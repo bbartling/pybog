@@ -4,11 +4,16 @@ Experimental train or fine-tune a language model (LLM) to generate .bog XML wire
 
 * ***AI fine-tuning project that outputs Niagara `.bog` wire sheet logic**. Let’s walk through how to set this up:
 
+## On Windows how to find saved models downloaded from Huggingface
+The `main.py` automatically downloads model and then saves in a cache location.
 
+```bash
 Get-ChildItem -Recurse "$env:USERPROFILE\.cache\huggingface" -Directory
-
+```
+That will output:
+```bash
 C:\Users\ben\.cache\huggingface\hub
-
+```
 
 ---
 
@@ -110,7 +115,7 @@ llm-bog-gen/
 * Embed and vectorize wire sheet logic with `sentence-transformers`
 * Add a **Brick or Haystack tag parser** to auto-generate points
 
-
+---
 
 ## Why Escape XML for GPT Fine-Tuning?
 
@@ -130,4 +135,4 @@ If your target is Niagara `.bog` generation, you'll want the model to **learn ho
 
 This project is open source and made available under the permissive [MIT License](LICENSE), allowing for reuse, modification, and distribution with attribution.
 
-Built with ❤️ and iterative guidance from [ChatGPT](https://openai.com/chatgpt) — including this README, modeling code, and data prep structure — as part of a research-driven exploration into intelligent chiller plant operation.
+Built with ❤️ and iterative guidance from [ChatGPT](https://openai.com/chatgpt) — including this README, modeling code, and data prep structure — as part of a research-driven exploration for the HVAC industry of the future.
