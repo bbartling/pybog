@@ -31,42 +31,13 @@ pybog/
 └── README.md              # This project plan
 ```
 
-Here is a significantly improved and well-structured `README.md` for your **pybog** project, using `<details>` tags for easier navigation and a professional layout without emojis:
-
 ---
-
-```markdown
-# pybog: Programmatic BOG File Generator for Tridium Niagara
-
-`pybog` is a Python toolkit that enables you to **parse**, **analyze**, **manipulate**, and **generate** `.bog` files used in Tridium Niagara. This allows you to automate wire sheet logic and component creation without relying on Niagara Workbench.
-
----
-
-## Table of Contents
-
-<details>
-  <summary><strong>📂 Project Overview</strong></summary>
-
-`pybog` consists of a parser and builder to work with `.bog` files, which are Niagara's ZIP-encoded configuration files.
-
-```
-
-pybog/
-├── src/
-│   ├── bog\_parser.py       # Read and parse .bog files
-│   ├── bog\_builder.py      # Create new .bog files from scratch
-├── examples/
-│   ├── main\_parser.py      # Run the parser on existing BOGs
-│   ├── main\_builder\_g36.py # Create a sample G36 logic sequence
-├── tests/                  # (optional) Add tests here
-└── README.md               # This file
-
-```
 
 </details>
 
 <details>
-  <summary><strong>🔍 Parsing Existing .bog Files</strong></summary>
+  
+<summary><strong>🔍 Parsing Existing .bog Files</strong></summary>
 
 You can parse and inspect `.bog` files using `main_parser.py`.
 
@@ -87,7 +58,8 @@ This will:
 </details>
 
 <details>
-  <summary><strong>🛠 Creating .bog Files Programmatically</strong></summary>
+
+<summary><strong>🛠 Creating .bog Files Programmatically</strong></summary>
 
 You can generate Niagara wire sheet logic using the builder API.
 
@@ -127,7 +99,8 @@ builder.new_row()  # Start next row of logic blocks
 </details>
 
 <details>
-  <summary><strong>📘 G36 Logic Builder Example</strong></summary>
+
+<summary><strong>📘 G36 Logic Builder Example</strong></summary>
 
 `main_builder_g36.py` demonstrates how to construct a Guideline 36 Duct Static Reset sequence:
 
@@ -152,7 +125,8 @@ python examples/main_builder_g36.py
 </details>
 
 <details>
-  <summary><strong>📚 Component Reference (kitControl)</strong></summary>
+
+<summary><strong>📚 Component Reference (kitControl)</strong></summary>
 
 The following `kitControl` components are supported:
 
@@ -185,7 +159,8 @@ The following `kitControl` components are supported:
 </details>
 
 <details>
-  <summary><strong>📜 License</strong></summary>
+
+<summary><strong>📜 License</strong></summary>
 
 This project is open source under the [MIT License](LICENSE).
 
