@@ -12,19 +12,18 @@ python examples/main_builder_g36.py
 ```
 
 ## FUTURE
-Get creative with AI agents in lessons learned.
 
 
 ```
 pybog/
 ├── src/
-│   ├── bog_parser.py      # Phase 1: Code to read and parse .bog files
-│   ├── bog_builder.py     # Phase 2: Code to create .bog files from scratch
+│   ├── bog_parser.py      # helper functions
+│   ├── bog_builder.py     # helper functions
 │   └── __init__.py
 ├── examples/
-│   ├── sample.bog         # A generic .bog file to use for testing
-│   ├── main_parser.py     # Example script showing how to use the parser
-│   └── main_builder.py    # Example script showing how to use the builder
+│   ├── sample.bog      <--- place bog files here
+│   ├── main_parser.py     # script to parse a bog
+│   └── main_builder.py    # script to make a bog
 ├── tests/
 │   ├── test_parser.py
 │   └── test_builder.py
