@@ -24,7 +24,8 @@ class BogFolderBuilder:
         self._current_x = 50
         self._current_y = 50
         self.x_offset = 140  # Horizontal distance between blocks
-        self.y_offset = 70   # Vertical distance for new rows
+        self.y_offset = 80   # Vertical distance for new rows
+        self.wrap_at_x = 500 # Start a new row after this x-coordinate
 
     def _get_next_handle(self):
         """Generates a unique hex handle string for components (e.g., '1', 'a', '1f')."""
@@ -52,13 +53,14 @@ class BogFolderBuilder:
 
         # --- Auto-Layout Logic ---
         if ws_annotation is None:
-            # Use automatic "typewriter" placement
+            # Check if we need to wrap to the next row
+            if self._current_x > self.wrap_at_x:
+                self.new_row()
+                
             annotation_str = f"{self._current_x},{self._current_y},8"
             ET.SubElement(component_element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': annotation_str})
-            # Move the "cursor" for the next block
             self._current_x += self.x_offset
         else:
-            # Use the manually provided placement
             ET.SubElement(component_element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': ws_annotation})
             
         return component_element

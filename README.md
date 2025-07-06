@@ -1,176 +1,182 @@
-# pybog
-To create a Python library that can parse, analyze, manipulate, and programmatically generate Tridium Niagara .bog files. This will enable automation for tasks like bulk component creation, configuration updates, and template generation without using Niagara Workbench.
+# pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-## Parse existing .bogs
-```bash
-python examples/main_parser.py examples/ClgControlLogic.bog --debug
+This project provides a Python library to programmatically **parse**, **analyze**, **manipulate**, and **generate** Tridium Niagara `.bog` files. It also includes tools to explore `.dist` station backup archives, enabling large-scale analysis and automation for Niagara systems without needing Workbench.
+
+---
+
+## Features
+
+- **Parse .bog Files**: Read any `.bog` file (ZIP archive containing `file.xml`) and inspect its contents.
+- **Build .bog Files**: Programmatically create complex wire sheets with components, properties, and links using a clean API.
+- **Explore .dist Files**: Analyze station backup `.dist` archives to find and extract the main `config.bog` and logic.
+- **LLM-Friendly Output**: Generate clean, human-readable summaries from station backups — ideal for AI analysis and documentation.
+- **No External Libraries**: Uses Python’s standard library only — no `pip install` needed.
+
+---
+
+## Project Structure
+
 ```
 
-## Make a .bog with py script
-```bash
-python examples/main_builder_g36.py 
-```
-
-## FUTURE
-
-
-```
 pybog/
 ├── src/
-│   ├── bog_parser.py      # helper functions
-│   ├── bog_builder.py     # helper functions
-│   └── __init__.py
+│   ├── bog\_parser.py        # Parse .bog files
+│   ├── bog\_builder.py       # Build .bog files
+│   └── dist\_explorer.py     # Analyze .dist station backups
 ├── examples/
-│   ├── sample.bog      <--- place bog files here
-│   ├── main_parser.py     # script to parse a bog
-│   └── main_builder.py    # script to make a bog
-├── tests/
-│   ├── test_parser.py
-│   └── test_builder.py
-└── README.md              # This project plan
+│   ├── main\_parser.py         # Parse a .bog file
+│   ├── main\_builder.py        # Build logic into a .bog
+│   └── main\_dist\_explorer.py  # Explore .dist files
+└── README.md
+
 ```
 
 ---
 
-</details>
+## Usage
 
 <details>
-  
-<summary><strong>🔍 Parsing Existing .bog Files</strong></summary>
+<summary><strong>1. Parsing a .bog File</strong></summary>
 
-You can parse and inspect `.bog` files using `main_parser.py`.
+Use `main_parser.py` to inspect the contents of a `.bog` file.
 
-### 🔧 Example Usage
+### Command:
+```bash
+python examples/main_parser.py <path_to_bog_file> [--debug]
+````
+
+### Example:
 
 ```bash
-python examples/main_parser.py examples/YourBogFileName.bog
-python examples/main_parser.py examples/YourBogFileName.bog --debug
+python examples/main_parser.py examples/ClgControlLogic.bog
+python examples/main_parser.py examples/ClgControlLogic.bog --debug
 ```
 
-This will:
-
-* Load the `.bog` as a zip archive
-* Find the main logic folder
-* List out component names and types
-* (Optional) Print full XML tree in debug mode
+* Finds the logic folder.
+* Lists components and types.
+* Optionally prints the entire XML tree (debug mode).
 
 </details>
 
 <details>
+<summary><strong>2. Building a .bog File</strong></summary>
 
-<summary><strong>🛠 Creating .bog Files Programmatically</strong></summary>
+Use `main_builder.py` to generate wire sheet logic.
 
-You can generate Niagara wire sheet logic using the builder API.
+### Command:
 
-### 📌 Sample Code
+```bash
+python examples/main_builder.py <type> [-o <output_file_name>]
+```
+
+#### Arguments:
+
+* `<type>`: Type of logic to build (`g36` or `chiller`)
+* `-o`, `--output`: Optional output file name (default: `generated.bog`)
+
+### Examples:
+
+```bash
+python examples/main_builder.py g36 -o g36.bog
+python examples/main_builder.py chiller
+```
+
+The `.bog` file will be saved to the `examples/` directory.
+
+</details>
+
+<details>
+<summary><strong>3. Exploring a .dist Station Backup</strong></summary>
+
+Use `main_dist_explorer.py` to extract and summarize a full Niagara station backup.
+
+### Command:
+
+```bash
+python examples/main_dist_explorer.py <path_to_dist_file> [-o <output_file>] [-l]
+```
+
+#### Arguments:
+
+* `<file>`: Path to the `.dist` station backup file
+* `-o`, `--output`: Optional text output file (default: `station_analysis.txt`)
+* `-l`, `--list-files`: Lists all files inside the archive and exits
+
+### Examples:
+
+```bash
+python examples/main_dist_explorer.py examples/backup_Diggs_RTU9.dist -o diggs_rtu9_analysis.txt
+python examples/main_dist_explorer.py examples/backup_Berry.dist --list-files
+```
+
+</details>
+
+<details>
+<summary><strong>4. Building .bog Logic via Code</strong></summary>
+
+### Sample Usage:
 
 ```python
 from src.bog_builder import BogFolderBuilder
 
-builder = BogFolderBuilder('MyLogicSheet')
+builder = BogFolderBuilder("MyLogicSheet")
 
-# Add a writable setpoint
-setpoint = builder.add_component('control:NumericWritable', 'ZoneSetpoint')
+setpoint = builder.add_component("control:NumericWritable", "ZoneSetpoint")
 
-# Add a PID loop with configured properties
 pid = builder.add_component(
-    'kitControl:LoopPoint', 'ZonePID',
-    properties={'proportionalConstant': '2.5', 'integralConstant': '0.2'}
+    "kitControl:LoopPoint", "ZonePID",
+    properties={"proportionalConstant": "2.5", "integralConstant": "0.2"}
 )
 
-# Wire the setpoint to the PID
 builder.add_link(
-    source_comp_handle=setpoint.get('h'), source_slot='out',
-    target_comp_handle=pid.get('h'), target_slot='setpoint'
+    source_comp_handle=setpoint.get("h"), source_slot="out",
+    target_comp_handle=pid.get("h"), target_slot="setpoint"
 )
 
-builder.save('examples/my_logic.bog')
+builder.save("examples/my_first_logic.bog")
 ```
 
-### 🔄 Auto-Layout
-
-The builder automatically places components with typewriter-style layout. You can call:
-
-```python
-builder.new_row()  # Start next row of logic blocks
-```
+Supports auto-layout and `new_row()` for visual structure.
 
 </details>
 
 <details>
+<summary><strong>5. Component Reference: kitControl</strong></summary>
 
-<summary><strong>📘 G36 Logic Builder Example</strong></summary>
+A full list of creatable components supported by the builder, based on Niagara’s documentation.
 
-`main_builder_g36.py` demonstrates how to construct a Guideline 36 Duct Static Reset sequence:
-
-### Run it:
-
-```bash
-python examples/main_builder_g36.py
-```
-
-### Output:
-
-* Generates `examples/generated_g36_logic.bog`
-* You can drag this file into Niagara Workbench
-
-### Components Used:
-
-* `kitControl:Maximum` for damper max logic
-* `kitControl:LoopPoint` for PID
-* `control:NumericWritable` for output setpoint
-* `control:BooleanWritable` for fan status
-
-</details>
-
-<details>
-
-<summary><strong>📚 Component Reference (kitControl)</strong></summary>
-
-The following `kitControl` components are supported:
-
-#### Alarm
+### Alarm Components
 
 * `kitControl:ChangeOfStateCountAlarmExt`
 * `kitControl:ElapsedActiveTimeAlarmExt`
 * `kitControl:LoopAlarmExt`
+* `kitControl:AlarmCountToRelay`
 
-#### Constants
+### Constants Components
 
-* `kitControl:BooleanConst`, `NumericConst`, `StringConst`, etc.
+* `kitControl:BooleanConst`, `EnumConst`, `NumericConst`, `StringConst`
 
-#### Conversions
+### Conversion Components
 
-* `kitControl:StatusNumericToInt`, `EnumToStatusEnum`, etc.
+* `kitControl:StatusBooleanToBoolean`, `StatusEnumToInt`, `NumericUnitConverter`, etc.
 
-#### HVAC / Energy
+### Energy Components
 
-* `kitControl:LoopPoint`, `OptimizedStartStop`, `NightPurge`, etc.
+* `kitControl:OptimizedStartStop`, `NightPurge`, `SetpointLoadShed`, etc.
 
-#### Logic / Math
+### HVAC Components
 
-* `kitControl:And`, `Or`, `Not`, `Add`, `Multiply`, etc.
+* `kitControl:LoopPoint`, `Tstat`, `SequenceBinary`, `LeadLagRuntime`, etc.
 
-#### Select / String / Timer / Util
+### Latch, Logic, Math, Timer, String, Select, Util Components
 
-* Full list provided in the original readme or source code
-
-</details>
-
-<details>
-
-<summary><strong>📜 License</strong></summary>
-
-This project is open source under the [MIT License](LICENSE).
-
-You are free to use, modify, and distribute this software with proper attribution.
+* All included from the original Niagara kitControl PDF
 
 </details>
 
 ---
 
+## License
 
+This project is licensed under the permissive [MIT License](LICENSE), allowing reuse, modification, and distribution with attribution.
 
-## 📍 License
-
-This project is open source and made available under the permissive [MIT License](LICENSE), allowing for reuse, modification, and distribution with attribution.
