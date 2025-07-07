@@ -38,7 +38,7 @@
 - **Layout:**
   - A component's position is defined by a slot: `p{n="wsAnnotation" t="b:WsAnnotation" v="<x>,<y>,8"}`.
 
-## MINIMAL VALID EXAMPLE (Adder)
+## MINIMAL VALID BOG FILE EXAMPLE (Adder Program Object)
 ```xml
 <bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
   <p t="b:UnrestrictedFolder" m="b=baja">
@@ -69,6 +69,61 @@
 </bajaObjectGraph>
 ```
 
+---
+
+## STRATEGY: WIRESHEET vs. PROGRAM OBJECT
+- **Use Wiresheet Components (`kitControl:`, `control:`, etc.) for:** Simple, visual, ladder-like logic. Involves basic math, boolean logic, timers, comparisons. When human readability on a wire sheet is key.
+- **Use a Program Object (`program:Program`) for:** Complex, algorithmic, or stateful logic. Involves iteration (loops), arrays, data structures (ArrayList, HashMap), runtime balancing, or procedural steps.
+
+---
+
+## GENERATING PROGRAM OBJECTS (JAVA LOGIC)
+- **CRITICAL RULE:** The LLM's role is to generate ONLY the Java code that goes *inside* the `onStart()`, `onExecute()`, and `onStop()` methods, plus any class-level helper methods.
+- **DO NOT GENERATE:**
+  - `import ...;` statements.
+  - `public class ProgramImpl extends ProgramBase { ... }` class definition.
+  - Slot getter/setter methods like `getIn1()` or `setOut()`.
+- **Workbench handles all of the above automatically.**
+- **Helper methods MUST be at the class level, not nested inside another method.**
+- **Use `Clock.schedule()` for internal timers.**
+
+### Program Object XML Example:
+- The Java code is placed inside the `v` attribute of a slot named `execute`, wrapped in `<![CDATA[...]]>`.
+```xml
+<p h="1" n="MyJavaLogic" t="program:Program" m="program=program">
+  <p n="execute" v="<![CDATA[
+// Member variables here (if any)
+Clock.Ticket ticket;
+ArrayList<Double> buffer = new ArrayList<>();
+
+public void onStart() throws Exception {
+  // onStart Java code here
+  updateTimer();
+}
+
+public void onExecute() throws Exception {
+  // onExecute Java code here
+  updateTimer();
+  // ... logic ...
+}
+
+public void onStop() throws Exception {
+  // onStop Java code here
+  if (ticket != null) ticket.cancel();
+}
+
+// Helper methods here
+void updateTimer() {
+  if (ticket != null) ticket.cancel();
+  ticket = Clock.schedule(getComponent(), BRelTime.makeSeconds(10), BProgram.execute, null);
+}
+]]>"/>
+  <!-- Define input/output slots for the Program Object below -->
+  <p n="in1" t="b:StatusNumeric" f="s"/>
+  <p n="out1" t="b:StatusNumeric" f="s"/>
+</p>
+
+
 KITCONTROL COMPONENT LIST
 Use prefix kitControl: for all types.
 
@@ -83,7 +138,6 @@ Timer: BooleanDelay, NumericDelay, OneShot, CurrentTime
 Util: Ramp, Counter, NumericSwitch, BooleanSwitch, StatusDemux
 
 Only use component types from the kitControl palette.
-
 
 kitControl Component Reference
 Here is a completed list of creatable components from the kitControl palette, based on the Niagara framework PDF documentation.
