@@ -1,6 +1,8 @@
 # pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-This project provides a Python library to **analyze**, **parse**, and **generate** Tridium Niagara `.bog` and `.dist` files. These tools are designed for developers, controls engineers, and AI workflows to work with Niagara logic offline — without needing Workbench.
+This project provides a Python library to **analyze**, **parse**, and **generate** Tridium Niagara `.bog` and `.dist` files. It enables developers, controls engineers, and AI systems to work with Niagara control logic **offline**, without requiring Workbench.
+
+The ultimate goal of the project is to empower **AI-assisted generation of Niagara wiresheet logic**—ranging from simple control sequences to complex optimization routines such as those defined by **ASHRAE Guideline 36**. By providing structured programmatic access to Niagara logic, the tools support automation, advanced supervisory control strategies, and scalable logic deployment across building automation systems.
 
 ---
 
@@ -15,19 +17,22 @@ This project provides a Python library to **analyze**, **parse**, and **generate
 ---
 
 ## 📁 Project Layout
+* TODO make more robust cheet sheet on best practices.
 
 ```bash
-pybog/
-├── examples/
+pybog/                          <-- run python commands from here
+├── examples/                   <-- put your bog and dist files in here
 │   ├── Adder.bog
 │   ├── backup_Diggs_RTU9.dist
-│   ├── main_analyzer.py      # Analyze a .bog or .dist file to JSON or text
-│   └── main_builder.py       # (WIP) Build a .bog programmatically
-├── pdf/
-│   └── docKitControl.pdf     # KitControl reference from Niagara
-├── src/
-│   ├── analyzer.py           # Core logic for parsing .bog/.dist
-│   └── bog_builder.py        # (WIP) Logic for programmatic bog creation
+│   ├── main_analyzer.py
+│   └── main_builder.py
+├── pdf/                        <-- KitControl reference from Niagara
+│   └── docKitControl.pdf      
+├── context_engineering/        <-- Cheet sheet for AI to use if you upload the text file
+│   └── llm_bog_instructions.text
+├── src/                        <-- helper functions
+│   ├── analyzer.py
+│   └── bog_builder.py
 └── README.md
 ````
 
