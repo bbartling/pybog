@@ -23,21 +23,16 @@ class BogFolderBuilder:
         self._link_counters = {} 
         self._current_x = 50
         self._current_y = 50
-        self.x_offset = 140  # Horizontal distance between blocks
-        self.y_offset = 80   # Vertical distance for new rows
-        self.wrap_at_x = 500 # Start a new row after this x-coordinate
+        self.x_offset = 140
+        self.y_offset = 80
+        self.wrap_at_x = 500
 
     def _get_next_handle(self):
-        """Generates a unique hex handle string for components (e.g., '1', 'a', '1f')."""
         handle = hex(self._next_handle)[2:]
         self._next_handle += 1
         return handle
 
     def add_component(self, comp_type, name, properties=None, ws_annotation=None):
-        """
-        Adds a component to the folder. If ws_annotation is None, it will be
-        placed automatically using the "typewriter" layout.
-        """
         handle_str = self._get_next_handle()
         comp_attrs = {'n': name, 't': comp_type, 'h': handle_str}
         
@@ -51,12 +46,9 @@ class BogFolderBuilder:
             for prop_name, prop_value in properties.items():
                 ET.SubElement(component_element, 'p', {'n': prop_name, 'v': str(prop_value)})
 
-        # --- Auto-Layout Logic ---
         if ws_annotation is None:
-            # Check if we need to wrap to the next row
             if self._current_x > self.wrap_at_x:
                 self.new_row()
-                
             annotation_str = f"{self._current_x},{self._current_y},8"
             ET.SubElement(component_element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': annotation_str})
             self._current_x += self.x_offset
@@ -71,7 +63,6 @@ class BogFolderBuilder:
         self._current_y += self.y_offset
 
     def add_link(self, source_comp_handle, source_slot, target_comp_handle, target_slot):
-        """Adds a link between two components."""
         target_element = self.folder.find(f'.//p[@h="{target_comp_handle}"]')
         if target_element is None:
             raise ValueError(f"Could not find target component with handle {target_comp_handle}")

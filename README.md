@@ -1,182 +1,101 @@
 # pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-This project provides a Python library to programmatically **parse**, **analyze**, **manipulate**, and **generate** Tridium Niagara `.bog` files. It also includes tools to explore `.dist` station backup archives, enabling large-scale analysis and automation for Niagara systems without needing Workbench.
+This project provides a Python library to **analyze**, **parse**, and **generate** Tridium Niagara `.bog` and `.dist` files. These tools are designed for developers, controls engineers, and AI workflows to work with Niagara logic offline — without needing Workbench.
 
 ---
 
-## Features
+## 🔍 Features
 
-- **Parse .bog Files**: Read any `.bog` file (ZIP archive containing `file.xml`) and inspect its contents.
-- **Build .bog Files**: Programmatically create complex wire sheets with components, properties, and links using a clean API.
-- **Explore .dist Files**: Analyze station backup `.dist` archives to find and extract the main `config.bog` and logic.
-- **LLM-Friendly Output**: Generate clean, human-readable summaries from station backups — ideal for AI analysis and documentation.
-- **No External Libraries**: Uses Python’s standard library only — no `pip install` needed.
-
----
-
-## Project Structure
-
-```
-
-pybog/
-├── src/
-│   ├── bog\_parser.py        # Parse .bog files
-│   ├── bog\_builder.py       # Build .bog files
-│   └── dist\_explorer.py     # Analyze .dist station backups
-├── examples/
-│   ├── main\_parser.py         # Parse a .bog file
-│   ├── main\_builder.py        # Build logic into a .bog
-│   └── main\_dist\_explorer.py  # Explore .dist files
-└── README.md
-
-```
+- **Parse `.bog` Files**: Load and inspect logic stored in Niagara `.bog` files (ZIPs with XML).
+- **Explore `.dist` Files**: Automatically extract `config.bog` from station backups and analyze the full logic setup.
+- **Output to JSON**: Convert Niagara logic into structured, LLM-friendly JSON for further automation or training.
+- **Component Graphs**: Identify components, links, and source code blocks (e.g. Java snippets in Program Objects).
+- **Zero Dependencies**: Works with Python’s standard library. No installation needed beyond Python.
 
 ---
 
-## Usage
+## 📁 Project Layout
 
-<details>
-<summary><strong>1. Parsing a .bog File</strong></summary>
-
-Use `main_parser.py` to inspect the contents of a `.bog` file.
-
-### Command:
 ```bash
-python examples/main_parser.py <path_to_bog_file> [--debug]
+pybog/
+├── examples/
+│   ├── Adder.bog
+│   ├── backup_Diggs_RTU9.dist
+│   ├── main_analyzer.py      # Analyze a .bog or .dist file to JSON or text
+│   └── main_builder.py       # (WIP) Build a .bog programmatically
+├── pdf/
+│   └── docKitControl.pdf     # KitControl reference from Niagara
+├── src/
+│   ├── analyzer.py           # Core logic for parsing .bog/.dist
+│   └── bog_builder.py        # (WIP) Logic for programmatic bog creation
+└── README.md
 ````
 
-### Example:
+---
+
+## ✅ How to Use
+
+### 1. Analyze a `.bog` or `.dist` File
+
+Run the analyzer and save results as either a readable text file or JSON.
 
 ```bash
-python examples/main_parser.py examples/ClgControlLogic.bog
-python examples/main_parser.py examples/ClgControlLogic.bog --debug
+python examples/main_analyzer.py <path_to_file.bog|.dist> -o <output_file> [--debug] [--list-files]
 ```
 
-* Finds the logic folder.
-* Lists components and types.
-* Optionally prints the entire XML tree (debug mode).
-
-</details>
-
-<details>
-<summary><strong>2. Building a .bog File</strong></summary>
-
-Use `main_builder.py` to generate wire sheet logic.
-
-### Command:
+#### Examples:
 
 ```bash
-python examples/main_builder.py <type> [-o <output_file_name>]
+# Convert a BOG file to structured JSON
+python examples/main_analyzer.py examples/Adder.bog -o Adder.json
+
+# Extract logic from a full station backup
+python examples/main_analyzer.py examples/backup_Diggs_RTU9.dist -o digg_rtu9_analysis.json
+
+# List all files in a station backup
+python examples/main_analyzer.py examples/backup_Diggs_RTU9.dist --list-files
 ```
 
-#### Arguments:
+---
 
-* `<type>`: Type of logic to build (`g36` or `chiller`)
-* `-o`, `--output`: Optional output file name (default: `generated.bog`)
+## 💡 LLM Integration
 
-### Examples:
+The output JSON includes:
 
-```bash
-python examples/main_builder.py g36 -o g36.bog
-python examples/main_builder.py chiller
-```
+* Component names, types, and properties
+* Wire sheet link structure
+* Any embedded Java source (for Program Objects)
+* All handles (IDs) and their resolved names
 
-The `.bog` file will be saved to the `examples/` directory.
+You can use this data to:
 
-</details>
+* Summarize Niagara logic
+* Generate prompts to recreate it using a builder
+* Train models on real-world examples (e.g., Diggs RTU9)
 
-<details>
-<summary><strong>3. Exploring a .dist Station Backup</strong></summary>
+---
 
-Use `main_dist_explorer.py` to extract and summarize a full Niagara station backup.
+## 🏗️ Coming Soon: BOG Builder
 
-### Command:
-
-```bash
-python examples/main_dist_explorer.py <path_to_dist_file> [-o <output_file>] [-l]
-```
-
-#### Arguments:
-
-* `<file>`: Path to the `.dist` station backup file
-* `-o`, `--output`: Optional text output file (default: `station_analysis.txt`)
-* `-l`, `--list-files`: Lists all files inside the archive and exits
-
-### Examples:
-
-```bash
-python examples/main_dist_explorer.py examples/backup_Diggs_RTU9.dist -o diggs_rtu9_analysis.txt
-python examples/main_dist_explorer.py examples/backup_Berry.dist --list-files
-```
-
-</details>
-
-<details>
-<summary><strong>4. Building .bog Logic via Code</strong></summary>
-
-### Sample Usage:
+The builder will allow users to define logic via Python and export `.bog` files:
 
 ```python
 from src.bog_builder import BogFolderBuilder
 
-builder = BogFolderBuilder("MyLogicSheet")
-
-setpoint = builder.add_component("control:NumericWritable", "ZoneSetpoint")
-
-pid = builder.add_component(
-    "kitControl:LoopPoint", "ZonePID",
-    properties={"proportionalConstant": "2.5", "integralConstant": "0.2"}
-)
-
-builder.add_link(
-    source_comp_handle=setpoint.get("h"), source_slot="out",
-    target_comp_handle=pid.get("h"), target_slot="setpoint"
-)
-
-builder.save("examples/my_first_logic.bog")
+builder = BogFolderBuilder("DemoLogic")
+builder.add_component("kitControl:BooleanConst", "MyOnSignal", properties={"out": "true"})
+builder.save("examples/generated.bog")
 ```
-
-Supports auto-layout and `new_row()` for visual structure.
-
-</details>
-
-<details>
-<summary><strong>5. Component Reference: kitControl</strong></summary>
-
-A full list of creatable components supported by the builder, based on Niagara’s documentation.
-
-### Alarm Components
-
-* `kitControl:ChangeOfStateCountAlarmExt`
-* `kitControl:ElapsedActiveTimeAlarmExt`
-* `kitControl:LoopAlarmExt`
-* `kitControl:AlarmCountToRelay`
-
-### Constants Components
-
-* `kitControl:BooleanConst`, `EnumConst`, `NumericConst`, `StringConst`
-
-### Conversion Components
-
-* `kitControl:StatusBooleanToBoolean`, `StatusEnumToInt`, `NumericUnitConverter`, etc.
-
-### Energy Components
-
-* `kitControl:OptimizedStartStop`, `NightPurge`, `SetpointLoadShed`, etc.
-
-### HVAC Components
-
-* `kitControl:LoopPoint`, `Tstat`, `SequenceBinary`, `LeadLagRuntime`, etc.
-
-### Latch, Logic, Math, Timer, String, Select, Util Components
-
-* All included from the original Niagara kitControl PDF
-
-</details>
 
 ---
 
-## License
+## 🧱 Component Library (kitControl)
 
-This project is licensed under the permissive [MIT License](LICENSE), allowing reuse, modification, and distribution with attribution.
+Reference logic building blocks from Niagara’s kitControl palette are documented in `pdf/docKitControl.pdf`.
+
+---
+
+## 📄 License
+
+MIT License — free for reuse with attribution.
 
