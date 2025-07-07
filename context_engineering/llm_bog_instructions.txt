@@ -1,381 +1,384 @@
-# LLM CONTEXT: NIAGARA BOG/DIST FILE SPECIFICATION
+llm_context: niagara_bog_dist_specification
 
-## CORE CONCEPTS
-- .bog file IS a ZIP archive containing file.xml.
-- .dist file IS a ZIP archive containing a full station directory structure.
-- The primary target in a .dist station backup is the file at path: `niagara_user_home/stations/STATION_NAME/config.bog/file.xml`.
-- The root XML element MUST be `bajaObjectGraph`.
+core_concepts:
+  bog_file:
+    format: zip
+    contains: file.xml
+  dist_file:
+    format: zip
+    contains: full_station_structure
+    target_path: niagara_user_home/stations/STATION_NAME/config.bog/file.xml
+  xml_root_element: bajaObjectGraph
 
-## XML STRUCTURE RULES
-- All components are `<p>` (property) tags.
-- **Root Element:**
-  - `bajaObjectGraph{version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]="}`
-- **Folder Structure:**
-  - `bajaObjectGraph -> p{t="b:UnrestrictedFolder" m="b=baja"} -> p{n="<YourFolderName>" t="b:Folder"}`
-- **Component Definition:**
-  - A component is a `<p>` tag inside the main Folder.
-  - Required attributes:
-    - `n`: Component name (string, e.g., "VavDamperMax").
-    - `t`: Component type (string, e.g., "kitControl:Maximum"). MUST be a valid Niagara type.
-    - `h`: Handle (string, plain hex value, e.g., "1", "a", "1f"). MUST be unique within the file.
-    - `m`: Module declaration (string, e.g., "kitControl=kitControl"). MUST be present if type `t` has a prefix.
-- **Component Properties (Slots):**
-  - A slot is a `<p>` tag nested inside a component `<p>` tag.
-  - Required attributes:
-    - `n`: Slot name (string, e.g., "in1", "proportionalConstant").
-    - `v`: Slot value (string, e.g., "0.0", "true").
-  - **Enum Values:** MUST use full path, e.g., `v="kitControl:TstatAction.direct"`.
-- **Links:**
-  - A link is a `<p>` tag nested inside the TARGET component.
-  - Required attributes:
-    - `n`: Link name (string, e.g., "Link", "Link1"). MUST be unique within the parent component.
-    - `t`: Type MUST be "b:Link".
-    - `m`: Module declaration MUST be "b=baja".
-  - **Link Properties (nested `<p>` tags):**
-    - `p{n="sourceOrd" v="h:<handle>"}`: Reference to source component handle. The `h:` prefix is MANDATORY.
-    - `p{n="sourceSlotName" v="<slot>"}`: Name of the source slot (e.g., "out").
-    - `p{n="targetSlotName" v="<slot>"}`: Name of the target slot (e.g., "inA").
-- **Layout:**
-  - A component's position is defined by a slot: `p{n="wsAnnotation" t="b:WsAnnotation" v="<x>,<y>,8"}`.
+xml_structure_rules:
+  components_tag: p
+  root_element:
+    name: bajaObjectGraph
+    attrs:
+      version: "4.0"
+      reversibleEncodingKeySource: "none"
+      FIPSEnabled: "false"
+      reversibleEncodingValidator: "[null.1]="
+  folder_structure:
+    path: bajaObjectGraph > p{t="b:UnrestrictedFolder" m="b=baja"} > p{name=your_folder t="b:Folder"}
+  component_definition:
+    tag: p
+    required_attributes:
+      - n: string  # e.g., "VavDamperMax"
+      - t: string  # e.g., "kitControl:Maximum"
+      - h: hex_string  # unique within file
+      - m: string  # e.g., "kitControl=kitControl"
+  component_slots:
+    tag: p
+    nested_under: component_p
+    required_attributes:
+      - n: string  # e.g., "in1"
+      - v: string  # e.g., "0.0"
+    enum_values:
+      rule: use_fully_qualified_type  # e.g., kitControl:TstatAction.direct
+  links:
+    tag: p
+    nested_under: target_component
+    required_attributes:
+      - n: string  # unique link name
+      - t: b:Link
+      - m: b=baja
+    nested_properties:
+      - sourceOrd: "h:<handle>"  # prefix 'h:' is mandatory
+      - sourceSlotName: string  # e.g., "out"
+      - targetSlotName: string  # e.g., "inA"
+  layout:
+    wsAnnotation:
+      tag: p
+      name: wsAnnotation
+      type: b:WsAnnotation
+      value_format: "<x>,<y>,8"
 
-## MINIMAL VALID BOG FILE EXAMPLE (Adder Program Object)
+minimal_valid_example:
+  type: xml
+  content: |
+    <bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
+      <p t="b:UnrestrictedFolder" m="b=baja">
+        <p n="MyAdderLogic" t="b:Folder">
+          <p n="Input1" t="control:NumericWritable" h="1" m="control=control">
+            <p n="fallback" v="5.0"/>
+            <p n="wsAnnotation" t="b:WsAnnotation" v="50,50,8"/>
+          </p>
+          <p n="Input2" t="control:NumericWritable" h="2" m="control=control">
+            <p n="fallback" v="10.0"/>
+            <p n="wsAnnotation" t="b:WsAnnotation" v="50,120,8"/>
+          </p>
+          <p n="Adder" t="kitControl:Add" h="3" m="kitControl=kitControl">
+            <p n="wsAnnotation" t="b:WsAnnotation" v="190,85,8"/>
+            <p n="Link" t="b:Link" m="b=baja">
+              <p n="sourceOrd" v="h:1"/>
+              <p n="sourceSlotName" v="out"/>
+              <p n="targetSlotName" v="inA"/>
+            </p>
+            <p n="Link1" t="b:Link" m="b=baja">
+              <p n="sourceOrd" v="h:2"/>
+              <p n="sourceSlotName" v="out"/>
+              <p n="targetSlotName" v="inB"/>
+            </p>
+          </p>
+        </p>
+      </p>
+    </bajaObjectGraph>
+
+
+---
+
+strategy:
+  wiresheet_usage:
+    simple_logic:
+      use_components: [kitControl, control]
+      use_case: basic math, boolean, timers, comparisons
+      benefit: visual clarity, human readability
+    complex_logic:
+      use_component: program:Program
+      use_case: iteration, arrays, data_structures, runtime_logic
+      benefit: compact procedural logic
+  layout:
+    spacing:
+      rule: 10_unit_grid
+      reasoning: mimics_human_layout, reduces_visual_noise
+    bounds:
+      max_x: 592
+      max_y: 594
+      enforce_canvas: true
+    programmatic_generation:
+      track_coordinates: true
+      wrap_x_threshold: 592
+      wrap_behavior:
+        if_x_exceeds: set_x=0, increment_y+=10
+        if_y_exceeds: raise_error or start_new_folder
+    visual_grouping:
+      keep_related_components_close: true
+
+---
+
+llm_context: niagara_program_object_guidelines
+
+generating_program_objects:
+  critical_rule: >
+    LLM must generate ONLY the Java code inside onStart(), onExecute(), and onStop(),
+    plus any helper methods at the class level.
+  do_not_generate:
+    - import_statements
+    - class_definition: 'public class ProgramImpl extends ProgramBase'
+    - slot_getter_setter_methods: ['getIn1()', 'setOut()', etc.]
+  notes:
+    - workbench_handles_framework: true
+    - helper_methods_must_be_class_level: true
+    - use_clock: 'Clock.schedule() for timers'
+  xml_example:
+    type: xml
+    content: |
+      <p h="1" n="MyJavaLogic" t="program:Program" m="program=program">
+        <p n="execute" v="<![CDATA[
+  // Member variables here (if any)
+  Clock.Ticket ticket;
+  ArrayList<Double> buffer = new ArrayList<>();
+
+  public void onStart() throws Exception {
+    updateTimer();
+  }
+
+  public void onExecute() throws Exception {
+    updateTimer();
+    // ... logic ...
+  }
+
+  public void onStop() throws Exception {
+    if (ticket != null) ticket.cancel();
+  }
+
+  // Helper methods here
+  void updateTimer() {
+    if (ticket != null) ticket.cancel();
+    ticket = Clock.schedule(getComponent(), BRelTime.makeSeconds(10), BProgram.execute, null);
+  }
+        ]]>"/>
+        <p n="in1" t="b:StatusNumeric" f="s"/>
+        <p n="out1" t="b:StatusNumeric" f="s"/>
+      </p>
+
+---
+
+EXAMPLE 1. High-Limit Cutout Logic (XML Format)
+
 ```xml
-<bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
-  <p t="b:UnrestrictedFolder" m="b=baja">
-    <p n="MyAdderLogic" t="b:Folder">
-      <p n="Input1" t="control:NumericWritable" h="1" m="control=control">
-        <p n="fallback" v="5.0"/>
-        <p n="wsAnnotation" t="b:WsAnnotation" v="50,50,8"/>
-      </p>
-      <p n="Input2" t="control:NumericWritable" h="2" m="control=control">
-        <p n="fallback" v="10.0"/>
-        <p n="wsAnnotation" t="b:WsAnnotation" v="50,120,8"/>
-      </p>
-      <p n="Adder" t="kitControl:Add" h="3" m="kitControl=kitControl">
-        <p n="wsAnnotation" t="b:WsAnnotation" v="190,85,8"/>
-        <p n="Link" t="b:Link" m="b=baja">
-          <p n="sourceOrd" v="h:1"/>
-          <p n="sourceSlotName" v="out"/>
-          <p n="targetSlotName" v="inA"/>
-        </p>
-        <p n="Link1" t="b:Link" m="b=baja">
-          <p n="sourceOrd" v="h:2"/>
-          <p n="sourceSlotName" v="out"/>
-          <p n="targetSlotName" v="inB"/>
-        </p>
-      </p>
-    </p>
-  </p>
-</bajaObjectGraph>
+<p h="1" n="HighLimitCutout" t="program:Program" m="program=program">
+  <p n="execute" v="<![CDATA[
+double highLimit = 85.0;
+
+public void onStart() throws Exception {
+  // No-op
+}
+
+public void onExecute() throws Exception {
+  double temp = getTempSensor();
+  setFanCmd(temp < highLimit);
+}
+
+public void onStop() throws Exception {
+  // No-op
+}
+]]>"/>
+  <p n="tempSensor" t="b:StatusNumeric" f="s"/>
+  <p n="fanCmd" t="b:StatusBoolean" f="s"/>
+</p>
 ```
 
 ---
 
-## STRATEGY: WIRESHEET vs. PROGRAM OBJECT
-- **Use Wiresheet Components (`kitControl:`, `control:`, etc.) for:** Simple, visual, ladder-like logic. Involves basic math, boolean logic, timers, comparisons. When human readability on a wire sheet is key.
-- **Use a Program Object (`program:Program`) for:** Complex, algorithmic, or stateful logic. Involves iteration (loops), arrays, data structures (ArrayList, HashMap), runtime balancing, or procedural steps.
+EXAMPLE 2. Runtime Accumulator (XML Format)
 
----
-
-## GENERATING PROGRAM OBJECTS (JAVA LOGIC)
-- **CRITICAL RULE:** The LLM's role is to generate ONLY the Java code that goes *inside* the `onStart()`, `onExecute()`, and `onStop()` methods, plus any class-level helper methods.
-- **DO NOT GENERATE:**
-  - `import ...;` statements.
-  - `public class ProgramImpl extends ProgramBase { ... }` class definition.
-  - Slot getter/setter methods like `getIn1()` or `setOut()`.
-- **Workbench handles all of the above automatically.**
-- **Helper methods MUST be at the class level, not nested inside another method.**
-- **Use `Clock.schedule()` for internal timers.**
-
-### Program Object XML Example:
-- The Java code is placed inside the `v` attribute of a slot named `execute`, wrapped in `<![CDATA[...]]>`.
 ```xml
-<p h="1" n="MyJavaLogic" t="program:Program" m="program=program">
+<p h="2" n="RuntimeAccumulator" t="program:Program" m="program=program">
   <p n="execute" v="<![CDATA[
-// Member variables here (if any)
 Clock.Ticket ticket;
-ArrayList<Double> buffer = new ArrayList<>();
+long runtimeSeconds = 0;
 
 public void onStart() throws Exception {
-  // onStart Java code here
   updateTimer();
 }
 
 public void onExecute() throws Exception {
-  // onExecute Java code here
-  updateTimer();
-  // ... logic ...
+  if (getPumpCmd()) runtimeSeconds += 60; // assumes 1-minute schedule
+  setRuntimeMinutes(runtimeSeconds / 60.0);
 }
 
 public void onStop() throws Exception {
-  // onStop Java code here
   if (ticket != null) ticket.cancel();
 }
 
-// Helper methods here
 void updateTimer() {
   if (ticket != null) ticket.cancel();
-  ticket = Clock.schedule(getComponent(), BRelTime.makeSeconds(10), BProgram.execute, null);
+  ticket = Clock.schedule(getComponent(), BRelTime.makeMinutes(1), BProgram.execute, null);
 }
 ]]>"/>
-  <!-- Define input/output slots for the Program Object below -->
-  <p n="in1" t="b:StatusNumeric" f="s"/>
-  <p n="out1" t="b:StatusNumeric" f="s"/>
+  <p n="pumpCmd" t="b:StatusBoolean" f="s"/>
+  <p n="runtimeMinutes" t="b:StatusNumeric" f="s"/>
 </p>
-
-
-KITCONTROL COMPONENT LIST
-Use prefix kitControl: for all types.
-
-Math: Add, Average, Maximum, Minimum, Multiply, Divide, Subtract, Reset
-
-Logic: And, Or, Xor, Not, Equal, GreaterThan, LessThan, NotEqual
-
-HVAC: LoopPoint, Tstat, SequenceLinear, SequenceBinary, LeadLagRuntime
-
-Timer: BooleanDelay, NumericDelay, OneShot, CurrentTime
-
-Util: Ramp, Counter, NumericSwitch, BooleanSwitch, StatusDemux
-
-Only use component types from the kitControl palette.
-
-kitControl Component Reference
-Here is a completed list of creatable components from the kitControl palette, based on the Niagara framework PDF documentation.
-
-Alarm Components
-kitControl:ChangeOfStateCountAlarmExt
-
-kitControl:ElapsedActiveTimeAlarmExt
-
-kitControl:LoopAlarmExt
-
-kitControl:AlarmCountToRelay
-
-Constants Components
-kitControl:BooleanConst
-
-kitControl:EnumConst
-
-kitControl:NumericConst
-
-kitControl:StringConst
-
-Conversion Components
-kitControl:StatusBooleanToBoolean
-
-kitControl:StatusEnumToEnum
-
-kitControl:StatusEnumToInt
-
-kitControl:StatusNumericToDouble
-
-kitControl:StatusNumericToFloat
-
-kitControl:StatusNumericToInt
-
-kitControl:BooleanToStatusBoolean
-
-kitControl:DoubleToStatusEnum
-
-kitControl:EnumToStatusEnum
-
-kitControl:FloatToStatusEnum
-
-kitControl:IntToStatusNumeric
-
-kitControl:LongToStatusNumeric
-
-kitControl:StringToStatusString
-
-kitControl:StatusEnumToStatusBoolean
-
-kitControl:StatusEnumToStatusNumeric
-
-kitControl:StatusNumericToStatusEnum
-
-kitControl:StatusNumericToStatusString
-
-kitControl:StatusStringToStatusNumeric
-
-kitControl:NumericUnitConverter
-
-Energy Components
-kitControl:DegreeDays
-
-kitControl:ElectricalDemandLimit
-
-kitControl:NightPurge
-
-kitControl:OptimizedStartStop
-
-kitControl:OutsideAirOptimization
-
-kitControl:Psychrometric
-
-kitControl:SetpointLoadShed
-
-kitControl:SetpointOffset
-
-kitControl:ShedControl
-
-kitControl:SlidingWindowDemandCalc
-
-HVAC Components
-kitControl:InterstartDelayControl
-
-kitControl:InterstartDelayMaster
-
-kitControl:LeadLagCycles
-
-kitControl:LeadLagRuntime
-
-kitControl:LoopPoint
-
-kitControl:RaiseLower
-
-kitControl:SequenceBinary
-
-kitControl:SequenceLinear
-
-kitControl:Tstat
-
-Latch Components
-kitControl:BooleanLatch
-
-kitControl:EnumLatch
-
-kitControl:NumericLatch
-
-kitControl:StringLatch
-
-Logic Components
-kitControl:And
-
-kitControl:Or
-
-kitControl:Xor
-
-kitControl:Not
-
-kitControl:Equal
-
-kitControl:GreaterThan
-
-kitControl:GreaterThanEqual
-
-kitControl:LessThan
-
-kitControl:LessThanEqual
-
-kitControl:NotEqual
-
-Math Components
-kitControl:Add
-
-kitControl:Average
-
-kitControl:Maximum
-
-kitControl:Minimum
-
-kitControl:Multiply
-
-kitControl:Divide
-
-kitControl:Modulus
-
-kitControl:Power
-
-kitControl:Subtract
-
-kitControl:AbsValue
-
-kitControl:ArcCosine
-
-kitControl:ArcSine
-
-kitControl:ArcTangent
-
-kitControl:Cosine
-
-kitControl:Exponential
-
-kitControl:Factorial
-
-kitControl:LogBase10
-
-kitControl:LogNatural
-
-kitControl:Negative
-
-kitControl:Reset
-
-kitControl:Sine
-
-kitControl:SquareRoot
-
-kitControl:Tangent
-
-Select Components
-kitControl:BooleanSelect
-
-kitControl:EnumSelect
-
-kitControl:NumericSelect
-
-kitControl:StringSelect
-
-String Components
-kitControl:StringConcat
-
-kitControl:StringSubstring
-
-kitControl:StringTrim
-
-kitControl:StringIndexOf
-
-kitControl:StringTest
-
-kitControl:StringLen
-
-Timer Components
-kitControl:BooleanDelay
-
-kitControl:OneShot
-
-kitControl:NumericDelay
-
-kitControl:CurrentTime
-
-kitControl:TimeDifference
-
-Util Components
-kitControl:BooleanSwitch
-
-kitControl:Counter
-
-kitControl:DigitalInputDemux
-
-kitControl:EnumSwitch
-
-kitControl:MinMaxAvg
-
-kitControl:MultiVibrator
-
-kitControl:NumericBitAnd
-
-kitControl:NumericBitOr
-
-kitControl:NumericBitXor
-
-kitControl:NumericSwitch
-
-kitControl:NumericToBitsDemux
-
-kitControl:Ramp
-
-kitControl:Random
-
-kitControl:SineWave
-
-kitControl:StatusDemux
+```
+
+EXAMPLE 3. Lead-Lag Weekly Switch (XML Format)
+
+```xml
+<p h="3" n="LeadLagWeekly" t="program:Program" m="program=program">
+  <p n="execute" v="<![CDATA[
+boolean leadIsA = true;
+
+public void onStart() throws Exception {
+  long currentWeek = System.currentTimeMillis() / (7L * 24 * 3600 * 1000);
+  leadIsA = (currentWeek % 2 == 0); // even weeks: A leads, odd weeks: B leads
+}
+
+public void onExecute() throws Exception {
+  boolean enable = getEnable();
+
+  setPumpACmd(enable && leadIsA);
+  setPumpBCmd(enable && !leadIsA);
+}
+
+public void onStop() throws Exception {
+  setPumpACmd(false);
+  setPumpBCmd(false);
+}
+]]>"/>
+  <p n="enable" t="b:StatusBoolean" f="s"/>
+  <p n="pumpACmd" t="b:StatusBoolean" f="s"/>
+  <p n="pumpBCmd" t="b:StatusBoolean" f="s"/>
+</p>
+```
+
+---
+
+
+kitcontrol_components:
+  alarm:
+    - ChangeOfStateCountAlarmExt
+    - ElapsedActiveTimeAlarmExt
+    - LoopAlarmExt
+    - AlarmCountToRelay
+  constants:
+    - BooleanConst
+    - EnumConst
+    - NumericConst
+    - StringConst
+  conversion:
+    - StatusBooleanToBoolean
+    - StatusEnumToEnum
+    - StatusEnumToInt
+    - StatusNumericToDouble
+    - StatusNumericToFloat
+    - StatusNumericToInt
+    - BooleanToStatusBoolean
+    - DoubleToStatusEnum
+    - EnumToStatusEnum
+    - FloatToStatusEnum
+    - IntToStatusNumeric
+    - LongToStatusNumeric
+    - StringToStatusString
+    - StatusEnumToStatusBoolean
+    - StatusEnumToStatusNumeric
+    - StatusNumericToStatusEnum
+    - StatusNumericToStatusString
+    - StatusStringToStatusNumeric
+    - NumericUnitConverter
+  energy:
+    - DegreeDays
+    - ElectricalDemandLimit
+    - NightPurge
+    - OptimizedStartStop
+    - OutsideAirOptimization
+    - Psychrometric
+    - SetpointLoadShed
+    - SetpointOffset
+    - ShedControl
+    - SlidingWindowDemandCalc
+  hvac:
+    - InterstartDelayControl
+    - InterstartDelayMaster
+    - LeadLagCycles
+    - LeadLagRuntime
+    - LoopPoint
+    - RaiseLower
+    - SequenceBinary
+    - SequenceLinear
+    - Tstat
+  latch:
+    - BooleanLatch
+    - EnumLatch
+    - NumericLatch
+    - StringLatch
+  logic:
+    - And
+    - Or
+    - Xor
+    - Not
+    - Equal
+    - GreaterThan
+    - GreaterThanEqual
+    - LessThan
+    - LessThanEqual
+    - NotEqual
+  math:
+    - Add
+    - Average
+    - Maximum
+    - Minimum
+    - Multiply
+    - Divide
+    - Modulus
+    - Power
+    - Subtract
+    - AbsValue
+    - ArcCosine
+    - ArcSine
+    - ArcTangent
+    - Cosine
+    - Exponential
+    - Factorial
+    - LogBase10
+    - LogNatural
+    - Negative
+    - Reset
+    - Sine
+    - SquareRoot
+    - Tangent
+  select:
+    - BooleanSelect
+    - EnumSelect
+    - NumericSelect
+    - StringSelect
+  string:
+    - StringConcat
+    - StringSubstring
+    - StringTrim
+    - StringIndexOf
+    - StringTest
+    - StringLen
+  timer:
+    - BooleanDelay
+    - OneShot
+    - NumericDelay
+    - CurrentTime
+    - TimeDifference
+  util:
+    - BooleanSwitch
+    - Counter
+    - DigitalInputDemux
+    - EnumSwitch
+    - MinMaxAvg
+    - MultiVibrator
+    - NumericBitAnd
+    - NumericBitOr
+    - NumericBitXor
+    - NumericSwitch
+    - NumericToBitsDemux
+    - Ramp
+    - Random
+    - SineWave
+    - StatusDemux

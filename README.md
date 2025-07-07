@@ -82,6 +82,72 @@ You can use this data to:
 
 ---
 
+## 🐍 Python Tutorial: Write Your Own `.bog` File
+
+This example shows how you can use plain Python to generate a basic Niagara `.bog` file that wires two `NumericWritable` blocks into an `Add` block. This mimics the look and behavior of simple wire sheet logic in Workbench.
+
+We also demonstrate how to control the component **positioning** by adjusting the `wsAnnotation` coordinates (`x, y, z`). In this case, we position each block only 10 units apart for a tighter layout.
+
+### ✨ Code Example
+
+```python
+# File: examples/write_adder.py
+
+xml_content = '''<bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
+  <p t="b:UnrestrictedFolder" m="b=baja">
+    <p n="MyAdderLogic" t="b:Folder">
+      <p n="Input1" t="control:NumericWritable" h="1" m="control=control">
+        <p n="fallback" v="5.0"/>
+        <p n="wsAnnotation" t="b:WsAnnotation" v="10,10,8"/>
+      </p>
+      <p n="Input2" t="control:NumericWritable" h="2" m="control=control">
+        <p n="fallback" v="10.0"/>
+        <p n="wsAnnotation" t="b:WsAnnotation" v="10,20,8"/>
+      </p>
+      <p n="Adder" t="kitControl:Add" h="3" m="kitControl=kitControl">
+        <p n="wsAnnotation" t="b:WsAnnotation" v="30,15,8"/>
+        <p n="Link" t="b:Link" m="b=baja">
+          <p n="sourceOrd" v="h:1"/>
+          <p n="sourceSlotName" v="out"/>
+          <p n="targetSlotName" v="inA"/>
+        </p>
+        <p n="Link1" t="b:Link" m="b=baja">
+          <p n="sourceOrd" v="h:2"/>
+          <p n="sourceSlotName" v="out"/>
+          <p n="targetSlotName" v="inB"/>
+        </p>
+      </p>
+    </p>
+  </p>
+</bajaObjectGraph>'''
+
+# Save to file
+with open("examples/tight_layout_adder.bog", "w", encoding="utf-8") as f:
+    f.write(xml_content)
+```
+
+### 📌 How it Works
+
+* Each `<p>` tag represents a Niagara component.
+* `h="1"`, `h="2"`, etc., are **handles** used for wiring links.
+* `wsAnnotation` controls where the block shows up on the Workbench wire sheet.
+* The `Add` block references the `out` slots from `Input1` and `Input2` via links to `inA` and `inB`.
+
+### ✅ Run It
+
+```bash
+python examples/write_adder.py
+```
+
+Then open `tight_layout_adder.bog` in Workbench to view and test the wire sheet logic.
+
+
+![Adder Logic Created with Python](snips/addrMadeWithPy.jpg)
+
+
+---
+
+
 ## 🏗️ Coming Soon: BOG Builder
 
 The builder will allow users to define logic via Python and export `.bog` files:
