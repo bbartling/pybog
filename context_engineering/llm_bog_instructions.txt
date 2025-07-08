@@ -10,6 +10,57 @@ core_concepts:
     target_path: niagara_user_home/stations/STATION_NAME/config.bog/file.xml
   xml_root_element: bajaObjectGraph
 
+# --- NEW SECTION: Python API Usage ---
+# This provides a high-level API to abstract away the XML complexity.
+# The AI should prefer using this Python API over generating raw XML.
+python_api_usage:
+  - description: "Instructions for using the BogFolderBuilder class in src/bog_builder.py to programmatically create wiresheets."
+  - initialization:
+      - goal: "Create a new wiresheet builder."
+      - command: "builder = BogFolderBuilder(folder_name='MyLogic')"
+  - add_component:
+      - goal: "Add a logic block to the wiresheet."
+      - command: "component_element = builder.add_component(comp_type, name, properties={}, settable=False, readonly=False, default_value=None)"
+      - parameters:
+          - comp_type: "The Niagara type (e.g., 'kitControl:Add', 'control:NumericWritable')."
+          - name: "The component's name on the wiresheet."
+          - settable: "Set to True for user-writable points (adds correct actions)."
+          - readonly: "Set to True for read-only calculated values (hides set action)."
+          - default_value: "Provide a numeric or string value to set the point's initial state."
+      - example_settable: "vav_temp = builder.add_component('control:NumericWritable', 'VAV_Temp', settable=True, default_value=72.0)"
+      - example_readonly: "fan_status = builder.add_component('control:BooleanWritable', 'Fan_Status', readonly=True)"
+  - add_link:
+      - goal: "Connect two components."
+      - command: "builder.add_link(source_handle, 'out', target_handle, 'inA')"
+      - note: "Use the .get('h') method on the component element returned by add_component to get its handle."
+      - example: "builder.add_link(vav_temp.get('h'), 'out', pid_loop.get('h'), 'setpoint')"
+  - save:
+      - goal: "Save the final .bog file."
+      - command: "builder.save('output_file.bog')"
+  - minimal_python_example:
+      - goal: "A complete, minimal example of creating a simple adder logic wiresheet."
+      - code: |
+          # main_builder.py
+          from src.bog_builder import BogFolderBuilder
+
+          # 1. Initialize the builder
+          builder = BogFolderBuilder(folder_name='MyAdderLogic')
+
+          # 2. Add components
+          input1 = builder.add_component('control:NumericWritable', 'Input1', settable=True, default_value=6.0)
+          input2 = builder.add_component('control:NumericWritable', 'Input2', settable=True, default_value=4.0)
+          add_block = builder.add_component('kitControl:Add', 'Add')
+          sum_output = builder.add_component('control:NumericWritable', 'Sum', readonly=True)
+
+          # 3. Link components together
+          builder.add_link(input1.get('h'), 'out', add_block.get('h'), 'inA')
+          builder.add_link(input2.get('h'), 'out', add_block.get('h'), 'inB')
+          builder.add_link(add_block.get('h'), 'out', sum_output.get('h'), 'in16')
+
+          # 4. Save the .bog file
+          builder.save('examples/Adder.bog')
+
+# --- Low-Level XML Structure Rules (For reference/fallback) ---
 xml_structure_rules:
   components_tag: p
   root_element:
@@ -34,25 +85,23 @@ xml_structure_rules:
     required_attributes:
       - n: string  # e.g., "in1"
       - v: string  # e.g., "0.0"
-    enum_values:
-      rule: use_fully_qualified_type  # e.g., kitControl:TstatAction.direct
   links:
     tag: p
     nested_under: target_component
     required_attributes:
       - n: string  # unique link name
       - t: b:Link
-      - m: b=baja
     nested_properties:
-      - sourceOrd: "h:<handle>"  # prefix 'h:' is mandatory
-      - sourceSlotName: string  # e.g., "out"
-      - targetSlotName: string  # e.g., "inA"
+      - sourceOrd: "h:<handle>"
+      - sourceSlotName: string
+      - targetSlotName: string
   layout:
     wsAnnotation:
       tag: p
       name: wsAnnotation
       type: b:WsAnnotation
       value_format: "<x>,<y>,8"
+
 
 minimal_valid_example:
   type: xml
@@ -98,22 +147,55 @@ strategy:
       use_component: program:Program
       use_case: iteration, arrays, data_structures, runtime_logic
       benefit: compact procedural logic
+  component_slot_strategy:
+    - description: "Defines how to configure component slots and actions for different use cases."
+    - settable_points:
+        - goal: "User can write a value to this point (e.g., a setpoint)."
+        - base_configuration:
+            - "<p n=\"out\" f=\"s\"/>"
+            - "<a n=\"override\" f=\"ho\"/>"
+            - "<a n=\"auto\" f=\"ho\"/>"
+            - "<a n=\"emergencyOverride\" f=\"h\"/>"
+            - "<a n=\"emergencyAuto\" f=\"h\"/>"
+        - with_default_value:
+            - goal: "To set an initial value for the settable point."
+            - note: "This replaces the simple '<p n=\"out\".../>' from the base configuration."
+            - configuration:
+                - "<p n=\"out\" f=\"s\" t=\"b:StatusNumeric\">"
+                - "  <p n=\"value\" v=\"YOUR_VALUE\"/>"
+                - "  <p n=\"status\" v=\"0;activeLevel=e:17@control:PriorityLevel\"/>"
+                - "</p>"
+                - "<p n=\"fallback\" t=\"b:StatusNumeric\">"
+                - "  <p n=\"value\" v=\"YOUR_VALUE\"/>"
+                - "</p>"
+    - readonly_points:
+        - goal: "User can only read the value; it is a result of a calculation."
+        - configuration:
+            - "<p n=\"out\" f=\"h\"/>"
+            - "<a n=\"set\" f=\"ho\"/>"
+            - "<a n=\"override\" f=\"ho\"/>"
+            - "<a n=\"auto\" f=\"ho\"/>"
+            - "<a n=\"emergencyOverride\" f=\"h\"/>"
+            - "<a n=\"emergencyAuto\" f=\"h\"/>"
   layout:
-    spacing:
-      rule: 10_unit_grid
-      reasoning: mimics_human_layout, reduces_visual_noise
-    bounds:
-      max_x: 592
-      max_y: 594
-      enforce_canvas: true
-    programmatic_generation:
-      track_coordinates: true
-      wrap_x_threshold: 592
-      wrap_behavior:
-        if_x_exceeds: set_x=0, increment_y+=10
-        if_y_exceeds: raise_error or start_new_folder
-    visual_grouping:
-      keep_related_components_close: true
+    strategy_name: Hierarchical Data Flow
+    primary_goal: "To arrange components in a left-to-right data flow using strict 10-unit increments."
+    increments:
+      x_increment: 10
+      y_increment: 10
+    placement_algorithm:
+      - rule: "Default placement: The next block is placed at x_coordinate + x_increment."
+      - special_rule_multi_input:
+          - condition: "A block (target) receives links from multiple source blocks."
+          - action_sources: "Arrange source blocks in a vertical stack to the left of the target. Each subsequent source is placed at y_coordinate + y_increment."
+          - action_target: "Position the target block to the right of the sources (x_coordinate + x_increment)."
+    typewriter_logic:
+      - description: "Handles wrapping when the layout exceeds the horizontal boundary."
+      - track_max_y: "The layout process must track the maximum Y-coordinate used by any block in the current row (maxY)."
+      - wrap_behavior:
+          - if_x_exceeds: 592
+          - then_y_is: "maxY + 10" # Use the standard 10-unit vertical increment for a new line.
+          - then_x_resets_to: 10
 
 ---
 
