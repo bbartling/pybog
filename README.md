@@ -1,10 +1,7 @@
 # pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-![Leave Temp Snip](https://github.com/bbartling/n4-hvac-optimization-blocks/blob/develop/vr.png)
+![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
-
-
-[🎥 Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
 
 This project provides a Python library to **analyze**, **parse**, and **generate** Tridium Niagara `.bog` and `.dist` files. It allows developers, controls engineers, and AI systems to work with Niagara control logic **offline**, without requiring Workbench.
 
@@ -12,6 +9,8 @@ By parsing complex JACE backup files into formats that AI/LLMs can understand, t
 
 The **ultimate goal** of the project is to enable AI to **generate Niagara Wiresheet logic**—from basic control sequences to advanced supervisory strategies, such as those defined in **ASHRAE Guideline 36**. Looking ahead, the tool aims to support **AI-driven translation** of control algorithms written in **Python**, **C++**, **JavaScript**, or other general-purpose, high-level C-style languages into Niagara Wiresheet logic. This would allow complex, algorithmic control logic authored by AI to be exported as `.bog` files, ready for human users to import, inspect, and test directly within the Niagara environment.
 
+
+[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
 ---
 
 ## 🔍 Features
