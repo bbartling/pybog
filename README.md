@@ -13,77 +13,26 @@ The **ultimate goal** of the project is to enable AI to **generate Niagara Wires
 [🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
 ---
 
-## 🔍 Features
+## Dump a .dist or .bog to JSON 
 
-- **Parse `.bog` Files**: Load and inspect logic stored in Niagara `.bog` files (ZIPs with XML).
-- **Explore `.dist` Files**: Automatically extract `config.bog` from station backups and analyze the full logic setup.
-- **Output to JSON**: Convert Niagara logic into structured, LLM-friendly JSON for further automation or training.
-- **Component Graphs**: Identify components, links, and source code blocks (e.g. Java snippets in Program Objects).
-- **Zero Dependencies**: Works with Python’s standard library. No installation needed beyond Python.
+You can now use `main.py` to:
 
----
-
-## 📁 Project Layout
-* TODO make more robust cheet sheet on best practices.
+- Analyze any `.bog` or `.dist` file
+- Extract the logic structure into clean **JSON**
+- Enable downstream processing, such as LLM prompting, visualization, or diagnostics
 
 ```bash
-pybog/                          <-- run python commands from here
-├── examples/                   <-- put your bog and dist files in here
-│   ├── Adder.bog
-│   ├── backup_Diggs_RTU9.dist
-│   ├── main_analyzer.py
-│   └── main_builder.py
-├── pdf/                        <-- KitControl reference from Niagara
-│   └── docKitControl.pdf      
-├── context_engineering/        <-- Cheet sheet for AI to use if you upload the text file
-│   └── llm_bog_instructions.text
-├── src/                        <-- helper functions
-│   ├── analyzer.py
-│   └── bog_builder.py
-└── README.md
-````
-
----
-
-## ✅ How to Use
-
-### 1. Analyze a `.bog` or `.dist` File
-
-Run the analyzer and save results as either a readable text file or JSON.
-
-```bash
-python examples/main_analyzer.py <path_to_file.bog|.dist> -o <output_file> [--debug] [--list-files]
+python main.py "C:\your\path\to\backup_Ahu4.dist" -o "C:\your\path\to\backup_Ahu4.json" -l
 ```
-
-#### Examples:
-
-```bash
-# Convert a BOG file to structured JSON
-python examples/main_analyzer.py examples/Adder.bog -o Adder.json
-
-# Extract logic from a full station backup
-python examples/main_analyzer.py examples/backup_Diggs_RTU9.dist -o digg_rtu9_analysis.json
-
-# List all files in a station backup
-python examples/main_analyzer.py examples/backup_Diggs_RTU9.dist --list-files
-```
-
 ---
 
-## 💡 LLM Integration
+### ✅ Argument Descriptions
 
-The output JSON includes:
-
-* Component names, types, and properties
-* Wire sheet link structure
-* Any embedded Java source (for Program Objects)
-* All handles (IDs) and their resolved names
-
-You can use this data to:
-
-* Summarize Niagara logic
-* Generate prompts to recreate it using a builder
-* Train models on real-world examples (e.g., Diggs RTU9)
+| Argument                                | Meaning                                                                                                                                                                     |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"C:\your\path\to\backup_Ahu4.dist"`    | **Positional argument**: path to the `.dist` or `.bog` file you want to analyze.                                                                                            |
+| `-o "C:\your\path\to\backup_Ahu4.json"` | **Optional** `--output` flag: specifies the output path for the generated `.json` file.                                                                                     |
+| `-l`                                    | **Optional** `--list` flag: tells the script to **print a list** of control logic components or metadata from the file, instead of (or in addition to) writing full output. |
 
 ---
 

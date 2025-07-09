@@ -10,55 +10,6 @@ core_concepts:
     target_path: niagara_user_home/stations/STATION_NAME/config.bog/file.xml
   xml_root_element: bajaObjectGraph
 
-# --- NEW SECTION: Python API Usage ---
-# This provides a high-level API to abstract away the XML complexity.
-# The AI should prefer using this Python API over generating raw XML.
-python_api_usage:
-  - description: "Instructions for using the BogFolderBuilder class in src/bog_builder.py to programmatically create wiresheets."
-  - initialization:
-      - goal: "Create a new wiresheet builder."
-      - command: "builder = BogFolderBuilder(folder_name='MyLogic')"
-  - add_component:
-      - goal: "Add a logic block to the wiresheet."
-      - command: "component_element = builder.add_component(comp_type, name, properties={}, settable=False, readonly=False, default_value=None)"
-      - parameters:
-          - comp_type: "The Niagara type (e.g., 'kitControl:Add', 'control:NumericWritable')."
-          - name: "The component's name on the wiresheet."
-          - settable: "Set to True for user-writable points (adds correct actions)."
-          - readonly: "Set to True for read-only calculated values (hides set action)."
-          - default_value: "Provide a numeric or string value to set the point's initial state."
-      - example_settable: "vav_temp = builder.add_component('control:NumericWritable', 'VAV_Temp', settable=True, default_value=72.0)"
-      - example_readonly: "fan_status = builder.add_component('control:BooleanWritable', 'Fan_Status', readonly=True)"
-  - add_link:
-      - goal: "Connect two components."
-      - command: "builder.add_link(source_handle, 'out', target_handle, 'inA')"
-      - note: "Use the .get('h') method on the component element returned by add_component to get its handle."
-      - example: "builder.add_link(vav_temp.get('h'), 'out', pid_loop.get('h'), 'setpoint')"
-  - save:
-      - goal: "Save the final .bog file."
-      - command: "builder.save('output_file.bog')"
-  - minimal_python_example:
-      - goal: "A complete, minimal example of creating a simple adder logic wiresheet."
-      - code: |
-          # main_builder.py
-          from src.bog_builder import BogFolderBuilder
-
-          # 1. Initialize the builder
-          builder = BogFolderBuilder(folder_name='MyAdderLogic')
-
-          # 2. Add components
-          input1 = builder.add_component('control:NumericWritable', 'Input1', settable=True, default_value=6.0)
-          input2 = builder.add_component('control:NumericWritable', 'Input2', settable=True, default_value=4.0)
-          add_block = builder.add_component('kitControl:Add', 'Add')
-          sum_output = builder.add_component('control:NumericWritable', 'Sum', readonly=True)
-
-          # 3. Link components together
-          builder.add_link(input1.get('h'), 'out', add_block.get('h'), 'inA')
-          builder.add_link(input2.get('h'), 'out', add_block.get('h'), 'inB')
-          builder.add_link(add_block.get('h'), 'out', sum_output.get('h'), 'in16')
-
-          # 4. Save the .bog file
-          builder.save('examples/Adder.bog')
 
 # --- Low-Level XML Structure Rules (For reference/fallback) ---
 xml_structure_rules:
@@ -143,10 +94,7 @@ strategy:
       use_components: [kitControl, control]
       use_case: basic math, boolean, timers, comparisons
       benefit: visual clarity, human readability
-    complex_logic:
-      use_component: program:Program
-      use_case: iteration, arrays, data_structures, runtime_logic
-      benefit: compact procedural logic
+
   component_slot_strategy:
     - description: "Defines how to configure component slots and actions for different use cases."
     - settable_points:
@@ -197,159 +145,20 @@ strategy:
           - then_y_is: "maxY + 10" # Use the standard 10-unit vertical increment for a new line.
           - then_x_resets_to: 10
 
----
-
-llm_context: niagara_program_object_guidelines
-
-generating_program_objects:
-  critical_rule: >
-    LLM must generate ONLY the Java code inside onStart(), onExecute(), and onStop(),
-    plus any helper methods at the class level.
-  do_not_generate:
-    - import_statements
-    - class_definition: 'public class ProgramImpl extends ProgramBase'
-    - slot_getter_setter_methods: ['getIn1()', 'setOut()', etc.]
-  notes:
-    - workbench_handles_framework: true
-    - helper_methods_must_be_class_level: true
-    - use_clock: 'Clock.schedule() for timers'
-  xml_example:
-    type: xml
-    content: |
-      <p h="1" n="MyJavaLogic" t="program:Program" m="program=program">
-        <p n="execute" v="<![CDATA[
-  // Member variables here (if any)
-  Clock.Ticket ticket;
-  ArrayList<Double> buffer = new ArrayList<>();
-
-  public void onStart() throws Exception {
-    updateTimer();
-  }
-
-  public void onExecute() throws Exception {
-    updateTimer();
-    // ... logic ...
-  }
-
-  public void onStop() throws Exception {
-    if (ticket != null) ticket.cancel();
-  }
-
-  // Helper methods here
-  void updateTimer() {
-    if (ticket != null) ticket.cancel();
-    ticket = Clock.schedule(getComponent(), BRelTime.makeSeconds(10), BProgram.execute, null);
-  }
-        ]]>"/>
-        <p n="in1" t="b:StatusNumeric" f="s"/>
-        <p n="out1" t="b:StatusNumeric" f="s"/>
-      </p>
-
----
-
-EXAMPLE 1. High-Limit Cutout Logic (XML Format)
-
-```xml
-<p h="1" n="HighLimitCutout" t="program:Program" m="program=program">
-  <p n="execute" v="<![CDATA[
-double highLimit = 85.0;
-
-public void onStart() throws Exception {
-  // No-op
-}
-
-public void onExecute() throws Exception {
-  double temp = getTempSensor();
-  setFanCmd(temp < highLimit);
-}
-
-public void onStop() throws Exception {
-  // No-op
-}
-]]>"/>
-  <p n="tempSensor" t="b:StatusNumeric" f="s"/>
-  <p n="fanCmd" t="b:StatusBoolean" f="s"/>
-</p>
-```
-
----
-
-EXAMPLE 2. Runtime Accumulator (XML Format)
-
-```xml
-<p h="2" n="RuntimeAccumulator" t="program:Program" m="program=program">
-  <p n="execute" v="<![CDATA[
-Clock.Ticket ticket;
-long runtimeSeconds = 0;
-
-public void onStart() throws Exception {
-  updateTimer();
-}
-
-public void onExecute() throws Exception {
-  if (getPumpCmd()) runtimeSeconds += 60; // assumes 1-minute schedule
-  setRuntimeMinutes(runtimeSeconds / 60.0);
-}
-
-public void onStop() throws Exception {
-  if (ticket != null) ticket.cancel();
-}
-
-void updateTimer() {
-  if (ticket != null) ticket.cancel();
-  ticket = Clock.schedule(getComponent(), BRelTime.makeMinutes(1), BProgram.execute, null);
-}
-]]>"/>
-  <p n="pumpCmd" t="b:StatusBoolean" f="s"/>
-  <p n="runtimeMinutes" t="b:StatusNumeric" f="s"/>
-</p>
-```
-
-EXAMPLE 3. Lead-Lag Weekly Switch (XML Format)
-
-```xml
-<p h="3" n="LeadLagWeekly" t="program:Program" m="program=program">
-  <p n="execute" v="<![CDATA[
-boolean leadIsA = true;
-
-public void onStart() throws Exception {
-  long currentWeek = System.currentTimeMillis() / (7L * 24 * 3600 * 1000);
-  leadIsA = (currentWeek % 2 == 0); // even weeks: A leads, odd weeks: B leads
-}
-
-public void onExecute() throws Exception {
-  boolean enable = getEnable();
-
-  setPumpACmd(enable && leadIsA);
-  setPumpBCmd(enable && !leadIsA);
-}
-
-public void onStop() throws Exception {
-  setPumpACmd(false);
-  setPumpBCmd(false);
-}
-]]>"/>
-  <p n="enable" t="b:StatusBoolean" f="s"/>
-  <p n="pumpACmd" t="b:StatusBoolean" f="s"/>
-  <p n="pumpBCmd" t="b:StatusBoolean" f="s"/>
-</p>
-```
-
----
-
 
 kitcontrol_components:
-  alarm:
+  - description: "A reference list of available components from the kitControl palette."
+  - alarm:
     - ChangeOfStateCountAlarmExt
     - ElapsedActiveTimeAlarmExt
     - LoopAlarmExt
     - AlarmCountToRelay
-  constants:
+  - constants:
     - BooleanConst
     - EnumConst
     - NumericConst
     - StringConst
-  conversion:
+  - conversion:
     - StatusBooleanToBoolean
     - StatusEnumToEnum
     - StatusEnumToInt
@@ -357,9 +166,7 @@ kitcontrol_components:
     - StatusNumericToFloat
     - StatusNumericToInt
     - BooleanToStatusBoolean
-    - DoubleToStatusEnum
     - EnumToStatusEnum
-    - FloatToStatusEnum
     - IntToStatusNumeric
     - LongToStatusNumeric
     - StringToStatusString
@@ -369,7 +176,7 @@ kitcontrol_components:
     - StatusNumericToStatusString
     - StatusStringToStatusNumeric
     - NumericUnitConverter
-  energy:
+  - energy:
     - DegreeDays
     - ElectricalDemandLimit
     - NightPurge
@@ -380,7 +187,7 @@ kitcontrol_components:
     - SetpointOffset
     - ShedControl
     - SlidingWindowDemandCalc
-  hvac:
+  - hvac:
     - InterstartDelayControl
     - InterstartDelayMaster
     - LeadLagCycles
@@ -390,12 +197,12 @@ kitcontrol_components:
     - SequenceBinary
     - SequenceLinear
     - Tstat
-  latch:
+  - latch:
     - BooleanLatch
     - EnumLatch
     - NumericLatch
     - StringLatch
-  logic:
+  - logic:
     - And
     - Or
     - Xor
@@ -406,7 +213,7 @@ kitcontrol_components:
     - LessThan
     - LessThanEqual
     - NotEqual
-  math:
+  - math:
     - Add
     - Average
     - Maximum
@@ -430,25 +237,25 @@ kitcontrol_components:
     - Sine
     - SquareRoot
     - Tangent
-  select:
+  - select:
     - BooleanSelect
     - EnumSelect
     - NumericSelect
     - StringSelect
-  string:
+  - string:
     - StringConcat
     - StringSubstring
     - StringTrim
     - StringIndexOf
     - StringTest
     - StringLen
-  timer:
+  - timer:
     - BooleanDelay
     - OneShot
     - NumericDelay
     - CurrentTime
     - TimeDifference
-  util:
+  - util:
     - BooleanSwitch
     - Counter
     - DigitalInputDemux
