@@ -1,4 +1,4 @@
-xml_content = '''
+xml_content = """
 <bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
   <p t="b:UnrestrictedFolder" m="b=baja">
     <p n="MainChillerPlant" t="b:Folder">
@@ -82,7 +82,7 @@ xml_content = '''
   </p>
 </bajaObjectGraph>
 
-'''
+"""
 
 with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
     f.write(xml_content)

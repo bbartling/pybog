@@ -153,7 +153,7 @@ Then open `tight_layout_adder.bog` in Workbench to view and test the wire sheet 
 ---
 
 
-## 🏗️ Coming Soon: BOG Builder
+## 🏗️ Maybe FUTURE Py BOG Builder???
 
 The builder will allow users to define logic via Python and export `.bog` files:
 
