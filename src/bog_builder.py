@@ -22,7 +22,7 @@ class BogFolderBuilder:
         self.START_X = 10
         self.START_Y = 10
         self.X_COLUMN_WIDTH = 15
-        self.Y_INCREMENT = 10    # The one and only vertical distance
+        self.Y_INCREMENT = 10
         self.MAX_X = 592
 
     def _get_next_handle(self):
@@ -44,17 +44,26 @@ class BogFolderBuilder:
             'handle': handle
         }
 
-    def add_numeric_writable(self, name, default_value=0.0, read_only=False):
-        """Helper to register a control:NumericWritable component."""
-        actions = {}
-        if read_only:
-            actions = {'set': 'ho', 'override': 'ho', 'auto': 'ho', 'emergencyOverride': 'h', 'emergencyAuto': 'h'}
-        else:
-            actions = {'override': 'ho', 'auto': 'ho', 'emergencyOverride': 'h', 'emergencyAuto': 'h'}
+    def add_numeric_writable(self, name, default_value=0.0):
+        """
+        Helper to register a standard control:NumericWritable component.
+        This method is now simplified: it always hides emergency actions
+        and leaves standard set/override actions available.
+        """
+        # Define a single, standard set of actions for all numeric points.
+        # This hides the emergency features, which are rarely used.
+        standard_actions = {
+            'emergencyOverride': 'h',
+            'emergencyAuto': 'h'
+        }
+        
+        # The 'read_only' parameter is removed. The human user can now
+        # make a point read-only by simply not linking anything to its inputs
+        # or by using logic to drive its value.
         self.add_component(
             'control:NumericWritable', name,
-            properties={'defaultValue': default_value, 'readOnly': read_only},
-            actions=actions
+            properties={'defaultValue': default_value},
+            actions=standard_actions
         )
 
     def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
@@ -114,7 +123,6 @@ class BogFolderBuilder:
                     comp_coords[name] = (current_x, avg_y)
                 else:
                     comp_coords[name] = (current_x, current_y)
-                    # THIS IS THE CORRECTED LINE:
                     current_y += self.Y_INCREMENT
                 
                 if comp_coords[name][1] > max_y_in_row:
@@ -140,8 +148,8 @@ class BogFolderBuilder:
                 ET.SubElement(out_slot, 'p', {'n': 'status', 'v': '0;activeLevel=e:17@control:PriorityLevel'})
                 fallback_slot = ET.SubElement(comp_element, 'p', {'n': 'fallback', 't': 'b:StatusNumeric'})
                 ET.SubElement(fallback_slot, 'p', {'n': 'value', 'v': str(default_val)})
-                if data['properties'].get('readOnly', False):
-                     ET.SubElement(comp_element, 'p', {'n': 'in16', 'f': 'tsL'})
+                # Always add an in16 slot for potential logic inputs
+                ET.SubElement(comp_element, 'p', {'n': 'in16', 'f': 'tsL'})
             else:
                  for prop_name, prop_value in data['properties'].items():
                     ET.SubElement(comp_element, 'p', {'n': prop_name, 'v': str(prop_value)})

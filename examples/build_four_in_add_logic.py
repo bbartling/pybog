@@ -20,7 +20,7 @@ def main():
     builder.add_numeric_writable(name="Input3", default_value=30.0)
     builder.add_numeric_writable(name="Input4", default_value=40.0)
     builder.add_component(comp_type="kitControl:Add", name="Add")
-    builder.add_numeric_writable(name="Sum", read_only=True)
+    builder.add_numeric_writable(name="Sum")
 
     # 3. Register all links. This is CRITICAL for the layout engine.
     builder.add_link("Input1", "out", "Add", "inA")
