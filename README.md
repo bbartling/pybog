@@ -36,7 +36,8 @@ python main.py "C:\your\path\to\backup_Ahu4.dist" -o "C:\your\path\to\backup_Ahu
 
 ---
 
-## 🐍 Python Tutorial: Write Your Own `.bog` File
+<details>
+<summary><strong>🐍 Python Tutorial: Write Your Own `.bog` File in XML from scratch</strong></summary>
 
 The Python script operates by creating the entire XML structure of the Niagara .bog file as a single, multi-line text string. This string contains all the necessary tags to define each component, its properties, and the links between them. Finally, the script writes this complete XML string directly into a new file, which Niagara can then open and display as a standard wiresheet.
 
@@ -140,10 +141,11 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 ![Adder Logic Created with Python](snips/addrMadeWithPy.jpg)
 
 
+</details>
+
 ---
 
-
-## 🏗️ Maybe FUTURE Py BOG Builder???
+## 🏗️ Py Bog Building
 
 The builder will allow users to define logic via Python and export `.bog` files:
 
@@ -193,7 +195,7 @@ if __name__ == "__main__":
 <details>
 <summary><strong>Bog Builder Test Plan: Common HVAC Algorithms</strong></summary>
 
-Here is a list of proposed scripts to generate `.bog` files for testing. Each one is based on real-world HVAC logic.
+Here is a list of proposed scripts to generate `.bog` files for testing **bog file building**. Each one is based on real-world HVAC logic scenorios from actual JACE backup file dumps setup by a human DDC technician.
 
 --- 
 
@@ -270,6 +272,7 @@ Here is a list of proposed scripts to generate `.bog` files for testing. Each on
 ---
 
 ### 🧩 Advanced Data Type & Optimization Tests (21–25):
+Exploritory processes to see if AI can create advanced wire sheet algorithms.
 
 21. **build_enum_mode_switch.py**  
     ☐ Demonstrates use of an `Enum` block to control different system modes (e.g., OFF, HEAT, COOL, AUTO) using a `NumericSwitch`. Useful for systems with multiple operating states such as rooftop units or air handlers.
@@ -287,8 +290,6 @@ Here is a list of proposed scripts to generate `.bog` files for testing. Each on
     ☐ This one includes **two coordinated reset logics** for an AHU:
     - **Duct Static Pressure Reset**: Uses the total number of open VAV dampers (e.g., >20%) to reset the duct static pressure setpoint downward, reducing fan energy.
     - **Discharge Air Temp Reset**: Adjusts the AHU discharge air temperature setpoint based on average zone cooling demand or reset schedules, minimizing reheat and saving energy.
-
-
 
 </details>
 
