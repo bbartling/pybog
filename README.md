@@ -11,9 +11,11 @@ The **ultimate goal** of the project is to enable AI to **generate Niagara Wires
 
 
 [🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
+
 ---
 
-## Dump a .dist or .bog to JSON 
+<details>
+<summary><strong>🔧 Dump a .dist or .bog to JSON </strong></summary>
 
 You can now use `main.py` to:
 
@@ -34,10 +36,12 @@ python main.py "C:\your\path\to\backup_Ahu4.dist" -o "C:\your\path\to\backup_Ahu
 | `-o "C:\your\path\to\backup_Ahu4.json"` | **Optional** `--output` flag: specifies the output path for the generated `.json` file.                                                                                     |
 | `-l`                                    | **Optional** `--list` flag: tells the script to **print a list** of control logic components or metadata from the file, instead of (or in addition to) writing full output. |
 
+</details>
+
 ---
 
 <details>
-<summary><strong>🐍 Python Tutorial: Write Your Own `.bog` File in XML from scratch</strong></summary>
+<summary><strong>👷 Write Your Own `.bog` File in XML from scratch</strong></summary>
 
 The Python script operates by creating the entire XML structure of the Niagara .bog file as a single, multi-line text string. This string contains all the necessary tags to define each component, its properties, and the links between them. Finally, the script writes this complete XML string directly into a new file, which Niagara can then open and display as a standard wiresheet.
 
@@ -145,9 +149,9 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-## 🏗️ Py Bog Building
+## 🐍 Py Bog Building
 
-The builder will allow users to define logic via Python and export `.bog` files:
+The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
 
 ```python
 import sys
