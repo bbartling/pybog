@@ -25,6 +25,16 @@ class BogFolderBuilder:
         self.Y_INCREMENT_TIGHT = 10
         self.MAX_X = 592
 
+    def average(self, final_output_name, input_names):
+        self.add_reduction_block("Average", final_output_name, input_names)
+
+    def minimum(self, final_output_name, input_names):
+        self.add_reduction_block("Minimum", final_output_name, input_names)
+
+    def maximum(self, final_output_name, input_names):
+        self.add_reduction_block("Maximum", final_output_name, input_names)
+
+
     def _get_next_handle(self):
         """Generates a unique hex handle string."""
         handle = hex(self._next_handle)[2:]
@@ -43,6 +53,48 @@ class BogFolderBuilder:
             'actions': actions or {},
             'handle': handle
         }
+
+    def add_reduction_block(self, block_type, final_output_name, input_names):
+        """
+        Adds a reduction block (Average, Minimum, Maximum) that supports N inputs.
+        Niagara blocks support only 4 inputs, so this method builds a reduction tree
+        and wires it automatically.
+        
+        Parameters:
+            block_type (str): One of "Average", "Minimum", "Maximum"
+            final_output_name (str): Name of the final output numericWritable
+            input_names (list[str]): List of input component names
+        """
+        from math import ceil
+
+        assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"
+        MAX_INPUTS = 4
+        tier = 1
+        current_inputs = input_names[:]
+
+        # Step 1: Build tree of reduction blocks until final node
+        while len(current_inputs) > MAX_INPUTS:
+            tier_outputs = []
+            for i in range(0, len(current_inputs), MAX_INPUTS):
+                chunk = current_inputs[i:i+MAX_INPUTS]
+                node_name = f"{block_type}_T{tier}_{i//MAX_INPUTS}"
+                self.add_component(f"kitControl:{block_type}", node_name)
+                for j, input_name in enumerate(chunk):
+                    self.add_link(input_name, "out", node_name, f"in{chr(65 + j)}")
+                tier_outputs.append(node_name)
+            current_inputs = tier_outputs
+            tier += 1
+
+        # Step 2: Final block
+        final_block = f"{block_type}_T{tier}_final"
+        self.add_component(f"kitControl:{block_type}", final_block)
+        for j, input_name in enumerate(current_inputs):
+            self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
+
+        # Step 3: Final writable output
+        self.add_numeric_writable(name=final_output_name)
+        self.add_link(final_block, "out", final_output_name, "in16")
+
 
     def add_numeric_writable(self, name, default_value=0.0):
         """
@@ -71,28 +123,33 @@ class BogFolderBuilder:
 
     def _build_xml(self):
         """Lays out components and constructs the final XML tree before saving."""
-        root = ET.Element('bajaObjectGraph', {'version': '4.0', 'reversibleEncodingKeySource': 'none', 'FIPSEnabled': 'false', 'reversibleEncodingValidator': '[null.1]'})
+        root = ET.Element('bajaObjectGraph', {
+            'version': '4.0',
+            'reversibleEncodingKeySource': 'none',
+            'FIPSEnabled': 'false',
+            'reversibleEncodingValidator': '[null.1]'
+        })
         unrestricted_folder = ET.SubElement(root, 'p', {'t': 'b:UnrestrictedFolder', 'm': 'b=baja'})
         folder_element = ET.SubElement(unrestricted_folder, 'p', {'n': self.folder_name, 't': 'b:Folder'})
 
+        # Build graph structure
         in_degree = {name: 0 for name in self._components}
         adj = defaultdict(list)
         for link in self._links:
-            source, target = link['source_name'], link['target_name']
-            adj[source].append(target)
-            in_degree[target] += 1
+            adj[link['source_name']].append(link['target_name'])
+            in_degree[link['target_name']] += 1
 
-        queue = deque([name for name in sorted(self._components.keys()) if in_degree[name] == 0])
+        queue = deque([name for name in sorted(self._components) if in_degree[name] == 0])
         levels = []
-        visited_in_bfs = set()
+        visited = set()
 
         while queue:
             level_size = len(queue)
             current_level = []
             for _ in range(level_size):
                 u = queue.popleft()
-                if u in visited_in_bfs: continue
-                visited_in_bfs.add(u)
+                if u in visited: continue
+                visited.add(u)
                 current_level.append(u)
                 for v in sorted(adj[u]):
                     in_degree[v] -= 1
@@ -102,7 +159,8 @@ class BogFolderBuilder:
 
         comp_coords = {}
         current_x = self.START_X
-        
+
+        # Initial vertical pass
         current_y = self.START_Y
         if levels:
             for name in levels[0]:
@@ -111,53 +169,59 @@ class BogFolderBuilder:
 
         current_x += self.X_COLUMN_WIDTH
 
+        # Remaining tiers
         for level in levels[1:]:
-            last_y_in_column = self.START_Y - self.Y_INCREMENT
-            
-            def get_avg_input_y(comp_name):
-                source_ys = [comp_coords[link['source_name']][1] for link in self._links if link['target_name'] == comp_name and link['source_name'] in comp_coords]
-                return sum(source_ys) / len(source_ys) if source_ys else 0
-            
-            sorted_level = sorted(level, key=get_avg_input_y)
+            def avg_input_y(name):
+                ys = [
+                    comp_coords[link['source_name']][1]
+                    for link in self._links
+                    if link['target_name'] == name and link['source_name'] in comp_coords
+                ]
+                return sum(ys) / len(ys) if ys else self.START_Y
 
-            for name in sorted_level:
-                avg_y = get_avg_input_y(name)
-                y_pos = max(avg_y, last_y_in_column + self.Y_INCREMENT)
+            sorted_level = sorted(level, key=avg_input_y)
+
+            # Compute total vertical space needed for this tier
+            total_height = len(sorted_level) * self.Y_INCREMENT
+            start_y = self.START_Y + (len(levels[0]) * self.Y_INCREMENT // 2) - (total_height // 2)
+
+            for i, name in enumerate(sorted_level):
+                y_pos = start_y + i * self.Y_INCREMENT
                 comp_coords[name] = (current_x, y_pos)
-                last_y_in_column = y_pos
 
             current_x += self.X_COLUMN_WIDTH
 
+        # XML build
         link_counters = defaultdict(int)
         for name, data in self._components.items():
-            comp_attrs = {'n': name, 't': data['type'], 'h': data['handle']}
+            attrs = {'n': name, 't': data['type'], 'h': data['handle']}
             if ':' in data['type']:
                 prefix = data['type'].split(':')[0]
-                comp_attrs['m'] = f"{prefix}={prefix}"
-            comp_element = ET.SubElement(folder_element, 'p', comp_attrs)
-            
+                attrs['m'] = f"{prefix}={prefix}"
+            element = ET.SubElement(folder_element, 'p', attrs)
+
             x, y = comp_coords.get(name, (self.START_X, self.START_Y))
-            ET.SubElement(comp_element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': f"{int(x)},{int(y)},8"})
+            ET.SubElement(element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': f"{int(x)},{int(y)},8"})
 
             if data['type'] == 'control:NumericWritable':
                 default_val = data['properties'].get('defaultValue', 0.0)
-                out_slot = ET.SubElement(comp_element, 'p', {'n': 'out', 'f': 's', 't': 'b:StatusNumeric'})
+                out_slot = ET.SubElement(element, 'p', {'n': 'out', 'f': 's', 't': 'b:StatusNumeric'})
                 ET.SubElement(out_slot, 'p', {'n': 'value', 'v': str(default_val)})
                 ET.SubElement(out_slot, 'p', {'n': 'status', 'v': '0;activeLevel=e:17@control:PriorityLevel'})
-                fallback_slot = ET.SubElement(comp_element, 'p', {'n': 'fallback', 't': 'b:StatusNumeric'})
+                fallback_slot = ET.SubElement(element, 'p', {'n': 'fallback', 't': 'b:StatusNumeric'})
                 ET.SubElement(fallback_slot, 'p', {'n': 'value', 'v': str(default_val)})
-                ET.SubElement(comp_element, 'p', {'n': 'in16', 'f': 'tsL'})
+                ET.SubElement(element, 'p', {'n': 'in16', 'f': 'tsL'})
             else:
-                 for prop_name, prop_value in data['properties'].items():
-                    ET.SubElement(comp_element, 'p', {'n': prop_name, 'v': str(prop_value)})
+                for prop_name, prop_value in data['properties'].items():
+                    ET.SubElement(element, 'p', {'n': prop_name, 'v': str(prop_value)})
 
             for action_name, action_flag in data['actions'].items():
-                ET.SubElement(comp_element, 'a', {'n': action_name, 'f': action_flag})
+                ET.SubElement(element, 'a', {'n': action_name, 'f': action_flag})
 
+        # Wire links
         for link in self._links:
             target_handle = self._handle_map[link['target_name']]
             target_element = folder_element.find(f".//p[@h='{target_handle}']")
-            
             link_count = link_counters[link['target_name']]
             link_name = "Link" if link_count == 0 else f"Link{link_count}"
             link_counters[link['target_name']] += 1
@@ -168,8 +232,9 @@ class BogFolderBuilder:
             ET.SubElement(link_element, 'p', {'n': 'sourceOrd', 'v': f"h:{self._handle_map[link['source_name']]}"})
             ET.SubElement(link_element, 'p', {'n': 'relationId', 'v': 'n:dataLink'})
             ET.SubElement(link_element, 'p', {'n': 'targetSlotName', 'v': link['target_slot']})
-        
+
         return root
+
 
     def save(self, file_path):
         """Saves the constructed component to a .bog file."""
