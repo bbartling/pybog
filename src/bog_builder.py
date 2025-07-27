@@ -18,11 +18,11 @@ class BogFolderBuilder:
         self._next_handle = 1
         self._handle_map = {}
 
-        # --- Layout Parameters are now Hardcoded Constants ---
         self.START_X = 10
         self.START_Y = 10
         self.X_COLUMN_WIDTH = 15
         self.Y_INCREMENT = 10
+        self.Y_INCREMENT_TIGHT = 10
         self.MAX_X = 592
 
     def _get_next_handle(self):
@@ -47,19 +47,11 @@ class BogFolderBuilder:
     def add_numeric_writable(self, name, default_value=0.0):
         """
         Helper to register a standard control:NumericWritable component.
-        This method is now simplified: it always hides emergency actions
-        and leaves standard set/override actions available.
         """
-        # Define a single, standard set of actions for all numeric points.
-        # This hides the emergency features, which are rarely used.
         standard_actions = {
             'emergencyOverride': 'h',
             'emergencyAuto': 'h'
         }
-        
-        # The 'read_only' parameter is removed. The human user can now
-        # make a point read-only by simply not linking anything to its inputs
-        # or by using logic to drive its value.
         self.add_component(
             'control:NumericWritable', name,
             properties={'defaultValue': default_value},
@@ -90,15 +82,19 @@ class BogFolderBuilder:
             adj[source].append(target)
             in_degree[target] += 1
 
-        queue = deque([name for name, degree in in_degree.items() if degree == 0])
+        queue = deque([name for name in sorted(self._components.keys()) if in_degree[name] == 0])
         levels = []
+        visited_in_bfs = set()
+
         while queue:
             level_size = len(queue)
             current_level = []
             for _ in range(level_size):
                 u = queue.popleft()
+                if u in visited_in_bfs: continue
+                visited_in_bfs.add(u)
                 current_level.append(u)
-                for v in adj[u]:
+                for v in sorted(adj[u]):
                     in_degree[v] -= 1
                     if in_degree[v] == 0:
                         queue.append(v)
@@ -106,27 +102,29 @@ class BogFolderBuilder:
 
         comp_coords = {}
         current_x = self.START_X
-        row_start_y = self.START_Y
-        max_y_in_row = 0
+        
+        current_y = self.START_Y
+        if levels:
+            for name in levels[0]:
+                comp_coords[name] = (current_x, current_y)
+                current_y += self.Y_INCREMENT
 
-        for i, level in enumerate(levels):
-            current_y = row_start_y
-            if current_x > self.MAX_X and i > 0:
-                current_x = self.START_X
-                row_start_y = max_y_in_row + self.Y_INCREMENT
-                max_y_in_row = row_start_y
+        current_x += self.X_COLUMN_WIDTH
+
+        for level in levels[1:]:
+            last_y_in_column = self.START_Y - self.Y_INCREMENT
             
-            for name in level:
-                source_positions_y = [comp_coords[link['source_name']][1] for link in self._links if link['target_name'] == name and link['source_name'] in comp_coords]
-                if source_positions_y:
-                    avg_y = sum(source_positions_y) / len(source_positions_y)
-                    comp_coords[name] = (current_x, avg_y)
-                else:
-                    comp_coords[name] = (current_x, current_y)
-                    current_y += self.Y_INCREMENT
-                
-                if comp_coords[name][1] > max_y_in_row:
-                    max_y_in_row = comp_coords[name][1]
+            def get_avg_input_y(comp_name):
+                source_ys = [comp_coords[link['source_name']][1] for link in self._links if link['target_name'] == comp_name and link['source_name'] in comp_coords]
+                return sum(source_ys) / len(source_ys) if source_ys else 0
+            
+            sorted_level = sorted(level, key=get_avg_input_y)
+
+            for name in sorted_level:
+                avg_y = get_avg_input_y(name)
+                y_pos = max(avg_y, last_y_in_column + self.Y_INCREMENT)
+                comp_coords[name] = (current_x, y_pos)
+                last_y_in_column = y_pos
 
             current_x += self.X_COLUMN_WIDTH
 
@@ -138,7 +136,7 @@ class BogFolderBuilder:
                 comp_attrs['m'] = f"{prefix}={prefix}"
             comp_element = ET.SubElement(folder_element, 'p', comp_attrs)
             
-            x, y = comp_coords[name]
+            x, y = comp_coords.get(name, (self.START_X, self.START_Y))
             ET.SubElement(comp_element, 'p', {'n': 'wsAnnotation', 't': 'b:WsAnnotation', 'v': f"{int(x)},{int(y)},8"})
 
             if data['type'] == 'control:NumericWritable':
@@ -148,7 +146,6 @@ class BogFolderBuilder:
                 ET.SubElement(out_slot, 'p', {'n': 'status', 'v': '0;activeLevel=e:17@control:PriorityLevel'})
                 fallback_slot = ET.SubElement(comp_element, 'p', {'n': 'fallback', 't': 'b:StatusNumeric'})
                 ET.SubElement(fallback_slot, 'p', {'n': 'value', 'v': str(default_val)})
-                # Always add an in16 slot for potential logic inputs
                 ET.SubElement(comp_element, 'p', {'n': 'in16', 'f': 'tsL'})
             else:
                  for prop_name, prop_value in data['properties'].items():
@@ -166,10 +163,11 @@ class BogFolderBuilder:
             link_counters[link['target_name']] += 1
 
             link_element = ET.SubElement(target_element, 'p', {'n': link_name, 't': 'b:Link'})
-            ET.SubElement(link_element, 'p', {'n': 'sourceOrd', 'v': f"h:{self._handle_map[link['source_name']]}"})
+            ET.SubElement(link_element, 'p', {'n': 'relationTags', 'v': ''})
             ET.SubElement(link_element, 'p', {'n': 'sourceSlotName', 'v': link['source_slot']})
-            ET.SubElement(link_element, 'p', {'n': 'targetSlotName', 'v': link['target_slot']})
+            ET.SubElement(link_element, 'p', {'n': 'sourceOrd', 'v': f"h:{self._handle_map[link['source_name']]}"})
             ET.SubElement(link_element, 'p', {'n': 'relationId', 'v': 'n:dataLink'})
+            ET.SubElement(link_element, 'p', {'n': 'targetSlotName', 'v': link['target_slot']})
         
         return root
 
