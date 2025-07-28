@@ -3,17 +3,21 @@ import os
 import argparse
 
 # Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.bog_builder import BogFolderBuilder
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Build a complex, multi-algorithm .bog file.")
-    parser.add_argument("-o", "--output_dir", default="examples", help="Output directory.")
+    parser = argparse.ArgumentParser(
+        description="Build a complex, multi-algorithm .bog file."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
     args = parser.parse_args()
 
     # 1. Initialize the builder
     builder = BogFolderBuilder("MultiAlgorithmTest")
-
 
     # Define input blocks and default values
     builder.add_numeric_writable(name="Input1", default_value=10.0)
@@ -116,6 +120,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"Successfully created {output_path}")
+
 
 if __name__ == "__main__":
     main()

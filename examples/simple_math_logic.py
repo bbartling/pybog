@@ -3,8 +3,9 @@ import os
 import argparse
 
 # Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.bog_builder import BogFolderBuilder
+
 
 def main():
     """
@@ -12,8 +13,12 @@ def main():
     that combines multiple math blocks to calculate:
     Result = ((Input_A + Input_B) * Input_C) / Input_D
     """
-    parser = argparse.ArgumentParser(description="Build a complex math logic .bog file with automatic layout.")
-    parser.add_argument("-o", "--output_dir", default="examples", help="Output directory.")
+    parser = argparse.ArgumentParser(
+        description="Build a complex math logic .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
     args = parser.parse_args()
 
     # 1. Initialize the builder
@@ -21,7 +26,7 @@ def main():
 
     # 2. Register all components for the equation.
     # The builder's layout engine will handle all positioning.
-    
+
     # --- Inputs ---
     builder.add_numeric_writable(name="Input_A", default_value=20.0)
     builder.add_numeric_writable(name="Input_B", default_value=10.0)
@@ -38,7 +43,7 @@ def main():
 
     # 3. Register all links to define the data flow.
     # This is the most critical part for the automatic layout engine.
-    
+
     # First level of logic: (Input_A + Input_B)
     builder.add_link("Input_A", "out", "Add_AB", "inA")
     builder.add_link("Input_B", "out", "Add_AB", "inB")
@@ -59,6 +64,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"Successfully created {output_path}")
+
 
 if __name__ == "__main__":
     main()
