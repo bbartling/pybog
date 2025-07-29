@@ -1,147 +1,1334 @@
-This XML file does not appear to have any style information associated with it. The document tree is shown below.
-<bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]">
-<p t="b:UnrestrictedFolder" m="b=baja">
-<p n="BooleanLogicNumericSwitch" t="b:Folder">
-<p n="Input_A" t="control:NumericWritable" h="1" m="control=control">
-<p n="wsAnnotation" t="b:WsAnnotation" v="10,30,8"/>
-<p n="out" f="s" t="b:StatusNumeric">
-<p n="value" v="100.0"/>
-<p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
-</p>
-<p n="fallback" t="b:StatusNumeric">
-<p n="value" v="100.0"/>
-</p>
-<p n="in16" f="tsL"/>
-<a n="emergencyOverride" f="h"/>
-<a n="emergencyAuto" f="h"/>
-</p>
-<p n="Input_B" t="control:NumericWritable" h="2" m="control=control">
-<p n="wsAnnotation" t="b:WsAnnotation" v="10,40,8"/>
-<p n="out" f="s" t="b:StatusNumeric">
-<p n="value" v="40.0"/>
-<p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
-</p>
-<p n="fallback" t="b:StatusNumeric">
-<p n="value" v="40.0"/>
-</p>
-<p n="in16" f="tsL"/>
-<a n="emergencyOverride" f="h"/>
-<a n="emergencyAuto" f="h"/>
-</p>
-<p n="BooleanWritable" t="control:BooleanWritable" h="3" m="control=control">
-<p n="wsAnnotation" t="b:WsAnnotation" v="10,10,8"/>
-<p n="defaultValue" v="false"/>
-<a n="emergencyOverride" f="h"/>
-<a n="emergencyAuto" f="h"/>
-</p>
-<p n="Add" t="kitControl:Add" h="4" m="kitControl=kitControl">
-<p n="wsAnnotation" t="b:WsAnnotation" v="25,25,8"/>
-<p n="Link" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:1"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inA"/>
-</p>
-<p n="Link1" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:2"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inB"/>
-</p>
-</p>
-<p n="Subtract" t="kitControl:Subtract" h="5" m="kitControl=kitControl">
-<p n="wsAnnotation" t="b:WsAnnotation" v="25,35,8"/>
-<p n="Link" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:1"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inA"/>
-</p>
-<p n="Link1" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:2"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inB"/>
-</p>
-</p>
-<p n="Equal" t="kitControl:Equal" h="6" m="kitControl=kitControl">
-<p n="wsAnnotation" t="b:WsAnnotation" v="25,15,8"/>
-<p n="Link" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:3"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inA"/>
-</p>
-<p n="Link1" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:9"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inB"/>
-</p>
-</p>
-<p n="NumericSwitch" t="util:NumericSwitch" h="7" m="util=util">
-<p n="wsAnnotation" t="b:WsAnnotation" v="40,25,8"/>
-<p n="Link" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:6"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inSwitch"/>
-</p>
-<p n="Link1" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:4"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inTrue"/>
-</p>
-<p n="Link2" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:5"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="inFalse"/>
-</p>
-</p>
-<p n="Output" t="control:NumericWritable" h="8" m="control=control">
-<p n="wsAnnotation" t="b:WsAnnotation" v="55,25,8"/>
-<p n="out" f="s" t="b:StatusNumeric">
-<p n="value" v="0.0"/>
-<p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
-</p>
-<p n="fallback" t="b:StatusNumeric">
-<p n="value" v="0.0"/>
-</p>
-<p n="in16" f="tsL"/>
-<a n="emergencyOverride" f="h"/>
-<a n="emergencyAuto" f="h"/>
-<p n="Link" t="b:Link">
-<p n="relationTags" v=""/>
-<p n="sourceSlotName" v="out"/>
-<p n="sourceOrd" v="h:7"/>
-<p n="relationId" v="n:dataLink"/>
-<p n="targetSlotName" v="in16"/>
-</p>
-</p>
-<p n="Const_True" t="control:NumericWritable" h="9" m="control=control">
-<p n="wsAnnotation" t="b:WsAnnotation" v="10,20,8"/>
-<p n="out" f="s" t="b:StatusNumeric">
-<p n="value" v="1.0"/>
-<p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
-</p>
-<p n="fallback" t="b:StatusNumeric">
-<p n="value" v="1.0"/>
-</p>
-<p n="in16" f="tsL"/>
-<a n="emergencyOverride" f="h"/>
-<a n="emergencyAuto" f="h"/>
-</p>
-</p>
-</p>
-</bajaObjectGraph>
+Please follow these instructions as an AI helper tool to assist the human DDC technicians in creating advanced flow programming wire sheets for the Niagara 4 platfrom.
+
+Most blocks are limited to inA, inB, inC, inD wire connnections for flow programming algorithms for HVAC controls.
+This is the underlying project source code to create the XML bajaObjectGraph called a .bog file which the human will use for production system.
+Humans using this dont know computer science data structures and algorithms but are HVAC, PLC programming, and flow programming experts for mechanical sequencing.
+Put together an algorithm with the Niagara API based on the Python API to make a bog file which will be returned to the human.
+
+To maintain a consistent and simple style, ensure all generated Python scripts for creating .bog files directly append to the system path for imports (e.g., sys.path.append(...)) without using try/except error handling, accept an output directory with an -o command-line argument, and define the final .bog filename as a hardcoded string within the script.
+
+Current source to make an a bog file.
+
+# src/bog_builder.py
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+import zipfile
+from collections import defaultdict, deque
+
+
+class BogFolderBuilder:
+    """
+    Builds a Niagara .bog file with a non-negotiable, intelligent layout engine
+    that strictly adheres to the Hierarchical Data Flow strategy.
+    """
+
+    def __init__(self, folder_name, debug=True):
+        """Initializes the builder with a root folder name."""
+        self.debug = debug
+        self.folder_name = folder_name
+        self._components = {}
+        self._links = []
+        self._next_handle = 1
+        self._handle_map = {}
+
+        # Layout constants
+        self.START_X = 10
+        self.START_Y = 10
+        self.X_COLUMN_WIDTH = 15  # Increased for better spacing between columns
+        self.Y_INCREMENT = 10  # Increased for better vertical spacing
+
+    def log(self, message):
+        """Prints a debug message if debugging is enabled."""
+        if self.debug:
+            print(f"[BOG DEBUG] {message}")
+
+    def _get_next_handle(self):
+        """Generates a unique hex handle string."""
+        handle = hex(self._next_handle)[2:]
+        self._next_handle += 1
+        return handle
+
+    def add_component(self, comp_type, name, properties=None, actions=None):
+        """Registers a component. Layout is 100% automatic."""
+        if name in self._components:
+            raise ValueError(f"Component with name '{name}' already exists.")
+        handle = self._get_next_handle()
+        self._handle_map[name] = handle
+        self._components[name] = {
+            "type": comp_type,
+            "properties": properties or {},
+            "actions": actions or {},
+            "handle": handle,
+        }
+        self.log(f"Added component '{name}' ({comp_type})")
+
+    def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
+        """Adds a link between two components, with automatic type conversion."""
+        if source_comp_name not in self._components:
+            raise ValueError(f"Source component '{source_comp_name}' not found.")
+        if target_comp_name not in self._components:
+            raise ValueError(f"Target component '{target_comp_name}' not found.")
+
+        source_type = self._components[source_comp_name]["type"]
+
+        # Determine if a conversion link is needed
+        link_type = "b:Link"
+        if "Boolean" in source_type and target_slot.startswith("in"):
+            # A more robust check for boolean-like types
+            source_comp_info = self._components.get(source_comp_name, {})
+            if source_comp_info.get("type") == "control:BooleanWritable":
+                link_type = "b:ConversionLink"
+
+        self._links.append(
+            {
+                "source_name": source_comp_name,
+                "source_slot": source_slot,
+                "target_name": target_comp_name,
+                "target_slot": target_slot,
+                "link_type": link_type,
+            }
+        )
+        self.log(
+            f"Linked [{link_type}] '{source_comp_name}.{source_slot}' -> '{target_comp_name}.{target_slot}'"
+        )
+
+    def add_numeric_writable(self, name, default_value=0.0):
+        """Helper to add a standard control:NumericWritable component."""
+        self.add_component(
+            "control:NumericWritable",
+            name,
+            properties={"defaultValue": default_value},
+            actions={"emergencyOverride": "h", "emergencyAuto": "h"},
+        )
+
+    def add_numeric_switch(self, name):
+        """Adds a kitControl:NumericSwitch component (not util)."""
+        self.add_component("kitControl:NumericSwitch", name)
+
+    def add_boolean_writable(self, name, default_value=False):
+        """Helper to add a standard control:BooleanWritable component."""
+        self.add_component(
+            "control:BooleanWritable",
+            name,
+            properties={"fallback": {"value": str(default_value).lower()}},
+            actions={
+                "emergencyActive": "h",
+                "emergencyInactive": "h",
+                "emergencyAuto": "h",
+            },
+        )
+
+    def save(self, file_path):
+        """Constructs the XML and saves it to a .bog file."""
+        final_xml_root = self._build_xml()
+        # Use minidom for pretty printing the XML
+        rough_string = ET.tostring(final_xml_root, "utf-8")
+        reparsed = minidom.parseString(rough_string)
+        pretty_string = reparsed.toprettyxml(indent="  ", encoding="utf-8")
+
+        with zipfile.ZipFile(file_path, "w") as bog_zip:
+            bog_zip.writestr("file.xml", pretty_string)
+        self.log(f"Successfully wrote .bog file to {file_path}")
+
+    def add_reduction_block(self, block_type, final_output_name, input_names):
+        assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"
+        MAX_INPUTS = 4
+        tier = 1
+        current_inputs = input_names[:]
+
+        while len(current_inputs) > MAX_INPUTS:
+            tier_outputs = []
+            for i in range(0, len(current_inputs), MAX_INPUTS):
+                chunk = current_inputs[i : i + MAX_INPUTS]
+                node_name = f"{block_type}_T{tier}_{i//MAX_INPUTS}"
+                self.add_component(f"kitControl:{block_type}", node_name)
+                for j, input_name in enumerate(chunk):
+                    self.add_link(input_name, "out", node_name, f"in{chr(65 + j)}")
+                tier_outputs.append(node_name)
+            current_inputs = tier_outputs
+            tier += 1
+
+        final_block = f"{block_type}_T{tier}_final"
+        self.add_component(f"kitControl:{block_type}", final_block)
+        for j, input_name in enumerate(current_inputs):
+            self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
+
+        self.add_numeric_writable(name=final_output_name)
+        self.add_link(final_block, "out", final_output_name, "in16")
+
+    def _build_xml(self):
+        """Lays out components and constructs the final XML tree before saving."""
+        self.log("Starting XML build process...")
+
+        root = ET.Element(
+            "bajaObjectGraph",
+            {
+                "version": "4.0",
+                "reversibleEncodingKeySource": "none",
+                "FIPSEnabled": "false",
+                "reversibleEncodingValidator": "[null.1]",
+            },
+        )
+        unrestricted_folder = ET.SubElement(
+            root, "p", {"t": "b:UnrestrictedFolder", "m": "b=baja"}
+        )
+        folder_element = ET.SubElement(
+            unrestricted_folder, "p", {"n": self.folder_name, "t": "b:Folder"}
+        )
+
+        # Perform a topological sort to arrange components in tiers/levels
+        in_degree = {name: 0 for name in self._components}
+        adj = defaultdict(list)
+        for link in self._links:
+            adj[link["source_name"]].append(link["target_name"])
+            in_degree[link["target_name"]] += 1
+
+        # Initialize queue with nodes that have no incoming links
+        queue = deque(
+            [name for name in sorted(self._components) if in_degree[name] == 0]
+        )
+        levels = []
+        visited = set()
+
+        while queue:
+            level_size = len(queue)
+            current_level = []
+            for _ in range(level_size):
+                u = queue.popleft()
+                if u in visited:
+                    continue
+                visited.add(u)
+                current_level.append(u)
+                for v in sorted(adj[u]):
+                    in_degree[v] -= 1
+                    if in_degree[v] == 0:
+                        queue.append(v)
+            if current_level:
+                levels.append(current_level)
+
+        comp_coords = {}
+        current_x = self.START_X
+
+        # Layout the first tier (source components)
+        if levels:
+            level_zero_y = self.START_Y
+            for name in levels[0]:
+                comp_coords[name] = (current_x, level_zero_y)
+                level_zero_y += self.Y_INCREMENT
+
+        current_x += self.X_COLUMN_WIDTH
+
+        # Layout subsequent tiers with fan-out handling
+        for level in levels[1:]:
+            def avg_input_y(name):
+                """Average Y of all connected parent nodes."""
+                ys = [
+                    comp_coords[link["source_name"]][1]
+                    for link in self._links
+                    if link["target_name"] == name
+                    and link["source_name"] in comp_coords
+                ]
+                return sum(ys) / len(ys) if ys else self.START_Y
+
+            # Calculate desired positions
+            desired_positions = [
+                {"name": name, "y": avg_input_y(name)} for name in level
+            ]
+            desired_positions.sort(key=lambda p: p["y"])
+
+            # Pass 1: Collision resolution (push down)
+            last_y = -float("inf")
+            for pos in desired_positions:
+                y_pos = max(pos["y"], last_y + self.Y_INCREMENT)
+                comp_coords[pos["name"]] = (current_x, y_pos)
+                last_y = y_pos
+
+            # Pass 2: Centering tier vertically
+            all_y = [
+                coord[1] for coord in comp_coords.values() if coord[0] == current_x
+            ]
+            avg_y = sum(all_y) / len(all_y)
+            tier_shift = self.START_Y + ((len(levels[0]) * self.Y_INCREMENT) / 2) - avg_y
+            for name in [p["name"] for p in desired_positions]:
+                x, y = comp_coords[name]
+                comp_coords[name] = (x, y + tier_shift)
+
+            current_x += self.X_COLUMN_WIDTH
+
+
+        # === OUTPUT SIDE-CAR LOGIC ===
+        # Position output-only writables next to their driver component
+        for name, data in self._components.items():
+            if data["type"] in ("control:NumericWritable", "control:BooleanWritable"):
+                is_output_only = all(
+                    link["source_name"] != name for link in self._links
+                )
+                if is_output_only:
+                    incoming_links = [
+                        l for l in self._links if l["target_name"] == name
+                    ]
+                    if incoming_links:
+                        # Place it next to its first input driver
+                        driver = incoming_links[0]["source_name"]
+                        if driver in comp_coords:
+                            sx, sy = comp_coords[driver]
+                            comp_coords[name] = (sx + self.X_COLUMN_WIDTH, sy)
+
+        # === FINAL XML ELEMENT CONSTRUCTION ===
+        link_counters = defaultdict(int)
+        for name, data in self._components.items():
+            attrs = {"n": name, "t": data["type"], "h": data["handle"]}
+            if ":" in data["type"]:
+                prefix = data["type"].split(":")[0]
+                attrs["m"] = f"{prefix}={prefix}"
+            element = ET.SubElement(folder_element, "p", attrs)
+
+            x, y = comp_coords.get(name, (self.START_X, self.START_Y))
+            ET.SubElement(
+                element,
+                "p",
+                {
+                    "n": "wsAnnotation",
+                    "t": "b:WsAnnotation",
+                    "v": f"{int(x)},{int(y)},8",
+                },
+            )
+
+            # Add component-specific properties and slots
+            if data["type"] == "control:NumericWritable":
+                default_val = data["properties"].get("defaultValue", 0.0)
+                out_slot = ET.SubElement(
+                    element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"}
+                )
+                ET.SubElement(out_slot, "p", {"n": "value", "v": str(default_val)})
+                ET.SubElement(
+                    out_slot,
+                    "p",
+                    {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
+                )
+                fallback_slot = ET.SubElement(
+                    element, "p", {"n": "fallback", "t": "b:StatusNumeric"}
+                )
+                ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
+                ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
+            elif data["type"] == "control:BooleanWritable":
+                fallback_slot = ET.SubElement(
+                    element, "p", {"n": "fallback", "t": "b:StatusBoolean"}
+                )
+                ET.SubElement(
+                    fallback_slot,
+                    "p",
+                    {"n": "value", "v": data["properties"]["fallback"]["value"]},
+                )
+            else:
+                for prop_name, prop_value in data["properties"].items():
+                    ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
+            for action_name, action_flag in data["actions"].items():
+                ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
+
+        # Wire all the links between components
+        for link in self._links:
+            target_handle = self._handle_map[link["target_name"]]
+            target_element = folder_element.find(f".//p[@h='{target_handle}']")
+
+            # Ensure target element was found before proceeding
+            if target_element is None:
+                self.log(
+                    f"WARNING: Could not find target element for link to '{link['target_name']}'"
+                )
+                continue
+
+            link_count = link_counters[link["target_name"]]
+            link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
+            link_counters[link["target_name"]] += 1
+
+            link_element = ET.SubElement(
+                target_element, "p", {"n": link_name, "t": link["link_type"]}
+            )
+            ET.SubElement(
+                link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]}
+            )
+            ET.SubElement(
+                link_element,
+                "p",
+                {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"},
+            )
+            ET.SubElement(
+                link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]}
+            )
+
+            if link["link_type"] == "b:ConversionLink":
+                ET.SubElement(
+                    link_element,
+                    "p",
+                    {
+                        "n": "converter",
+                        "m": "conv=converters",
+                        "t": "conv:StatusBooleanToStatusNumeric",
+                    },
+                )
+
+        return root
+
+
+
+
+
+Niagara4 kitcontrol_components:
+  - description: "A reference list of available components from the kitControl palette."
+  - alarm:
+    - ChangeOfStateCountAlarmExt
+    - ElapsedActiveTimeAlarmExt
+    - LoopAlarmExt
+    - AlarmCountToRelay
+  - constants:
+    - BooleanConst
+    - EnumConst
+    - NumericConst
+    - StringConst
+  - conversion:
+    - StatusBooleanToBoolean
+    - StatusEnumToEnum
+    - StatusEnumToInt
+    - StatusNumericToDouble
+    - StatusNumericToFloat
+    - StatusNumericToInt
+    - BooleanToStatusBoolean
+    - EnumToStatusEnum
+    - IntToStatusNumeric
+    - LongToStatusNumeric
+    - StringToStatusString
+    - StatusEnumToStatusBoolean
+    - StatusEnumToStatusNumeric
+    - StatusNumericToStatusEnum
+    - StatusNumericToStatusString
+    - StatusStringToStatusNumeric
+    - NumericUnitConverter
+  - energy:
+    - DegreeDays
+    - ElectricalDemandLimit
+    - NightPurge
+    - OptimizedStartStop
+    - OutsideAirOptimization
+    - Psychrometric
+    - SetpointLoadShed
+    - SetpointOffset
+    - ShedControl
+    - SlidingWindowDemandCalc
+  - hvac:
+    - InterstartDelayControl
+    - InterstartDelayMaster
+    - LeadLagCycles
+    - LeadLagRuntime
+    - LoopPoint
+    - RaiseLower
+    - SequenceBinary
+    - SequenceLinear
+    - Tstat
+  - latch:
+    - BooleanLatch
+    - EnumLatch
+    - NumericLatch
+    - StringLatch
+  - logic:
+    - And
+    - Or
+    - Xor
+    - Not
+    - Equal
+    - GreaterThan
+    - GreaterThanEqual
+    - LessThan
+    - LessThanEqual
+    - NotEqual
+  - math:
+    - Add
+    - Average
+    - Maximum
+    - Minimum
+    - Multiply
+    - Divide
+    - Modulus
+    - Power
+    - Subtract
+    - AbsValue
+    - ArcCosine
+    - ArcSine
+    - ArcTangent
+    - Cosine
+    - Exponential
+    - Factorial
+    - LogBase10
+    - LogNatural
+    - Negative
+    - Reset
+    - Sine
+    - SquareRoot
+    - Tangent
+  - select:
+    - BooleanSelect
+    - EnumSelect
+    - NumericSelect
+    - StringSelect
+  - string:
+    - StringConcat
+    - StringSubstring
+    - StringTrim
+    - StringIndexOf
+    - StringTest
+    - StringLen
+  - timer:
+    - BooleanDelay
+    - OneShot
+    - NumericDelay
+    - CurrentTime
+    - TimeDifference
+  - util:
+    - BooleanSwitch
+    - Counter
+    - DigitalInputDemux
+    - EnumSwitch
+    - MinMaxAvg
+    - MultiVibrator
+    - NumericBitAnd
+    - NumericBitOr
+    - NumericBitXor
+    - NumericSwitch
+    - NumericToBitsDemux
+    - Ramp
+    - Random
+    - SineWave
+    - StatusDemux
+
+
+
+
+
+The following are easy examples tested by the creator of this repo.
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a 4-input adder .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+
+    # 2. Register all components. The builder will handle the layout.
+    builder.add_numeric_writable(name="Input1", default_value=10.0)
+    builder.add_numeric_writable(name="Input2", default_value=20.0)
+    builder.add_numeric_writable(name="Input3", default_value=30.0)
+    builder.add_numeric_writable(name="Input4", default_value=40.0)
+    builder.add_numeric_writable(name="Input5", default_value=50.0)
+    builder.add_numeric_writable(name="Input6", default_value=60.0)
+    builder.add_numeric_writable(name="Input7", default_value=70.0)
+    builder.add_numeric_writable(name="Input8", default_value=80.0)
+    builder.add_numeric_writable(name="Total")
+
+    builder.add_component(comp_type="kitControl:Add", name="Add1")
+    builder.add_component(comp_type="kitControl:Add", name="Add2")
+    builder.add_component(comp_type="kitControl:Add", name="Add3")
+
+    # 3. Register all links.
+    builder.add_link("Input1", "out", "Add1", "inA")
+    builder.add_link("Input2", "out", "Add1", "inB")
+    builder.add_link("Input3", "out", "Add1", "inC")
+    builder.add_link("Input4", "out", "Add1", "inD")
+
+    builder.add_link("Input5", "out", "Add2", "inA")
+    builder.add_link("Input6", "out", "Add2", "inB")
+    builder.add_link("Input7", "out", "Add2", "inC")
+    builder.add_link("Input8", "out", "Add2", "inD")
+
+    builder.add_link("Add1", "out", "Add3", "inA")
+    builder.add_link("Add2", "out", "Add3", "inA")
+
+    builder.add_link("Add3", "out", "Total", "in16")
+
+    # 4. Save the file. This triggers the layout calculation and file writing.
+    output_path = os.path.join(args.output_dir, "addition_complicated.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a complex, multi-algorithm .bog file."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("MultiAlgorithmTest")
+
+    # Define input blocks and default values
+    builder.add_numeric_writable(name="Input1", default_value=10.0)
+    builder.add_numeric_writable(name="Input2", default_value=20.0)
+    builder.add_numeric_writable(name="Input3", default_value=30.0)
+    builder.add_numeric_writable(name="Input4", default_value=40.0)
+    builder.add_numeric_writable(name="Input5", default_value=50.0)
+    builder.add_numeric_writable(name="Input6", default_value=60.0)
+    builder.add_numeric_writable(name="Input7", default_value=70.0)
+    builder.add_numeric_writable(name="Input8", default_value=80.0)
+    builder.add_numeric_writable(name="Input9", default_value=90.0)
+    builder.add_numeric_writable(name="Input10", default_value=100.0)
+    builder.add_numeric_writable(name="Input11", default_value=110.0)
+
+    # Define final alg output blocks
+    builder.add_numeric_writable(name="Min_Final")
+    builder.add_numeric_writable(name="Max_Final")
+    builder.add_numeric_writable(name="Avg_Final")
+
+    builder.add_component(comp_type="kitControl:Average", name="Avg1")
+    builder.add_component(comp_type="kitControl:Average", name="Avg2")
+    builder.add_component(comp_type="kitControl:Average", name="Avg3")
+
+    builder.add_component(comp_type="kitControl:Minimum", name="Min1")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min2")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min3")
+
+    builder.add_component(comp_type="kitControl:Maximum", name="Max1")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max2")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max3")
+
+    # Define tier 2 blocks to handle 4 input limitations
+    builder.add_component(comp_type="kitControl:Average", name="Avg4")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max4")
+
+    # Link Tier 1
+    builder.add_link("Input1", "out", "Avg1", "inA")
+    builder.add_link("Input2", "out", "Avg1", "inB")
+    builder.add_link("Input3", "out", "Avg1", "inC")
+    builder.add_link("Input4", "out", "Avg1", "inD")
+
+    builder.add_link("Input5", "out", "Avg2", "inA")
+    builder.add_link("Input6", "out", "Avg2", "inB")
+    builder.add_link("Input7", "out", "Avg2", "inC")
+    builder.add_link("Input8", "out", "Avg2", "inD")
+
+    builder.add_link("Input9", "out", "Avg3", "inA")
+    builder.add_link("Input10", "out", "Avg3", "inB")
+    builder.add_link("Input11", "out", "Avg3", "inC")
+
+    builder.add_link("Input1", "out", "Min1", "inA")
+    builder.add_link("Input2", "out", "Min1", "inB")
+    builder.add_link("Input3", "out", "Min1", "inC")
+    builder.add_link("Input4", "out", "Min1", "inD")
+
+    builder.add_link("Input5", "out", "Min2", "inA")
+    builder.add_link("Input6", "out", "Min2", "inB")
+    builder.add_link("Input7", "out", "Min2", "inC")
+    builder.add_link("Input8", "out", "Min2", "inD")
+
+    builder.add_link("Input9", "out", "Min3", "inA")
+    builder.add_link("Input10", "out", "Min3", "inB")
+    builder.add_link("Input11", "out", "Min3", "inC")
+
+    builder.add_link("Input1", "out", "Max1", "inA")
+    builder.add_link("Input2", "out", "Max1", "inB")
+    builder.add_link("Input3", "out", "Max1", "inC")
+    builder.add_link("Input4", "out", "Max1", "inD")
+
+    builder.add_link("Input5", "out", "Max2", "inA")
+    builder.add_link("Input6", "out", "Max2", "inB")
+    builder.add_link("Input7", "out", "Max2", "inC")
+    builder.add_link("Input8", "out", "Max2", "inD")
+
+    builder.add_link("Input9", "out", "Max3", "inA")
+    builder.add_link("Input10", "out", "Max3", "inB")
+    builder.add_link("Input11", "out", "Max3", "inC")
+
+    # link tier 2
+    builder.add_link("Avg1", "out", "Avg4", "inA")
+    builder.add_link("Avg2", "out", "Avg4", "inB")
+    builder.add_link("Avg3", "out", "Avg4", "inC")
+
+    builder.add_link("Min1", "out", "Min4", "inA")
+    builder.add_link("Min2", "out", "Min4", "inB")
+    builder.add_link("Min3", "out", "Min4", "inC")
+
+    builder.add_link("Max1", "out", "Max4", "inA")
+    builder.add_link("Max2", "out", "Max4", "inB")
+    builder.add_link("Max3", "out", "Max4", "inC")
+
+    # link tier 3
+    builder.add_link("Avg4", "out", "Avg_Final", "in16")
+    builder.add_link("Max4", "out", "Max_Final", "in16")
+    builder.add_link("Min4", "out", "Min_Final", "in16")
+
+    # 4. Save the file.
+    output_path = os.path.join(args.output_dir, "avg_min_max.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Boolean Logic Playground for Niagara logic blocks."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    builder = BogFolderBuilder("BoolLogic_Playground", debug=True)
+
+    # === Inputs ===
+    builder.add_boolean_writable("Bool_A", default_value=True)
+    builder.add_boolean_writable("Bool_B", default_value=False)
+    builder.add_numeric_writable("Num_A", default_value=5.0)
+    builder.add_numeric_writable("Num_B", default_value=10.0)
+
+    # === Boolean Logic Blocks ===
+    builder.add_component("kitControl:And", "And_Block")
+    builder.add_component("kitControl:Or", "Or_Block")
+    builder.add_component("kitControl:Xor", "Xor_Block")
+    builder.add_component("kitControl:Not", "Not_Block")
+
+    # === Comparison Blocks ===
+    builder.add_component("kitControl:Equal", "Equal_Block")
+    builder.add_component("kitControl:NotEqual", "NotEqual_Block")
+    builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
+    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual_Block")
+    builder.add_component("kitControl:LessThan", "LessThan_Block")
+    builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
+
+    # === Outputs ===
+    builder.add_boolean_writable("Bool_Output_And")
+    builder.add_boolean_writable("Bool_Output_Or")
+    builder.add_boolean_writable("Bool_Output_Xor")
+    builder.add_boolean_writable("Bool_Output_Not")
+    builder.add_boolean_writable("Bool_Output_Equal")
+    builder.add_boolean_writable("Bool_Output_NotEqual")
+    builder.add_boolean_writable("Bool_Output_GT")
+    builder.add_boolean_writable("Bool_Output_GTE")
+    builder.add_boolean_writable("Bool_Output_LT")
+    builder.add_boolean_writable("Bool_Output_LTE")
+
+    # === Wiring ===
+    # Boolean Logic: A and B
+    builder.add_link("Bool_A", "out", "And_Block", "inA")
+    builder.add_link("Bool_B", "out", "And_Block", "inB")
+    builder.add_link("And_Block", "out", "Bool_Output_And", "in16")
+
+    builder.add_link("Bool_A", "out", "Or_Block", "inA")
+    builder.add_link("Bool_B", "out", "Or_Block", "inB")
+    builder.add_link("Or_Block", "out", "Bool_Output_Or", "in16")
+
+    builder.add_link("Bool_A", "out", "Xor_Block", "inA")
+    builder.add_link("Bool_B", "out", "Xor_Block", "inB")
+    builder.add_link("Xor_Block", "out", "Bool_Output_Xor", "in16")
+
+    builder.add_link("Bool_B", "out", "Not_Block", "in")
+    builder.add_link("Not_Block", "out", "Bool_Output_Not", "in16")
+
+    # Comparisons: Num_A vs Num_B
+    builder.add_link("Num_A", "out", "Equal_Block", "inA")
+    builder.add_link("Num_B", "out", "Equal_Block", "inB")
+    builder.add_link("Equal_Block", "out", "Bool_Output_Equal", "in16")
+
+    builder.add_link("Num_A", "out", "NotEqual_Block", "inA")
+    builder.add_link("Num_B", "out", "NotEqual_Block", "inB")
+    builder.add_link("NotEqual_Block", "out", "Bool_Output_NotEqual", "in16")
+
+    builder.add_link("Num_A", "out", "GreaterThan_Block", "inA")
+    builder.add_link("Num_B", "out", "GreaterThan_Block", "inB")
+    builder.add_link("GreaterThan_Block", "out", "Bool_Output_GT", "in16")
+
+    builder.add_link("Num_A", "out", "GreaterThanEqual_Block", "inA")
+    builder.add_link("Num_B", "out", "GreaterThanEqual_Block", "inB")
+    builder.add_link("GreaterThanEqual_Block", "out", "Bool_Output_GTE", "in16")
+
+    builder.add_link("Num_A", "out", "LessThan_Block", "inA")
+    builder.add_link("Num_B", "out", "LessThan_Block", "inB")
+    builder.add_link("LessThan_Block", "out", "Bool_Output_LT", "in16")
+
+    builder.add_link("Num_A", "out", "LessThanEqual_Block", "inA")
+    builder.add_link("Num_B", "out", "LessThanEqual_Block", "inB")
+    builder.add_link("LessThanEqual_Block", "out", "Bool_Output_LTE", "in16")
+
+    # === Save file ===
+    output_path = os.path.join(args.output_dir, "bool_logic_playground.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a 4-input adder .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+
+    # 2. Register all components. The builder will handle the layout.
+    builder.add_numeric_writable(name="Input1", default_value=10.0)
+    builder.add_numeric_writable(name="Input2", default_value=20.0)
+    builder.add_numeric_writable(name="Input3", default_value=30.0)
+    builder.add_numeric_writable(name="Input4", default_value=40.0)
+    builder.add_component(comp_type="kitControl:Add", name="Add")
+    builder.add_numeric_writable(name="Sum")
+
+    # 3. Register all links. This is CRITICAL for the layout engine.
+    builder.add_link("Input1", "out", "Add", "inA")
+    builder.add_link("Input2", "out", "Add", "inB")
+    builder.add_link("Input3", "out", "Add", "inC")
+    builder.add_link("Input4", "out", "Add", "inD")
+    builder.add_link("Add", "out", "Sum", "in16")
+
+    # 4. Save the file. This triggers the layout calculation and file writing.
+    output_path = os.path.join(args.output_dir, "4_input_adder_auto.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a complex, multi-algorithm .bog file with the simple API."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    builder = BogFolderBuilder("TieredLogicTest")
+
+    input_names = []
+    for i in range(1, 12):
+        name = f"Input{i}"
+        builder.add_numeric_writable(name, default_value=i * 10.0)
+        input_names.append(name)
+
+    print("INPUT NAMES", input_names)
+
+    # Use single high-level API calls
+    builder.add_reduction_block("Average", "Avg_Final", input_names)
+    builder.add_reduction_block("Minimum", "Min_Final", input_names)
+    builder.add_reduction_block("Maximum", "Max_Final", input_names)
+
+    output_path = os.path.join(args.output_dir, "mod_avg_min_max.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    This script tests the BogFolderBuilder with a more complex algorithm
+    that combines multiple math blocks to calculate:
+    Result = ((Input_A + Input_B) * Input_C) / Input_D
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a complex math logic .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("ComplexMathEquation")
+
+    # 2. Register all components for the equation.
+    # The builder's layout engine will handle all positioning.
+
+    # --- Inputs ---
+    builder.add_numeric_writable(name="Input_A", default_value=20.0)
+    builder.add_numeric_writable(name="Input_B", default_value=10.0)
+    builder.add_numeric_writable(name="Input_C", default_value=2.0)
+    builder.add_numeric_writable(name="Input_D", default_value=3.0)
+
+    # --- Logic Blocks ---
+    builder.add_component(comp_type="kitControl:Add", name="Add_AB")
+    builder.add_component(comp_type="kitControl:Multiply", name="Multiply_ABC")
+    builder.add_component(comp_type="kitControl:Divide", name="Divide_ABCD")
+
+    # --- Output ---
+    builder.add_numeric_writable(name="Result")
+
+    # 3. Register all links to define the data flow.
+    # This is the most critical part for the automatic layout engine.
+
+    # First level of logic: (Input_A + Input_B)
+    builder.add_link("Input_A", "out", "Add_AB", "inA")
+    builder.add_link("Input_B", "out", "Add_AB", "inB")
+
+    # Second level of logic: (Result of Add) * Input_C
+    builder.add_link("Add_AB", "out", "Multiply_ABC", "inA")
+    builder.add_link("Input_C", "out", "Multiply_ABC", "inB")
+
+    # Third level of logic: (Result of Multiply) / Input_D
+    builder.add_link("Multiply_ABC", "out", "Divide_ABCD", "inA")
+    builder.add_link("Input_D", "out", "Divide_ABCD", "inB")
+
+    # Final output link
+    builder.add_link("Divide_ABCD", "out", "Result", "in16")
+
+    # 4. Save the file.
+    output_path = os.path.join(args.output_dir, "simple_math_logic_auto.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    This script uses the BogFolderBuilder to create a wiresheet that
+    subtracts one number from another (Input_A - Input_B).
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a subtraction logic .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("SubtractionLogic")
+
+    # 2. Register all components.
+    # The builder's layout engine will automatically place them.
+    builder.add_numeric_writable(name="Input_A", default_value=100.0)
+    builder.add_numeric_writable(name="Input_B", default_value=40.0)
+    builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
+    builder.add_numeric_writable(name="Difference")
+
+    # 3. Register all links. This is how the layout is determined.
+    builder.add_link("Input_A", "out", "Subtract", "inA")
+    builder.add_link("Input_B", "out", "Subtract", "inB")
+    builder.add_link("Subtract", "out", "Difference", "in16")
+
+    # 4. Save the file. This triggers the layout calculation and file writing.
+    output_path = os.path.join(args.output_dir, "subtract_logic_auto.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+import sys
+import os
+import argparse
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Zone Occupancy Setpoint Switching (Direct) .bog file."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    builder = BogFolderBuilder("Zone_Occ_Setpoint_Switch", debug=True)
+
+    # Inputs
+    builder.add_boolean_writable(
+        "Occ_Schedule", default_value=False
+    )  # Occupied (True) / Unoccupied (False)
+    builder.add_numeric_writable(
+        "Occ_Zone_Setpoint", default_value=72.0
+    )  # Occupied cooling temp (°F)
+    builder.add_numeric_writable(
+        "Unocc_Zone_Setpoint", default_value=78.0
+    )  # Unoccupied cooling temp (°F)
+
+    # Logic Components
+    builder.add_numeric_switch(
+        "Zone_Setpoint_Switch"
+    )  # Switch between occupied/unoccupied setpoints
+
+    # Output
+    builder.add_numeric_writable("Zone_Temp_SPt")  # Final Zone Setpoint
+
+    # Wiring:
+    # Pipe Occ_Schedule Boolean directly into NumericSwitch
+    builder.add_link("Occ_Schedule", "out", "Zone_Setpoint_Switch", "inSwitch")
+    builder.add_link("Occ_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inTrue")
+    builder.add_link("Unocc_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inFalse")
+
+    # Final output setpoint
+    builder.add_link("Zone_Setpoint_Switch", "out", "Zone_Temp_SPt", "in16")
+
+    # Save file
+    output_path = os.path.join(args.output_dir, "zone_occ_setpoint_switch.bog")
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"Successfully created {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def create_max_pair(builder, input_a_name, input_b_name, pair_id):
+    """
+    Creates and links a GreaterThan and NumericSwitch block to find the maximum of two inputs.
+
+    Args:
+        builder (BogFolderBuilder): The BOG builder instance.
+        input_a_name (str): The name of the first numeric component.
+        input_b_name (str): The name of the second numeric component.
+        pair_id (str): A unique identifier for this comparison pair.
+
+    Returns:
+        str: The name of the NumericSwitch component which outputs the maximum value.
+    """
+    gt_name = f"GT_{pair_id}"
+    switch_name = f"Switch_{pair_id}"
+
+    # Add the necessary logic blocks for the comparison
+    builder.add_component("kitControl:GreaterThan", gt_name)
+    builder.add_numeric_switch(switch_name)
+
+    # Wire the two inputs to the GreaterThan block
+    builder.add_link(input_a_name, "out", gt_name, "inA")
+    builder.add_link(input_b_name, "out", gt_name, "inB")
+
+    # Wire the boolean result of the comparison to the switch's selector
+    builder.add_link(gt_name, "out", switch_name, "inSwitch")
+
+    # Wire the original inputs to the true/false paths of the switch.
+    # If input_a > input_b, the GreaterThan output is true, so we select inTrue (input_a).
+    builder.add_link(input_a_name, "out", switch_name, "inTrue")
+    builder.add_link(input_b_name, "out", switch_name, "inFalse")
+
+    # The switch now outputs the greater of the two values.
+    return switch_name
+
+
+def main():
+    """
+    Main function to build and save the .bog file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to find the max of 10 inputs using only GreaterThan and NumericSwitch blocks."
+    )
+    # Updated argument to accept an output directory
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder with a name for the logic folder
+    builder = BogFolderBuilder("FindMaxValueWithSwitches")
+
+    # 2. Create 10 numeric writable inputs for the VAV boxes
+    print("Adding 10 VAV box inputs...")
+    inputs = [f"VAV_{i}" for i in range(1, 11)]
+    for name in inputs:
+        # Set a default value based on the VAV number for easy testing
+        builder.add_numeric_writable(name, default_value=float(name.split('_')[1]))
+
+    # 3. Create the final output point
+    builder.add_numeric_writable("MaxValue")
+
+    # 4. Build the comparison tree algorithmically
+    # This loop creates a "tournament bracket" to find the max value.
+    # In each round (tier), it pairs up the winners from the last round.
+    print("Building comparison logic tree...")
+    current_tier_outputs = inputs[:]
+    tier_num = 1
+    while len(current_tier_outputs) > 1:
+        print(f"  Processing Tier {tier_num} with {len(current_tier_outputs)} inputs...")
+        next_tier_outputs = []
+        
+        # Pair up components from the current tier
+        for i in range(len(current_tier_outputs) // 2):
+            input_a = current_tier_outputs[i*2]
+            input_b = current_tier_outputs[i*2 + 1]
+            pair_id = f"T{tier_num}_P{i}"
+            
+            # Create a comparison block for the pair
+            winner = create_max_pair(builder, input_a, input_b, pair_id)
+            next_tier_outputs.append(winner)
+        
+        # If there's an odd number of components, the last one gets a "bye"
+        # and passes directly to the next tier.
+        if len(current_tier_outputs) % 2 == 1:
+            passthrough = current_tier_outputs[-1]
+            next_tier_outputs.append(passthrough)
+            print(f"    '{passthrough}' passes to the next tier.")
+        
+        current_tier_outputs = next_tier_outputs
+        tier_num += 1
+
+    # 5. Link the final winner of the tournament to the output component
+    final_winner = current_tier_outputs[0]
+    print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
+    builder.add_link(final_winner, "out", "MaxValue", "in16")
+
+    # 6. Define hardcoded filename and construct the full output path
+    bog_filename = "find_max_value.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    
+    # Create the output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+        
+    # Save the complete logic to the .bog file
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+ *** N - 1 EXAMPLE that can be used in guideline 36 trim respond logic for rogue zone ***
+
+ import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.bog_builder import BogFolderBuilder
+
+
+def create_comparison_node(builder, input_a_name, input_b_name, node_id):
+    """
+    Creates a set of blocks to find the max and min of two inputs.
+
+    Args:
+        builder (BogFolderBuilder): The BOG builder instance.
+        input_a_name (str): The name of the first numeric component.
+        input_b_name (str): The name of the second numeric component.
+        node_id (str): A unique identifier for this comparison node.
+
+    Returns:
+        (str, str): A tuple containing the names of the (Max Output Component, Min Output Component).
+    """
+    gt_name = f"GT_{node_id}"
+    max_switch_name = f"MaxSwitch_{node_id}"
+    min_switch_name = f"MinSwitch_{node_id}"
+
+    # Add the necessary logic blocks
+    builder.add_component("kitControl:GreaterThan", gt_name)
+    builder.add_numeric_switch(max_switch_name)
+    builder.add_numeric_switch(min_switch_name)
+
+    # Wire inputs to the GreaterThan block
+    builder.add_link(input_a_name, "out", gt_name, "inA")
+    builder.add_link(input_b_name, "out", gt_name, "inB")
+
+    # Wire the GT result to both switches
+    builder.add_link(gt_name, "out", max_switch_name, "inSwitch")
+    builder.add_link(gt_name, "out", min_switch_name, "inSwitch")
+
+    # --- Max Switch Wiring ---
+    # If A > B, GT is true, so Max is A (inTrue)
+    builder.add_link(input_a_name, "out", max_switch_name, "inTrue")
+    builder.add_link(input_b_name, "out", max_switch_name, "inFalse")
+
+    # --- Min Switch Wiring ---
+    # If A > B, GT is true, so Min is B (inFalse)
+    builder.add_link(input_b_name, "out", min_switch_name, "inTrue")
+    builder.add_link(input_a_name, "out", min_switch_name, "inFalse")
+
+    return (max_switch_name, min_switch_name)
+
+def create_combine_node(builder, max1_name, second1_name, max2_name, second2_name, node_id):
+    """
+    Creates blocks to find the top two values from two pairs of (max, second_max).
+
+    Args:
+        builder: The BOG builder instance.
+        max1_name (str): The max value from the first pair.
+        second1_name (str): The second value from the first pair.
+        max2_name (str): The max value from the second pair.
+        second2_name (str): The second value from the second pair.
+        node_id (str): A unique identifier for this combination node.
+
+    Returns:
+        (str, str): A tuple containing the names of the (Overall Max Component, Overall Second Max Component).
+    """
+    # 1. Find the overall max and the min of the two incoming maxes
+    overall_max, min_of_maxes = create_comparison_node(builder, max1_name, max2_name, f"{node_id}_MaxCompare")
+
+    # 2. Find the max of the remaining candidates for second place
+    # Candidate pool is: min_of_maxes, second1_name, second2_name
+    intermediate_second, _ = create_comparison_node(builder, min_of_maxes, second1_name, f"{node_id}_Second_A")
+    overall_second, _ = create_comparison_node(builder, intermediate_second, second2_name, f"{node_id}_Second_B")
+
+    return (overall_max, overall_second)
+
+
+def main():
+    """
+    Main function to build and save the .bog file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to find the N and N-1 max values from 6 damper positions."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+    )
+    args = parser.parse_args()
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("FindTopTwoOfSixDampers")
+
+    # 2. Create the 6 VAV damper position inputs
+    inputs = [f"VAV_Damper_{i}" for i in range(1, 7)]
+    for i, name in enumerate(inputs):
+        builder.add_numeric_writable(name, default_value=float(i * 10))
+
+    # 3. Create final output points
+    builder.add_numeric_writable("HighestDamperPosition")
+    builder.add_numeric_writable("SecondHighestDamperPosition")
+
+    # 4. Build the tournament tree
+    print("Building comparison logic tree for 6 inputs...")
+
+    # Tier 1: Compare raw inputs to get (max, min) pairs for all 6 inputs
+    tier1_results = []
+    for i in range(3): # 6 inputs = 3 pairs
+        input_a = inputs[i*2]
+        input_b = inputs[i*2 + 1]
+        max_comp, min_comp = create_comparison_node(builder, input_a, input_b, f"T1_P{i}")
+        tier1_results.append((max_comp, min_comp))
+    
+    # Tier 2: Combine the first two pairs from Tier 1
+    max1, second1 = tier1_results[0]
+    max2, second2 = tier1_results[1]
+    tier2_max, tier2_second = create_combine_node(builder, max1, second1, max2, second2, "T2_C0")
+
+    # Tier 3: Combine the result of Tier 2 with the last pair from Tier 1
+    last_pair_max, last_pair_second = tier1_results[2]
+    final_max, final_second = create_combine_node(builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0")
+
+    # 5. Link the final winner pair to the output components
+    print(f"\nFinal Max component is '{final_max}'.")
+    print(f"Final Second Max component is '{final_second}'.")
+    builder.add_link(final_max, "out", "HighestDamperPosition", "in16")
+    builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
+
+    # 6. Save the complete logic to the .bog file
+    bog_filename = "find_top_two_of_6.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
