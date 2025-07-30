@@ -126,7 +126,7 @@ def main():
     builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
 
     # 6. Save the complete logic to the .bog file
-    bog_filename = "find_top_two_of_6.bog"
+    bog_filename = "find_second_highest_of_6.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
