@@ -149,9 +149,6 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-
-## The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
-
 <details>
 <summary><strong>🐍 Py Bog Building Example</strong></summary>
 
@@ -312,52 +309,53 @@ This example shows the **Min/Max/Average** logic grouped within a dedicated fold
 
 ![Folder Layout](https://github.com/bbartling/pybog/blob/develop/snips/manualMinMaxAvgFolder.png)
 
+## The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
+
 </details>
 
 
 <details>
 <summary><strong>Bog Builder Test Plan: Common HVAC Algorithms</strong></summary>
 
-Here is a list of proposed scripts to generate `.bog` files for testing **bog file building**. Each one is based on real-world HVAC logic scenorios from actual JACE backup file dumps setup by a human DDC technician.
+## Tested `.bog` Builder Scripts
 
---- 
+Here is a list of tested scripts that generate `.bog` files for **bog file building**.  
+Each one replicates real-world HVAC control logic as seen in actual JACE backups created by field DDC technicians.
 
-### 🔢 Math Block and Logic Block Tests:
-0. ✅ **build_four_in_add_logic.py**  
-   A simple subtraction of two setpoints (`Input_A - Input_B`).
+---
 
-1. ☐ **build_subtract.py**  
-   A simple subtraction of two setpoints (`Input_A - Input_B`).
+### ✅ Math and Logic Tests:
+1. ✅ **four_in_add_logic.py**  
+   Simple 4-input adder (`Input1 + Input2 + Input3 + Input4`).
 
-2. ☐ **build_multiply.py**  
-   Calculates a value by multiplying an input by a constant (e.g., `Flow * 1.5`).
+2. ✅ **subtract_simple.py**  
+   Basic subtraction (`Input_A - Input_B`).
 
-3. ☐ **build_divide.py**  
-   Divides one input by another—a common step in calculating efficiency or ratios.
+3. ✅ **simple_math_logic.py**  
+   Multi-step math: `((Input_A + Input_B) * Input_C) / Input_D`.
 
-4. ☐ **build_average.py**  
-   Takes three temperature inputs and calculates the average.
+4. ✅ **addition_complicated.py**  
+   8-input adder organized with a **sub-folder** (`Input1-8 summed`).
 
-5. ☐ **build_min_max.py**  
-   Takes three inputs and uses both a `Minimum` and a `Maximum` block to find the highest and lowest values.
+5. ✅ **average_min_max.py**  
+   Calculates **average**, **minimum**, and **maximum** across 11 inputs using **three organized sub-folders**.
 
-6. ☐ **build_greater_than.py**  
-   Compares an input temperature to a setpoint and outputs a boolean (`Temp > Setpoint`).
+6. ✅ **bool_logic_playground.py**  
+   Playground for `AND`, `OR`, `XOR`, `NOT`, `EQUAL`, `NOT EQUAL`, `GT`, `GTE`, `LT`, `LTE`.
 
-7. ☐ **build_less_than.py**  
-   Compares an input pressure to a low-limit setpoint (`Pressure < Low_Limit`).
+7. ✅ **boolean_numeric_switch.py**  
+   Combines boolean logic with a numeric switch for selecting between math results.
 
-8. ☐ **build_equal.py**  
-   Checks if a status input is equal to a specific value (e.g., `Mode == 2`).
+8. ✅ **zone_occ_setpoint_switch.py**  
+   Occupied/unoccupied zone setpoint selection using a **NumericSwitch**.
 
-9. ☐ **build_not_equal.py**  
-   Checks if a status is not in an alarm state (`Status != 1`).
+9. ✅ **find_max_value.py**  
+   Finds the **maximum value** from 10 VAV damper positions using a tournament tree.
 
-10. ☐ **build_and_logic.py**  
-    Creates a simple permissive where `Input_A AND Input_B` must be true to produce a true output.
+10. ✅ **find_second_highest_of_6.py**  
+    Finds the **highest** and **second-highest** values from 6 inputs.
 
-11. ☐ **build_or_logic.py**  
-    Creates a common alarm summary where `Alarm_A OR Alarm_B` will trigger a master alarm.
+
 
 ---
 
