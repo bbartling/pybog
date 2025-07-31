@@ -149,9 +149,11 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-## 🐍 Py Bog Building
 
-The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
+## The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
+
+<details>
+<summary><strong>🐍 Py Bog Building Example</strong></summary>
 
 ```python
 import sys
@@ -298,9 +300,20 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 ```
+
+### Top-Level WireSheet Made from Python Script
+This example shows the same **Min/Max/Average** logic built directly on the **top-level wiresheet**:
+
+![Top-Level Layout](https://github.com/bbartling/pybog/blob/develop/snips/manualMinMaxAvgTopLevel.png)
+
+### Average Folder Contents
+This example shows the **Min/Max/Average** logic grouped within a dedicated folder:
+
+![Folder Layout](https://github.com/bbartling/pybog/blob/develop/snips/manualMinMaxAvgFolder.png)
+
+</details>
+
 
 <details>
 <summary><strong>Bog Builder Test Plan: Common HVAC Algorithms</strong></summary>
@@ -309,7 +322,7 @@ Here is a list of proposed scripts to generate `.bog` files for testing **bog fi
 
 --- 
 
-### 🔢 Math Block Tests:
+### 🔢 Math Block and Logic Block Tests:
 0. ✅ **build_four_in_add_logic.py**  
    A simple subtraction of two setpoints (`Input_A - Input_B`).
 
@@ -328,9 +341,6 @@ Here is a list of proposed scripts to generate `.bog` files for testing **bog fi
 5. ☐ **build_min_max.py**  
    Takes three inputs and uses both a `Minimum` and a `Maximum` block to find the highest and lowest values.
 
----
-
-### ⚙️ Logic Block Tests:
 6. ☐ **build_greater_than.py**  
    Compares an input temperature to a setpoint and outputs a boolean (`Temp > Setpoint`).
 
@@ -352,54 +362,14 @@ Here is a list of proposed scripts to generate `.bog` files for testing **bog fi
 ---
 
 ### 🧠 Combined Algorithm Tests:
-12. ☐ **build_heating_setpoint_reset.py**  
-    A classic Outside Air Reset. Uses `Subtract` and `Multiply` blocks to calculate a heating setpoint based on OAT.
-
-13. ☐ **build_cooling_lockout.py**  
-    Uses a `LessThan` block to disable cooling if OAT is below a threshold (e.g., 55°F).
-
-14. ☐ **build_fan_status_alarm.py**  
-    Compares a fan command and its status using `Equal` and `Not` blocks to trigger an alarm on mismatch.
-
-15. ☐ **build_mode_select.py**  
-    Uses a `NumericSwitch` to select one of three setpoints based on a mode input (1, 2, or 3).
-
-16. ☐ **build_damper_control.py**  
-    A simple economizer check using `GreaterThan` to compare return and outside air temperatures.
-
-17. ☐ **build_flow_calculation.py**  
-    Simulates airflow by taking a pressure input, computing the `SquareRoot`, then multiplying by a K-factor.
-
-18. ☐ **build_two_stage_control.py**  
-    Uses two `GreaterThan` blocks with different setpoints to control two stages of equipment.
-
-19. ☐ **build_alarm_latch.py**  
-    Uses an `Or` block for multiple alarms and a `BooleanLatch` to hold the alarm until manually reset.
-
-20. ☐ **build_occupied_setpoint_select.py**  
-    Uses a `BooleanSelect` block to switch between occupied/unoccupied setpoints based on a schedule.
+TODO
 
 ---
 
 ### 🧩 Advanced Data Type & Optimization Tests (21–25):
 Exploritory processes to see if AI can create advanced wire sheet algorithms.
 
-21. **build_enum_mode_switch.py**  
-    ☐ Demonstrates use of an `Enum` block to control different system modes (e.g., OFF, HEAT, COOL, AUTO) using a `NumericSwitch`. Useful for systems with multiple operating states such as rooftop units or air handlers.
-
-22. **build_string_match_select.py**  
-    ☐ Tests the use of string inputs (e.g., zone labels, system tags) in logic. Uses a `StringCompare` block to drive setpoint logic based on space names or metadata. Could be used for dashboard filtering or logic routing.
-
-23. **build_boolean_alarm_aggregation.py**  
-    ☐ Aggregates multiple boolean inputs (like VAV damper faults or occupancy sensors) into a summarized status using `Or`, `And`, and `BooleanLatch` blocks. Helps support fault dashboards or master alarm logic.
-
-24. **build_vav_sum_request.py**  
-    ☐ Implements the “VAV box sum requesting” logic from Guideline 36. Uses `BooleanToNumeric` and `NumericTotalizer` blocks to count the number of VAV boxes calling for cooling or heating. Output can drive duct static or discharge air temp reset logic at the AHU.
-
-25. **build_duct_static_and_temp_reset.py**  
-    ☐ This one includes **two coordinated reset logics** for an AHU:
-    - **Duct Static Pressure Reset**: Uses the total number of open VAV dampers (e.g., >20%) to reset the duct static pressure setpoint downward, reducing fan energy.
-    - **Discharge Air Temp Reset**: Adjusts the AHU discharge air temperature setpoint based on average zone cooling demand or reset schedules, minimizing reheat and saving energy.
+TODO
 
 </details>
 
