@@ -10,38 +10,45 @@ LOG_FILE = "run_examples_log.txt"
 
 
 def main():
-    examples = [f for f in os.listdir(EXAMPLES_DIR) if f.endswith(".py")]
     log_lines = []
 
-    print(f"Found {len(examples)} example scripts. Running them now...\n")
+    # Walk all subdirectories under EXAMPLES_DIR
+    scripts = [
+        os.path.relpath(os.path.join(root, f), start=os.getcwd())  # relative to project root
+        for root, _, files in os.walk(EXAMPLES_DIR)
+        for f in files if f.endswith(".py")
+    ]
 
-    for script in examples:
-        script_path = os.path.join(EXAMPLES_DIR, script)
-        cmd = [sys.executable, script_path, "-o", OUTPUT_DIR]
+    print(f"Found {len(scripts)} example scripts. Running them now...\n")
 
-        log_lines.append(f"\n=== Running: {script} ===\n")
-        print(f"[RUNNING] {script} -> Output: {OUTPUT_DIR}")
+    for script_path in scripts:
+        # Convert path to module notation (examples.simple_logic.addition_complicated)
+        module_name = script_path[:-3].replace(os.sep, ".")  # strip ".py" and replace / with .
+
+        cmd = [sys.executable, "-m", module_name, "-o", OUTPUT_DIR]
+
+        log_lines.append(f"\n=== Running: {module_name} ===\n")
+        print(f"[RUNNING] {module_name} -> Output: {OUTPUT_DIR}")
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             if result.returncode == 0:
-                msg = f"[SUCCESS] {script}\n{result.stdout}"
+                msg = f"[SUCCESS] {module_name}\n{result.stdout}"
                 print(msg)
                 log_lines.append(msg)
             else:
                 err = (
-                    f"[ERROR] {script}\nExit Code: {result.returncode}\n{result.stderr}"
+                    f"[ERROR] {module_name}\nExit Code: {result.returncode}\n{result.stderr}"
                 )
                 print(err)
                 log_lines.append(err)
 
         except Exception as e:
-            err_msg = f"[EXCEPTION] {script} -> {str(e)}"
+            err_msg = f"[EXCEPTION] {module_name} -> {str(e)}"
             print(err_msg)
             log_lines.append(err_msg)
 
-    # Write log file
-
+    # Write log file (optional)
     """
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_path = os.path.join(os.getcwd(), f"logs_{timestamp}.txt")

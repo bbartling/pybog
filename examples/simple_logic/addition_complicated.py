@@ -3,9 +3,10 @@ import os
 import argparse
 
 # Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from src.bog_builder_new import BogFolderBuilder
+
 
 
 def main():
