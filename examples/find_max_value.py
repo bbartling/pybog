@@ -4,21 +4,15 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     """
     Creates and links a GreaterThan and NumericSwitch block to find the maximum of two inputs.
-
-    Args:
-        builder (BogFolderBuilder): The BOG builder instance.
-        input_a_name (str): The name of the first numeric component.
-        input_b_name (str): The name of the second numeric component.
-        pair_id (str): A unique identifier for this comparison pair.
-
-    Returns:
-        str: The name of the NumericSwitch component which outputs the maximum value.
+    This function doesn't need to know about sub-folders; it will automatically
+    place components in whatever the builder's current "context" is.
     """
     gt_name = f"GT_{pair_id}"
     switch_name = f"Switch_{pair_id}"
@@ -35,11 +29,9 @@ def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     builder.add_link(gt_name, "out", switch_name, "inSwitch")
 
     # Wire the original inputs to the true/false paths of the switch.
-    # If input_a > input_b, the GreaterThan output is true, so we select inTrue (input_a).
     builder.add_link(input_a_name, "out", switch_name, "inTrue")
     builder.add_link(input_b_name, "out", switch_name, "inFalse")
 
-    # The switch now outputs the greater of the two values.
     return switch_name
 
 
@@ -50,28 +42,36 @@ def main():
     parser = argparse.ArgumentParser(
         description="Build a .bog file to find the max of 10 inputs using only GreaterThan and NumericSwitch blocks."
     )
-    # Updated argument to accept an output directory
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
     )
     args = parser.parse_args()
 
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
     # 1. Initialize the builder with a name for the logic folder
     builder = BogFolderBuilder("FindMaxValueWithSwitches")
 
-    # 2. Create 10 numeric writable inputs for the VAV boxes
+    # 2. Create TOP-LEVEL inputs and the final output point.
+    # These will remain visible on the main wiresheet.
     print("Adding 10 VAV box inputs...")
     inputs = [f"VAV_{i}" for i in range(1, 11)]
     for name in inputs:
-        # Set a default value based on the VAV number for easy testing
         builder.add_numeric_writable(name, default_value=float(name.split('_')[1]))
 
-    # 3. Create the final output point
     builder.add_numeric_writable("MaxValue")
 
-    # 4. Build the comparison tree algorithmically
-    # This loop creates a "tournament bracket" to find the max value.
-    # In each round (tier), it pairs up the winners from the last round.
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will place the entire dynamically-generated comparison tree
+    # inside a single sub-folder.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    builder.start_sub_folder("CalculationLogic")
+
+    # 3. Build the comparison tree algorithmically INSIDE the sub-folder.
+    # The while loop and the create_max_pair function will now create all
+    # their components inside the "CalculationLogic" folder.
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
     tier_num = 1
@@ -79,18 +79,15 @@ def main():
         print(f"  Processing Tier {tier_num} with {len(current_tier_outputs)} inputs...")
         next_tier_outputs = []
         
-        # Pair up components from the current tier
         for i in range(len(current_tier_outputs) // 2):
             input_a = current_tier_outputs[i*2]
             input_b = current_tier_outputs[i*2 + 1]
             pair_id = f"T{tier_num}_P{i}"
             
-            # Create a comparison block for the pair
+            # The builder automatically creates proxies for the inputs on the first pass
             winner = create_max_pair(builder, input_a, input_b, pair_id)
             next_tier_outputs.append(winner)
         
-        # If there's an odd number of components, the last one gets a "bye"
-        # and passes directly to the next tier.
         if len(current_tier_outputs) % 2 == 1:
             passthrough = current_tier_outputs[-1]
             next_tier_outputs.append(passthrough)
@@ -99,19 +96,23 @@ def main():
         current_tier_outputs = next_tier_outputs
         tier_num += 1
 
-    # 5. Link the final winner of the tournament to the output component
+    # This is the final component inside the sub-folder that holds the max value
     final_winner = current_tier_outputs[0]
+
+    # STEP 2: End the sub-folder "sandbox".
+    builder.end_sub_folder()
+
+
+    # 4. Link the final winner to the output component.
+    # The builder sees that 'final_winner' is inside the sub-folder and 'MaxValue'
+    # is outside, so it will automatically create a ProxyOut point.
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")
 
-    # 6. Define hardcoded filename and construct the full output path
-    bog_filename = "find_max_value.bog"
+    # 5. Save the file.
+    bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
-    
-    # Create the output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
-        
-    # Save the complete logic to the .bog file
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 

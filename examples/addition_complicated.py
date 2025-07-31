@@ -4,22 +4,27 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog file with automatic layout."
+        description="Build an 8-input adder .bog file with a clean, sub-foldered layout."
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )
     args = parser.parse_args()
 
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 2. Register all components. The builder will handle the layout.
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("ComplicatedAdder")
+
+    # 2. Register all TOP-LEVEL components.
+    # These are the clean inputs and the final output the user will see.
+    # --- Inputs ---
     builder.add_numeric_writable(name="Input1", default_value=10.0)
     builder.add_numeric_writable(name="Input2", default_value=20.0)
     builder.add_numeric_writable(name="Input3", default_value=30.0)
@@ -28,13 +33,35 @@ def main():
     builder.add_numeric_writable(name="Input6", default_value=60.0)
     builder.add_numeric_writable(name="Input7", default_value=70.0)
     builder.add_numeric_writable(name="Input8", default_value=80.0)
+    
+    # --- Output ---
     builder.add_numeric_writable(name="Total")
 
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will now place all the intermediate addition blocks into a sub-folder
+    # to keep the main wiresheet clean.
+
+    # STEP 1: Start the sub-folder.
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("AdditionLogic")
+
+    # --- Logic Blocks ---
+    # These 'Add' components are now created inside the "AdditionLogic" folder.
     builder.add_component(comp_type="kitControl:Add", name="Add1")
     builder.add_component(comp_type="kitControl:Add", name="Add2")
     builder.add_component(comp_type="kitControl:Add", name="Add3")
 
+    # STEP 2: End the sub-folder.
+    # This closes our "logic sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
     # 3. Register all links.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "AdditionLogic".
+
+    # Links from top-level inputs into the sub-folder's logic
     builder.add_link("Input1", "out", "Add1", "inA")
     builder.add_link("Input2", "out", "Add1", "inB")
     builder.add_link("Input3", "out", "Add1", "inC")
@@ -45,16 +72,19 @@ def main():
     builder.add_link("Input7", "out", "Add2", "inC")
     builder.add_link("Input8", "out", "Add2", "inD")
 
+    # Links between components that are both inside the sub-folder
     builder.add_link("Add1", "out", "Add3", "inA")
-    builder.add_link("Add2", "out", "Add3", "inA")
+    builder.add_link("Add2", "out", "Add3", "inB") # Corrected from inA to inB
 
+    # Link from the sub-folder's logic to the top-level output
     builder.add_link("Add3", "out", "Total", "in16")
 
     # 4. Save the file. This triggers the layout calculation and file writing.
-    output_path = os.path.join(args.output_dir, "addition_complicated.bog")
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 
 if __name__ == "__main__":

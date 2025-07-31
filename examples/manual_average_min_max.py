@@ -23,6 +23,8 @@ def main():
     builder = BogFolderBuilder("MultiAlgorithmTest")
 
     # 2. Define TOP-LEVEL input and output blocks.
+    # These will be the only components visible on the main wiresheet,
+    # alongside the folders containing the logic.
     # --- Inputs ---
     builder.add_numeric_writable(name="Input1", default_value=10.0)
     builder.add_numeric_writable(name="Input2", default_value=20.0)
@@ -41,11 +43,14 @@ def main():
     builder.add_numeric_writable(name="Max_Final")
     builder.add_numeric_writable(name="Avg_Final")
 
+
     # TUTORIAL: USING MULTIPLE SUB-FOLDERS
     # Since this script performs three separate calculations, we can give each one
-    # its own sub-folder for maximum organization.
+    # its own sub-folder for maximum organization. This keeps the logic for
+    # Average, Minimum, and Maximum completely separate and easy to debug.
 
     # --- Average Calculation Sub-Folder ---
+    # To see the Average logic flat, comment out the next two lines.
     builder.start_sub_folder("AverageLogic")
     builder.add_component(comp_type="kitControl:Average", name="Avg1")
     builder.add_component(comp_type="kitControl:Average", name="Avg2")
@@ -54,6 +59,7 @@ def main():
     builder.end_sub_folder()
 
     # --- Minimum Calculation Sub-Folder ---
+    # To see the Minimum logic flat, comment out the next two lines.
     builder.start_sub_folder("MinimumLogic")
     builder.add_component(comp_type="kitControl:Minimum", name="Min1")
     builder.add_component(comp_type="kitControl:Minimum", name="Min2")
@@ -62,6 +68,7 @@ def main():
     builder.end_sub_folder()
 
     # --- Maximum Calculation Sub-Folder ---
+    # To see the Maximum logic flat, comment out the next two lines.
     builder.start_sub_folder("MaximumLogic")
     builder.add_component(comp_type="kitControl:Maximum", name="Max1")
     builder.add_component(comp_type="kitControl:Maximum", name="Max2")

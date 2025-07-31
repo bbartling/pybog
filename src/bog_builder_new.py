@@ -8,34 +8,33 @@ import os
 class BogFolderBuilder:
     """
     Builds a Niagara .bog file with an intelligent layout engine.
-    Supports automatic recursive sub-folder creation to manage complexity.
+    Now supports automatic sub-folder creation to manage complexity.
     """
 
     def __init__(self, folder_name, debug=True):
         """Initializes the builder with a root folder name."""
         self.debug = debug
         self.folder_name = folder_name
-        self._components = {}
-        self._links = []
+        self._components = {}  # Global component registry
+        self._links = []       # Global link registry
         self._next_handle = 1
         self._handle_map = {}
-        self._sub_folders = defaultdict(list)
-        self._component_to_folder = {}
-        self._current_folder_path = (folder_name,)
+        self._sub_folders = defaultdict(list) # parent_path -> [child_folder_names]
+        self._component_to_folder = {} # component_name -> folder_path as tuple
 
-        # --- NEW: Threshold for automatic sub-folder creation ---
-        # If a folder's logic is wider than this, it will be split.
-        self.MAX_TIERS_PER_FOLDER = 5
+        # The current folder context for adding new components
+        self._current_folder_path = (folder_name,)
 
         # Layout constants - NOT TO BE MODIFIED
         self.START_X = 10
         self.START_Y = 10
-        self.X_COLUMN_WIDTH = 15
-        self.Y_INCREMENT = 10
+        self.X_COLUMN_WIDTH = 20 # Increased for better visual separation
+        self.Y_INCREMENT = 15    # Increased for better visual separation
 
-    def log(self, message):
-        if self.debug:
-            print(f"[BOG DEBUG] {message}")
+    def log(self, message, is_layout_log=False):
+        """Prints a debug message if debugging is enabled."""
+        if self.debug and is_layout_log:
+            print(f"[BOG LAYOUT DEBUG] {message}")
 
     def _get_next_handle(self):
         handle = hex(self._next_handle)[2:]
@@ -47,18 +46,14 @@ class BogFolderBuilder:
         parent_path = self._current_folder_path
         self._sub_folders[parent_path].append(name)
         self._current_folder_path = parent_path + (name,)
-        self.log(f"Entered sub-folder: {self.get_current_path_str()}")
-        return self._current_folder_path
 
     def end_sub_folder(self):
         """Exits the current sub-folder, returning to the parent."""
         if len(self._current_folder_path) > 1:
             self._current_folder_path = self._current_folder_path[:-1]
-            self.log(f"Returned to folder: {self.get_current_path_str()}")
-        else:
-            self.log("Already at the root folder.")
 
     def get_current_path_str(self):
+        """Returns the current folder path as a string."""
         return "/".join(self._current_folder_path)
 
     def add_component(self, comp_type, name, properties=None, actions=None):
@@ -67,29 +62,56 @@ class BogFolderBuilder:
             raise ValueError(f"Component with name '{name}' already exists.")
         handle = self._get_next_handle()
         self._handle_map[name] = handle
-        self._components[name] = {"type": comp_type, "properties": properties or {}, "actions": actions or {}, "handle": handle}
+        self._components[name] = {
+            "type": comp_type,
+            "properties": properties or {},
+            "actions": actions or {},
+            "handle": handle,
+        }
         self._component_to_folder[name] = self._current_folder_path
-        self.log(f"Added component '{name}' to folder '{self.get_current_path_str()}'")
 
     def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """Adds a link, creating proxies if it crosses a folder boundary."""
+        """Adds a link, creating directional proxies if it crosses a folder boundary."""
         if source_comp_name not in self._components:
             raise ValueError(f"Source component '{source_comp_name}' not found.")
         if target_comp_name not in self._components:
             raise ValueError(f"Target component '{target_comp_name}' not found.")
 
-        self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
+        source_folder = self._component_to_folder[source_comp_name]
+        target_folder = self._component_to_folder[target_comp_name]
+
+        if source_folder != target_folder:
+            # Case 1: Going INTO a sub-folder (Target is deeper)
+            if len(target_folder) > len(source_folder):
+                proxy_name = f"ProxyIn_{target_comp_name}_{target_slot}"
+                if proxy_name not in self._components:
+                    original_folder_ctx = self._current_folder_path
+                    self._current_folder_path = target_folder # Create proxy in target folder
+                    self.add_numeric_writable(proxy_name)
+                    self._current_folder_path = original_folder_ctx
+                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
+                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
+            # Case 2: Coming OUT OF a sub-folder (Source is deeper)
+            else:
+                proxy_name = f"ProxyOut_{source_comp_name}_{source_slot}"
+                if proxy_name not in self._components:
+                    original_folder_ctx = self._current_folder_path
+                    self._current_folder_path = source_folder # Create proxy in source folder
+                    self.add_numeric_writable(proxy_name)
+                    self._current_folder_path = original_folder_ctx
+                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
+                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
+        else:
+            # This is a direct link within the same folder.
+            self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
 
     def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
         """Internal method to add a link to the global registry."""
         source_type = self._components[source_comp_name]["type"]
         link_type = "b:Link"
         if "Boolean" in source_type and target_slot.startswith("in"):
-            source_comp_info = self._components.get(source_comp_name, {})
-            if source_comp_info.get("type") == "control:BooleanWritable":
-                link_type = "b:ConversionLink"
+            link_type = "b:ConversionLink"
         self._links.append({"source_name": source_comp_name, "source_slot": source_slot, "target_name": target_comp_name, "target_slot": target_slot, "link_type": link_type})
-        self.log(f"Registered link: '{source_comp_name}.{source_slot}' -> '{target_comp_name}.{target_slot}'")
 
     def save(self, file_path):
         """Constructs the XML and saves it to a .bog file."""
@@ -99,7 +121,6 @@ class BogFolderBuilder:
         pretty_string = reparsed.toprettyxml(indent="  ", encoding="utf-8")
         with zipfile.ZipFile(file_path, "w") as bog_zip:
             bog_zip.writestr("file.xml", pretty_string)
-        self.log(f"Successfully wrote .bog file to {file_path}")
 
     def _build_xml_recursive(self):
         """Builds the entire XML structure, starting from the root."""
@@ -108,37 +129,114 @@ class BogFolderBuilder:
         self._build_folder_contents(unrestricted_folder, (self.folder_name,))
         return root
 
+
     def _build_folder_contents(self, parent_xml_element, folder_path_tuple):
-        """Builds the XML for a single folder, automatically splitting it if it's too wide."""
+        """Builds the XML for a single folder, flattening only sub-folder icons at the top level."""
         folder_name = folder_path_tuple[-1]
+        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
+
+        # Create XML <p> element for this folder
         folder_element = ET.SubElement(parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"})
-        
-        components_in_folder = {name: data for name, data in self._components.items() if self._component_to_folder.get(name) == folder_path_tuple}
-        if not components_in_folder:
-            for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
-                self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
-            return
 
-        # --- Layout Calculation and Automatic Splitting ---
-        levels = self._calculate_levels(components_in_folder)
-        
-        if len(levels) > self.MAX_TIERS_PER_FOLDER:
-            self.log(f"Folder '{folder_name}' is too wide ({len(levels)} tiers). Splitting...")
-            self._split_folder_logic(folder_path_tuple, levels)
-            # After splitting, we need to re-calculate the components for the current folder
-            components_in_folder = {name: data for name, data in self._components.items() if self._component_to_folder.get(name) == folder_path_tuple}
+        # Get all components assigned to this folder
+        components_in_folder = {
+            name: data
+            for name, data in self._components.items()
+            if self._component_to_folder.get(name) == folder_path_tuple
+        }
+        #self.log(f"Components in folder {folder_name}: {list(components_in_folder.keys())}", is_layout_log=True)
+
+        if len(folder_path_tuple) == 1:
+            # TOP LEVEL: position inputs, outputs, and subfolder icons
+            sub_folders_in_this_view = self._sub_folders.get(folder_path_tuple, [])
+            comp_coords = self._position_top_level_interface(components_in_folder, sub_folders_in_this_view)
+
+            # 🔧 Flatten Y only for sub-folder icons at top level
+            for sf in sub_folders_in_this_view:
+                if sf in comp_coords:
+                    old_x, old_y = comp_coords[sf]
+                    comp_coords[sf] = (old_x, self.START_Y)
+                    #self.log(f"Flattened sub-folder '{sf}' from ({old_x}, {old_y}) to ({old_x}, {self.START_Y})", is_layout_log=True)
+
+        else:
+            # LOGIC SUBFOLDER: normal tiered layout
             levels = self._calculate_levels(components_in_folder)
+            comp_coords = self._position_components_normally(levels)
+            #self.log(f"Calculated levels for {folder_name}: {levels}", is_layout_log=True)
 
-        # --- Positioning and XML Generation for the (potentially smaller) folder ---
-        comp_coords = self._position_components(levels)
+        # Add components with wsAnnotation tags
         self._add_component_xml_tags(folder_element, components_in_folder, comp_coords)
-        
-        # Create proxies and add link tags
-        self._create_proxies_and_add_link_tags(folder_element, components_in_folder)
 
-        # --- Recursive call for sub-folders ---
+        # Add links targeting this folder
+        links_targeting_this_folder = [
+            l for l in self._links if self._component_to_folder.get(l['target_name']) == folder_path_tuple
+        ]
+        #self.log(f"Links targeting {folder_name}: {links_targeting_this_folder}", is_layout_log=True)
+        self._add_link_xml_tags(folder_element, links_targeting_this_folder)
+
+        # Recurse into subfolders
         for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
+            self.log(f"About to recurse into sub-folder: {sub_folder_name}", is_layout_log=True)
             self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
+
+
+    def _position_top_level_interface(self, components, sub_folders):
+        """Special layout for the root folder: Inputs (left) | Folders (center) | Outputs (right)."""
+        self.log("Using TOP-LEVEL interface layout.", is_layout_log=True)
+        coords = {}
+        inputs, outputs = [], []
+        
+        all_links_sources = {l['source_name'] for l in self._links}
+        all_links_targets = {l['target_name'] for l in self._links}
+
+        # Categorize components
+        for name, data in components.items():
+            if data['type'].endswith('Writable') and name in all_links_targets and name not in all_links_sources:
+                outputs.append(name)
+            elif data['type'].endswith('Writable'):
+                inputs.append(name)
+
+        self.log(f"Categorized as INPUTS: {sorted(inputs)}", is_layout_log=True)
+        self.log(f"Categorized as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
+        self.log(f"Found SUB-FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
+
+        # Place INPUTS (left column)
+        y = self.START_Y
+        for name in sorted(inputs):
+            coords[name] = (self.START_X, y)
+            self.log(f"Positioned INPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            y += self.Y_INCREMENT
+
+        # Place SUB-FOLDERS (middle column, FLAT at START_Y)
+        folder_x = self.START_X + self.X_COLUMN_WIDTH * 3
+        for folder_name in sorted(sub_folders):
+            coords[folder_name] = (folder_x, self.START_Y)
+            self.log(f"Positioned FOLDER '{folder_name}' flat at ({coords[folder_name][0]}, {coords[folder_name][1]})", is_layout_log=True)
+
+        # Place OUTPUTS (right column)
+        y = self.START_Y
+        output_x = self.START_X + self.X_COLUMN_WIDTH * 3
+        for name in sorted(outputs):
+            coords[name] = (output_x, y)
+            self.log(f"Positioned OUTPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            y += self.Y_INCREMENT
+
+        return coords
+
+
+    def _position_components_normally(self, levels):
+        """Calculates X,Y coordinates for components inside a logic folder."""
+        self.log(f"Using NORMAL component layout across {len(levels)} tiers.", is_layout_log=True)
+        comp_coords = {}
+        current_x = self.START_X
+        for i, level in enumerate(levels):
+            y_pos = self.START_Y
+            self.log(f"  Positioning Tier {i+1} with {len(level)} components.", is_layout_log=True)
+            for name in level:
+                comp_coords[name] = (current_x, y_pos)
+                y_pos += self.Y_INCREMENT
+            current_x += self.X_COLUMN_WIDTH
+        return comp_coords
 
     def _calculate_levels(self, components_in_scope):
         """Performs a topological sort to determine the layout tiers."""
@@ -149,10 +247,8 @@ class BogFolderBuilder:
             if source in components_in_scope and target in components_in_scope:
                 adj[source].append(target)
                 in_degree[target] += 1
-        
         queue = deque([name for name in components_in_scope if in_degree[name] == 0])
-        levels = []
-        visited = set()
+        levels, visited = [], set()
         while queue:
             level_size = len(queue)
             current_level = []
@@ -168,63 +264,6 @@ class BogFolderBuilder:
             if current_level:
                 levels.append(current_level)
         return levels
-
-    def _split_folder_logic(self, folder_path_tuple, levels):
-        """Moves logic beyond the tier threshold into a new sub-folder."""
-        split_tier = self.MAX_TIERS_PER_FOLDER
-        components_to_move = set()
-        for i in range(split_tier, len(levels)):
-            for comp_name in levels[i]:
-                components_to_move.add(comp_name)
-
-        continuation_folder_name = f"{folder_path_tuple[-1]}_Continuation_1"
-        new_folder_path = folder_path_tuple + (continuation_folder_name,)
-        
-        # Register the new sub-folder
-        self._sub_folders[folder_path_tuple].append(continuation_folder_name)
-
-        # Re-assign components to the new folder
-        for comp_name in components_to_move:
-            self._component_to_folder[comp_name] = new_folder_path
-            self.log(f"Moving component '{comp_name}' to new folder '{'/'.join(new_folder_path)}'")
-
-    def _position_components(self, levels):
-        """Calculates X,Y coordinates for a set of components based on their levels."""
-        comp_coords = {}
-        current_x = self.START_X
-        for level in levels:
-            # Simple vertical layout for now
-            y_pos = self.START_Y
-            for name in level:
-                comp_coords[name] = (current_x, y_pos)
-                y_pos += self.Y_INCREMENT
-            current_x += self.X_COLUMN_WIDTH
-        return comp_coords
-
-    def _create_proxies_and_add_link_tags(self, folder_element, components_in_folder):
-        """Creates proxy points for cross-folder links and adds all link tags."""
-        links_in_folder = [l for l in self._links if l['target_name'] in components_in_folder]
-        
-        for link in links_in_folder:
-            source_folder = self._component_to_folder.get(link["source_name"])
-            target_folder = self._component_to_folder.get(link["target_name"])
-
-            if source_folder != target_folder:
-                # This is a cross-boundary link, create an input proxy
-                proxy_name = f"ProxyIn_{link['target_name']}_{link['target_slot']}"
-                if proxy_name not in self._components:
-                    # Temporarily switch context to add the proxy component
-                    original_folder_ctx = self._current_folder_path
-                    self._current_folder_path = target_folder
-                    self.add_numeric_writable(proxy_name)
-                    self._current_folder_path = original_folder_ctx
-                
-                # The original link is now split into two
-                self._add_link_tag_to_xml(folder_element, link["source_name"], link["source_slot"], proxy_name, "in16", link["link_type"])
-                self._add_link_tag_to_xml(folder_element, proxy_name, "out", link["target_name"], link["target_slot"], "b:Link")
-            else:
-                # This is a direct link within the same folder
-                self._add_link_tag_to_xml(folder_element, link["source_name"], link["source_slot"], link["target_name"], link["target_slot"], link["link_type"])
 
     def _add_component_xml_tags(self, folder_element, components, coords):
         """Adds the <p> tags for components to the XML tree."""
@@ -255,25 +294,27 @@ class BogFolderBuilder:
             for action_name, action_flag in data["actions"].items():
                 ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
 
-    def _add_link_tag_to_xml(self, folder_element, source_name, source_slot, target_name, target_slot, link_type):
-        """Finds the target component in the XML and appends a single link tag."""
-        target_handle = self._handle_map.get(target_name)
-        if not target_handle: return
-        target_element = folder_element.find(f".//p[@h='{target_handle}']")
-        if target_element is None: return
+    def _add_link_xml_tags(self, folder_element, links):
+        """Adds the <p> tags for links to the XML tree."""
+        link_counters = defaultdict(int)
+        for link in links:
+            target_handle = self._handle_map.get(link["target_name"])
+            if not target_handle: continue
+            target_element = folder_element.find(f"./p[@h='{target_handle}']")
+            if target_element is None: continue
 
-        # Need a unique link name per target
-        link_count = len(target_element.findall('p[@t="b:Link"]')) + len(target_element.findall('p[@t="b:ConversionLink"]'))
-        link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
+            link_count = link_counters[link["target_name"]]
+            link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
+            link_counters[link["target_name"]] += 1
 
-        link_element = ET.SubElement(target_element, "p", {"n": link_name, "t": link_type})
-        ET.SubElement(link_element, "p", {"n": "sourceSlotName", "v": source_slot})
-        ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[source_name]}"})
-        ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": target_slot})
-        if link_type == "b:ConversionLink":
-            ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": "conv:StatusBooleanToStatusNumeric"})
+            link_element = ET.SubElement(target_element, "p", {"n": link_name, "t": link["link_type"]})
+            ET.SubElement(link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]})
+            ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"})
+            ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]})
+            if link["link_type"] == "b:ConversionLink":
+                ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": "conv:StatusBooleanToStatusNumeric"})
 
-    # Helper methods
+    # Helper methods from original file
     def add_numeric_writable(self, name, default_value=0.0):
         self.add_component("control:NumericWritable", name, properties={"defaultValue": default_value}, actions={"emergencyOverride": "h", "emergencyAuto": "h"})
     def add_numeric_switch(self, name):

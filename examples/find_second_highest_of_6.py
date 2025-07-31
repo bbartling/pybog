@@ -4,21 +4,12 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+from src.bog_builder_new import BogFolderBuilder
 
 
 def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     """
     Creates a set of blocks to find the max and min of two inputs.
-
-    Args:
-        builder (BogFolderBuilder): The BOG builder instance.
-        input_a_name (str): The name of the first numeric component.
-        input_b_name (str): The name of the second numeric component.
-        node_id (str): A unique identifier for this comparison node.
-
-    Returns:
-        (str, str): A tuple containing the names of the (Max Output Component, Min Output Component).
     """
     gt_name = f"GT_{node_id}"
     max_switch_name = f"MaxSwitch_{node_id}"
@@ -38,12 +29,10 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     builder.add_link(gt_name, "out", min_switch_name, "inSwitch")
 
     # --- Max Switch Wiring ---
-    # If A > B, GT is true, so Max is A (inTrue)
     builder.add_link(input_a_name, "out", max_switch_name, "inTrue")
     builder.add_link(input_b_name, "out", max_switch_name, "inFalse")
 
     # --- Min Switch Wiring ---
-    # If A > B, GT is true, so Min is B (inFalse)
     builder.add_link(input_b_name, "out", min_switch_name, "inTrue")
     builder.add_link(input_a_name, "out", min_switch_name, "inFalse")
 
@@ -52,23 +41,11 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
 def create_combine_node(builder, max1_name, second1_name, max2_name, second2_name, node_id):
     """
     Creates blocks to find the top two values from two pairs of (max, second_max).
-
-    Args:
-        builder: The BOG builder instance.
-        max1_name (str): The max value from the first pair.
-        second1_name (str): The second value from the first pair.
-        max2_name (str): The max value from the second pair.
-        second2_name (str): The second value from the second pair.
-        node_id (str): A unique identifier for this combination node.
-
-    Returns:
-        (str, str): A tuple containing the names of the (Overall Max Component, Overall Second Max Component).
     """
     # 1. Find the overall max and the min of the two incoming maxes
     overall_max, min_of_maxes = create_comparison_node(builder, max1_name, max2_name, f"{node_id}_MaxCompare")
 
     # 2. Find the max of the remaining candidates for second place
-    # Candidate pool is: min_of_maxes, second1_name, second2_name
     intermediate_second, _ = create_comparison_node(builder, min_of_maxes, second1_name, f"{node_id}_Second_A")
     overall_second, _ = create_comparison_node(builder, intermediate_second, second2_name, f"{node_id}_Second_B")
 
@@ -86,20 +63,25 @@ def main():
         "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
     )
     args = parser.parse_args()
+    
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
     # 1. Initialize the builder
     builder = BogFolderBuilder("FindTopTwoOfSixDampers")
 
-    # 2. Create the 6 VAV damper position inputs
+    # 2. Create the TOP-LEVEL input and output points
     inputs = [f"VAV_Damper_{i}" for i in range(1, 7)]
     for i, name in enumerate(inputs):
         builder.add_numeric_writable(name, default_value=float(i * 10))
 
-    # 3. Create final output points
     builder.add_numeric_writable("HighestDamperPosition")
     builder.add_numeric_writable("SecondHighestDamperPosition")
 
-    # 4. Build the tournament tree
+    # --- FIX: Start a sub-folder to contain all the calculation logic ---
+    builder.start_sub_folder("CalculationLogic")
+    print("--- Entered CalculationLogic sub-folder ---")
+
+    # 3. Build the tournament tree INSIDE the sub-folder
     print("Building comparison logic tree for 6 inputs...")
 
     # Tier 1: Compare raw inputs to get (max, min) pairs for all 6 inputs
@@ -107,6 +89,7 @@ def main():
     for i in range(3): # 6 inputs = 3 pairs
         input_a = inputs[i*2]
         input_b = inputs[i*2 + 1]
+        # The add_link function will now automatically create proxies for these inputs
         max_comp, min_comp = create_comparison_node(builder, input_a, input_b, f"T1_P{i}")
         tier1_results.append((max_comp, min_comp))
     
@@ -119,14 +102,19 @@ def main():
     last_pair_max, last_pair_second = tier1_results[2]
     final_max, final_second = create_combine_node(builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0")
 
-    # 5. Link the final winner pair to the output components
+    # --- FIX: End the sub-folder context ---
+    builder.end_sub_folder()
+    print("--- Exited CalculationLogic sub-folder ---")
+
+    # 4. Link the final winner pair to the output components
+    # The builder will automatically create output proxies from the sub-folder
     print(f"\nFinal Max component is '{final_max}'.")
     print(f"Final Second Max component is '{final_second}'.")
     builder.add_link(final_max, "out", "HighestDamperPosition", "in16")
     builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
 
-    # 6. Save the complete logic to the .bog file
-    bog_filename = "find_second_highest_of_6.bog"
+    # 5. Save the complete logic to the .bog file
+    bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
