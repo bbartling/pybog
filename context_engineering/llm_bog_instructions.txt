@@ -7,374 +7,6 @@ Put together an algorithm with the Niagara API based on the Python API to make a
 
 To maintain a consistent and simple style, ensure all generated Python scripts for creating .bog files directly append to the system path for imports (e.g., sys.path.append(...)) without using try/except error handling, accept an output directory with an -o command-line argument, and define the final .bog filename as a hardcoded string within the script.
 
-Current source to make an a bog file.
-
-# src/bog_builder.py
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
-import zipfile
-from collections import defaultdict, deque
-
-
-class BogFolderBuilder:
-    """
-    Builds a Niagara .bog file with a non-negotiable, intelligent layout engine
-    that strictly adheres to the Hierarchical Data Flow strategy.
-    """
-
-    def __init__(self, folder_name, debug=True):
-        """Initializes the builder with a root folder name."""
-        self.debug = debug
-        self.folder_name = folder_name
-        self._components = {}
-        self._links = []
-        self._next_handle = 1
-        self._handle_map = {}
-
-        # Layout constants
-        self.START_X = 10
-        self.START_Y = 10
-        self.X_COLUMN_WIDTH = 15  # Increased for better spacing between columns
-        self.Y_INCREMENT = 10  # Increased for better vertical spacing
-
-    def log(self, message):
-        """Prints a debug message if debugging is enabled."""
-        if self.debug:
-            print(f"[BOG DEBUG] {message}")
-
-    def _get_next_handle(self):
-        """Generates a unique hex handle string."""
-        handle = hex(self._next_handle)[2:]
-        self._next_handle += 1
-        return handle
-
-    def add_component(self, comp_type, name, properties=None, actions=None):
-        """Registers a component. Layout is 100% automatic."""
-        if name in self._components:
-            raise ValueError(f"Component with name '{name}' already exists.")
-        handle = self._get_next_handle()
-        self._handle_map[name] = handle
-        self._components[name] = {
-            "type": comp_type,
-            "properties": properties or {},
-            "actions": actions or {},
-            "handle": handle,
-        }
-        self.log(f"Added component '{name}' ({comp_type})")
-
-    def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """Adds a link between two components, with automatic type conversion."""
-        if source_comp_name not in self._components:
-            raise ValueError(f"Source component '{source_comp_name}' not found.")
-        if target_comp_name not in self._components:
-            raise ValueError(f"Target component '{target_comp_name}' not found.")
-
-        source_type = self._components[source_comp_name]["type"]
-
-        # Determine if a conversion link is needed
-        link_type = "b:Link"
-        if "Boolean" in source_type and target_slot.startswith("in"):
-            # A more robust check for boolean-like types
-            source_comp_info = self._components.get(source_comp_name, {})
-            if source_comp_info.get("type") == "control:BooleanWritable":
-                link_type = "b:ConversionLink"
-
-        self._links.append(
-            {
-                "source_name": source_comp_name,
-                "source_slot": source_slot,
-                "target_name": target_comp_name,
-                "target_slot": target_slot,
-                "link_type": link_type,
-            }
-        )
-        self.log(
-            f"Linked [{link_type}] '{source_comp_name}.{source_slot}' -> '{target_comp_name}.{target_slot}'"
-        )
-
-    def add_numeric_writable(self, name, default_value=0.0):
-        """Helper to add a standard control:NumericWritable component."""
-        self.add_component(
-            "control:NumericWritable",
-            name,
-            properties={"defaultValue": default_value},
-            actions={"emergencyOverride": "h", "emergencyAuto": "h"},
-        )
-
-    def add_numeric_switch(self, name):
-        """Adds a kitControl:NumericSwitch component (not util)."""
-        self.add_component("kitControl:NumericSwitch", name)
-
-    def add_boolean_writable(self, name, default_value=False):
-        """Helper to add a standard control:BooleanWritable component."""
-        self.add_component(
-            "control:BooleanWritable",
-            name,
-            properties={"fallback": {"value": str(default_value).lower()}},
-            actions={
-                "emergencyActive": "h",
-                "emergencyInactive": "h",
-                "emergencyAuto": "h",
-            },
-        )
-
-    def save(self, file_path):
-        """Constructs the XML and saves it to a .bog file."""
-        final_xml_root = self._build_xml()
-        # Use minidom for pretty printing the XML
-        rough_string = ET.tostring(final_xml_root, "utf-8")
-        reparsed = minidom.parseString(rough_string)
-        pretty_string = reparsed.toprettyxml(indent="  ", encoding="utf-8")
-
-        with zipfile.ZipFile(file_path, "w") as bog_zip:
-            bog_zip.writestr("file.xml", pretty_string)
-        self.log(f"Successfully wrote .bog file to {file_path}")
-
-    def add_reduction_block(self, block_type, final_output_name, input_names):
-        assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"
-        MAX_INPUTS = 4
-        tier = 1
-        current_inputs = input_names[:]
-
-        while len(current_inputs) > MAX_INPUTS:
-            tier_outputs = []
-            for i in range(0, len(current_inputs), MAX_INPUTS):
-                chunk = current_inputs[i : i + MAX_INPUTS]
-                node_name = f"{block_type}_T{tier}_{i//MAX_INPUTS}"
-                self.add_component(f"kitControl:{block_type}", node_name)
-                for j, input_name in enumerate(chunk):
-                    self.add_link(input_name, "out", node_name, f"in{chr(65 + j)}")
-                tier_outputs.append(node_name)
-            current_inputs = tier_outputs
-            tier += 1
-
-        final_block = f"{block_type}_T{tier}_final"
-        self.add_component(f"kitControl:{block_type}", final_block)
-        for j, input_name in enumerate(current_inputs):
-            self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
-
-        self.add_numeric_writable(name=final_output_name)
-        self.add_link(final_block, "out", final_output_name, "in16")
-
-    def _build_xml(self):
-        """Lays out components and constructs the final XML tree before saving."""
-        self.log("Starting XML build process...")
-
-        root = ET.Element(
-            "bajaObjectGraph",
-            {
-                "version": "4.0",
-                "reversibleEncodingKeySource": "none",
-                "FIPSEnabled": "false",
-                "reversibleEncodingValidator": "[null.1]",
-            },
-        )
-        unrestricted_folder = ET.SubElement(
-            root, "p", {"t": "b:UnrestrictedFolder", "m": "b=baja"}
-        )
-        folder_element = ET.SubElement(
-            unrestricted_folder, "p", {"n": self.folder_name, "t": "b:Folder"}
-        )
-
-        # Perform a topological sort to arrange components in tiers/levels
-        in_degree = {name: 0 for name in self._components}
-        adj = defaultdict(list)
-        for link in self._links:
-            adj[link["source_name"]].append(link["target_name"])
-            in_degree[link["target_name"]] += 1
-
-        # Initialize queue with nodes that have no incoming links
-        queue = deque(
-            [name for name in sorted(self._components) if in_degree[name] == 0]
-        )
-        levels = []
-        visited = set()
-
-        while queue:
-            level_size = len(queue)
-            current_level = []
-            for _ in range(level_size):
-                u = queue.popleft()
-                if u in visited:
-                    continue
-                visited.add(u)
-                current_level.append(u)
-                for v in sorted(adj[u]):
-                    in_degree[v] -= 1
-                    if in_degree[v] == 0:
-                        queue.append(v)
-            if current_level:
-                levels.append(current_level)
-
-        comp_coords = {}
-        current_x = self.START_X
-
-        # Layout the first tier (source components)
-        if levels:
-            level_zero_y = self.START_Y
-            for name in levels[0]:
-                comp_coords[name] = (current_x, level_zero_y)
-                level_zero_y += self.Y_INCREMENT
-
-        current_x += self.X_COLUMN_WIDTH
-
-        # Layout subsequent tiers with fan-out handling
-        for level in levels[1:]:
-            def avg_input_y(name):
-                """Average Y of all connected parent nodes."""
-                ys = [
-                    comp_coords[link["source_name"]][1]
-                    for link in self._links
-                    if link["target_name"] == name
-                    and link["source_name"] in comp_coords
-                ]
-                return sum(ys) / len(ys) if ys else self.START_Y
-
-            # Calculate desired positions
-            desired_positions = [
-                {"name": name, "y": avg_input_y(name)} for name in level
-            ]
-            desired_positions.sort(key=lambda p: p["y"])
-
-            # Pass 1: Collision resolution (push down)
-            last_y = -float("inf")
-            for pos in desired_positions:
-                y_pos = max(pos["y"], last_y + self.Y_INCREMENT)
-                comp_coords[pos["name"]] = (current_x, y_pos)
-                last_y = y_pos
-
-            # Pass 2: Centering tier vertically
-            all_y = [
-                coord[1] for coord in comp_coords.values() if coord[0] == current_x
-            ]
-            avg_y = sum(all_y) / len(all_y)
-            tier_shift = self.START_Y + ((len(levels[0]) * self.Y_INCREMENT) / 2) - avg_y
-            for name in [p["name"] for p in desired_positions]:
-                x, y = comp_coords[name]
-                comp_coords[name] = (x, y + tier_shift)
-
-            current_x += self.X_COLUMN_WIDTH
-
-
-        # === OUTPUT SIDE-CAR LOGIC ===
-        # Position output-only writables next to their driver component
-        for name, data in self._components.items():
-            if data["type"] in ("control:NumericWritable", "control:BooleanWritable"):
-                is_output_only = all(
-                    link["source_name"] != name for link in self._links
-                )
-                if is_output_only:
-                    incoming_links = [
-                        l for l in self._links if l["target_name"] == name
-                    ]
-                    if incoming_links:
-                        # Place it next to its first input driver
-                        driver = incoming_links[0]["source_name"]
-                        if driver in comp_coords:
-                            sx, sy = comp_coords[driver]
-                            comp_coords[name] = (sx + self.X_COLUMN_WIDTH, sy)
-
-        # === FINAL XML ELEMENT CONSTRUCTION ===
-        link_counters = defaultdict(int)
-        for name, data in self._components.items():
-            attrs = {"n": name, "t": data["type"], "h": data["handle"]}
-            if ":" in data["type"]:
-                prefix = data["type"].split(":")[0]
-                attrs["m"] = f"{prefix}={prefix}"
-            element = ET.SubElement(folder_element, "p", attrs)
-
-            x, y = comp_coords.get(name, (self.START_X, self.START_Y))
-            ET.SubElement(
-                element,
-                "p",
-                {
-                    "n": "wsAnnotation",
-                    "t": "b:WsAnnotation",
-                    "v": f"{int(x)},{int(y)},8",
-                },
-            )
-
-            # Add component-specific properties and slots
-            if data["type"] == "control:NumericWritable":
-                default_val = data["properties"].get("defaultValue", 0.0)
-                out_slot = ET.SubElement(
-                    element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"}
-                )
-                ET.SubElement(out_slot, "p", {"n": "value", "v": str(default_val)})
-                ET.SubElement(
-                    out_slot,
-                    "p",
-                    {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
-                )
-                fallback_slot = ET.SubElement(
-                    element, "p", {"n": "fallback", "t": "b:StatusNumeric"}
-                )
-                ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
-                ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
-            elif data["type"] == "control:BooleanWritable":
-                fallback_slot = ET.SubElement(
-                    element, "p", {"n": "fallback", "t": "b:StatusBoolean"}
-                )
-                ET.SubElement(
-                    fallback_slot,
-                    "p",
-                    {"n": "value", "v": data["properties"]["fallback"]["value"]},
-                )
-            else:
-                for prop_name, prop_value in data["properties"].items():
-                    ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
-
-            for action_name, action_flag in data["actions"].items():
-                ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
-
-        # Wire all the links between components
-        for link in self._links:
-            target_handle = self._handle_map[link["target_name"]]
-            target_element = folder_element.find(f".//p[@h='{target_handle}']")
-
-            # Ensure target element was found before proceeding
-            if target_element is None:
-                self.log(
-                    f"WARNING: Could not find target element for link to '{link['target_name']}'"
-                )
-                continue
-
-            link_count = link_counters[link["target_name"]]
-            link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
-            link_counters[link["target_name"]] += 1
-
-            link_element = ET.SubElement(
-                target_element, "p", {"n": link_name, "t": link["link_type"]}
-            )
-            ET.SubElement(
-                link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]}
-            )
-            ET.SubElement(
-                link_element,
-                "p",
-                {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"},
-            )
-            ET.SubElement(
-                link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]}
-            )
-
-            if link["link_type"] == "b:ConversionLink":
-                ET.SubElement(
-                    link_element,
-                    "p",
-                    {
-                        "n": "converter",
-                        "m": "conv=converters",
-                        "t": "conv:StatusBooleanToStatusNumeric",
-                    },
-                )
-
-        return root
-
-
-
-
-
 Niagara4 kitcontrol_components:
   - description: "A reference list of available components from the kitControl palette."
   - alarm:
@@ -502,10 +134,357 @@ Niagara4 kitcontrol_components:
     - StatusDemux
 
 
+# src/bog_builder.py
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+import zipfile
+from collections import defaultdict, deque
+import os
+
+class BogFolderBuilder:
+    """
+    Builds a Niagara .bog file with an intelligent layout engine.
+    Now supports automatic sub-folder creation to manage complexity.
+    """
+
+    def __init__(self, folder_name, debug=True):
+        """Initializes the builder with a root folder name."""
+        self.debug = debug
+        self.folder_name = folder_name
+        self._components = {}  # Global component registry
+        self._links = []       # Global link registry
+        self._next_handle = 1
+        self._handle_map = {}
+        self._sub_folders = defaultdict(list) # parent_path -> [child_folder_names]
+        self._component_to_folder = {} # component_name -> folder_path as tuple
+
+        # The current folder context for adding new components
+        self._current_folder_path = (folder_name,)
+
+        # Layout constants - NOT TO BE MODIFIED
+        self.START_X = 10
+        self.START_Y = 10
+        self.X_COLUMN_WIDTH = 20 # Increased for better visual separation
+        self.Y_INCREMENT = 15    # Increased for better visual separation
+
+    def log(self, message, is_layout_log=False):
+        """Prints a debug message if debugging is enabled."""
+        if self.debug and is_layout_log:
+            print(f"[BOG LAYOUT DEBUG] {message}")
+
+    def _get_next_handle(self):
+        handle = hex(self._next_handle)[2:]
+        self._next_handle += 1
+        return handle
+
+    def start_sub_folder(self, name):
+        """Starts a new sub-folder context."""
+        parent_path = self._current_folder_path
+        self._sub_folders[parent_path].append(name)
+        self._current_folder_path = parent_path + (name,)
+
+    def end_sub_folder(self):
+        """Exits the current sub-folder, returning to the parent."""
+        if len(self._current_folder_path) > 1:
+            self._current_folder_path = self._current_folder_path[:-1]
+
+    def get_current_path_str(self):
+        """Returns the current folder path as a string."""
+        return "/".join(self._current_folder_path)
+
+    def add_component(self, comp_type, name, properties=None, actions=None):
+        """Registers a component in the current folder context."""
+        if name in self._components:
+            raise ValueError(f"Component with name '{name}' already exists.")
+        handle = self._get_next_handle()
+        self._handle_map[name] = handle
+        self._components[name] = {
+            "type": comp_type,
+            "properties": properties or {},
+            "actions": actions or {},
+            "handle": handle,
+        }
+        self._component_to_folder[name] = self._current_folder_path
+
+    def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
+        """Adds a link, creating directional proxies if it crosses a folder boundary."""
+        if source_comp_name not in self._components:
+            raise ValueError(f"Source component '{source_comp_name}' not found.")
+        if target_comp_name not in self._components:
+            raise ValueError(f"Target component '{target_comp_name}' not found.")
+
+        source_folder = self._component_to_folder[source_comp_name]
+        target_folder = self._component_to_folder[target_comp_name]
+
+        if source_folder != target_folder:
+            # Case 1: Going INTO a sub-folder (Target is deeper)
+            if len(target_folder) > len(source_folder):
+                proxy_name = f"ProxyIn_{target_comp_name}_{target_slot}"
+                if proxy_name not in self._components:
+                    original_folder_ctx = self._current_folder_path
+                    self._current_folder_path = target_folder # Create proxy in target folder
+                    self.add_numeric_writable(proxy_name)
+                    self._current_folder_path = original_folder_ctx
+                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
+                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
+            # Case 2: Coming OUT OF a sub-folder (Source is deeper)
+            else:
+                proxy_name = f"ProxyOut_{source_comp_name}_{source_slot}"
+                if proxy_name not in self._components:
+                    original_folder_ctx = self._current_folder_path
+                    self._current_folder_path = source_folder # Create proxy in source folder
+                    self.add_numeric_writable(proxy_name)
+                    self._current_folder_path = original_folder_ctx
+                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
+                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
+        else:
+            # This is a direct link within the same folder.
+            self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
+
+    def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
+        """Internal method to add a link to the global registry."""
+        source_type = self._components[source_comp_name]["type"]
+        link_type = "b:Link"
+        if "Boolean" in source_type and target_slot.startswith("in"):
+            link_type = "b:ConversionLink"
+        self._links.append({"source_name": source_comp_name, "source_slot": source_slot, "target_name": target_comp_name, "target_slot": target_slot, "link_type": link_type})
+
+    def save(self, file_path):
+        """Constructs the XML and saves it to a .bog file."""
+        final_xml_root = self._build_xml_recursive()
+        rough_string = ET.tostring(final_xml_root, "utf-8")
+        reparsed = minidom.parseString(rough_string)
+        pretty_string = reparsed.toprettyxml(indent="  ", encoding="utf-8")
+        with zipfile.ZipFile(file_path, "w") as bog_zip:
+            bog_zip.writestr("file.xml", pretty_string)
+
+    def _build_xml_recursive(self):
+        """Builds the entire XML structure, starting from the root."""
+        root = ET.Element("bajaObjectGraph", {"version": "4.0", "reversibleEncodingKeySource": "none", "FIPSEnabled": "false", "reversibleEncodingValidator": "[null.1]"})
+        unrestricted_folder = ET.SubElement(root, "p", {"t": "b:UnrestrictedFolder", "m": "b=baja"})
+        self._build_folder_contents(unrestricted_folder, (self.folder_name,))
+        return root
+
+
+    def _build_folder_contents(self, parent_xml_element, folder_path_tuple):
+        """Builds the XML for a single folder, flattening only sub-folder icons at the top level."""
+        folder_name = folder_path_tuple[-1]
+        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
+
+        # Create XML <p> element for this folder
+        folder_element = ET.SubElement(parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"})
+
+        # Get all components assigned to this folder
+        components_in_folder = {
+            name: data
+            for name, data in self._components.items()
+            if self._component_to_folder.get(name) == folder_path_tuple
+        }
+        #self.log(f"Components in folder {folder_name}: {list(components_in_folder.keys())}", is_layout_log=True)
+
+        if len(folder_path_tuple) == 1:
+            # TOP LEVEL: position inputs, outputs, and subfolder icons
+            sub_folders_in_this_view = self._sub_folders.get(folder_path_tuple, [])
+            comp_coords = self._position_top_level_interface(components_in_folder, sub_folders_in_this_view)
+
+            # 🔧 Flatten Y only for sub-folder icons at top level
+            for sf in sub_folders_in_this_view:
+                if sf in comp_coords:
+                    old_x, old_y = comp_coords[sf]
+                    comp_coords[sf] = (old_x, self.START_Y)
+                    #self.log(f"Flattened sub-folder '{sf}' from ({old_x}, {old_y}) to ({old_x}, {self.START_Y})", is_layout_log=True)
+
+        else:
+            # LOGIC SUBFOLDER: normal tiered layout
+            levels = self._calculate_levels(components_in_folder)
+            comp_coords = self._position_components_normally(levels)
+            #self.log(f"Calculated levels for {folder_name}: {levels}", is_layout_log=True)
+
+        # Add components with wsAnnotation tags
+        self._add_component_xml_tags(folder_element, components_in_folder, comp_coords)
+
+        # Add links targeting this folder
+        links_targeting_this_folder = [
+            l for l in self._links if self._component_to_folder.get(l['target_name']) == folder_path_tuple
+        ]
+        #self.log(f"Links targeting {folder_name}: {links_targeting_this_folder}", is_layout_log=True)
+        self._add_link_xml_tags(folder_element, links_targeting_this_folder)
+
+        # Recurse into subfolders
+        for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
+            self.log(f"About to recurse into sub-folder: {sub_folder_name}", is_layout_log=True)
+            self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
+
+
+    def _position_top_level_interface(self, components, sub_folders):
+        """Special layout for the root folder: Inputs (left) | Folders (center) | Outputs (right)."""
+        self.log("Using TOP-LEVEL interface layout.", is_layout_log=True)
+        coords = {}
+        inputs, outputs = [], []
+        
+        all_links_sources = {l['source_name'] for l in self._links}
+        all_links_targets = {l['target_name'] for l in self._links}
+
+        # Categorize components
+        for name, data in components.items():
+            if data['type'].endswith('Writable') and name in all_links_targets and name not in all_links_sources:
+                outputs.append(name)
+            elif data['type'].endswith('Writable'):
+                inputs.append(name)
+
+        self.log(f"Categorized as INPUTS: {sorted(inputs)}", is_layout_log=True)
+        self.log(f"Categorized as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
+        self.log(f"Found SUB-FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
+
+        # Place INPUTS (left column)
+        y = self.START_Y
+        for name in sorted(inputs):
+            coords[name] = (self.START_X, y)
+            self.log(f"Positioned INPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            y += self.Y_INCREMENT
+
+        # Place SUB-FOLDERS (middle column, FLAT at START_Y)
+        folder_x = self.START_X + self.X_COLUMN_WIDTH * 3
+        for folder_name in sorted(sub_folders):
+            coords[folder_name] = (folder_x, self.START_Y)
+            self.log(f"Positioned FOLDER '{folder_name}' flat at ({coords[folder_name][0]}, {coords[folder_name][1]})", is_layout_log=True)
+
+        # Place OUTPUTS (right column)
+        y = self.START_Y
+        output_x = self.START_X + self.X_COLUMN_WIDTH * 3
+        for name in sorted(outputs):
+            coords[name] = (output_x, y)
+            self.log(f"Positioned OUTPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            y += self.Y_INCREMENT
+
+        return coords
+
+
+    def _position_components_normally(self, levels):
+        """Calculates X,Y coordinates for components inside a logic folder."""
+        self.log(f"Using NORMAL component layout across {len(levels)} tiers.", is_layout_log=True)
+        comp_coords = {}
+        current_x = self.START_X
+        for i, level in enumerate(levels):
+            y_pos = self.START_Y
+            self.log(f"  Positioning Tier {i+1} with {len(level)} components.", is_layout_log=True)
+            for name in level:
+                comp_coords[name] = (current_x, y_pos)
+                y_pos += self.Y_INCREMENT
+            current_x += self.X_COLUMN_WIDTH
+        return comp_coords
+
+    def _calculate_levels(self, components_in_scope):
+        """Performs a topological sort to determine the layout tiers."""
+        in_degree = {name: 0 for name in components_in_scope}
+        adj = defaultdict(list)
+        for link in self._links:
+            source, target = link["source_name"], link["target_name"]
+            if source in components_in_scope and target in components_in_scope:
+                adj[source].append(target)
+                in_degree[target] += 1
+        queue = deque([name for name in components_in_scope if in_degree[name] == 0])
+        levels, visited = [], set()
+        while queue:
+            level_size = len(queue)
+            current_level = []
+            for _ in range(level_size):
+                u = queue.popleft()
+                if u in visited: continue
+                visited.add(u)
+                current_level.append(u)
+                for v in sorted(adj[u]):
+                    in_degree[v] -= 1
+                    if in_degree[v] == 0:
+                        queue.append(v)
+            if current_level:
+                levels.append(current_level)
+        return levels
+
+    def _add_component_xml_tags(self, folder_element, components, coords):
+        """Adds the <p> tags for components to the XML tree."""
+        for name, data in components.items():
+            attrs = {"n": name, "t": data["type"], "h": data["handle"]}
+            if ":" in data["type"]:
+                prefix = data["type"].split(":")[0]
+                attrs["m"] = f"{prefix}={prefix}"
+            element = ET.SubElement(folder_element, "p", attrs)
+            
+            x, y = coords.get(name, (self.START_X, self.START_Y))
+            ET.SubElement(element, "p", {"n": "wsAnnotation", "t": "b:WsAnnotation", "v": f"{int(x)},{int(y)},8"})
+
+            if data["type"] == "control:NumericWritable":
+                default_val = data["properties"].get("defaultValue", 0.0)
+                out_slot = ET.SubElement(element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"})
+                ET.SubElement(out_slot, "p", {"n": "value", "v": str(default_val)})
+                ET.SubElement(out_slot, "p", {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"})
+                fallback_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusNumeric"})
+                ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
+                ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
+            elif data["type"] == "control:BooleanWritable":
+                fallback_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusBoolean"})
+                ET.SubElement(fallback_slot, "p", {"n": "value", "v": data["properties"]["fallback"]["value"]})
+            else:
+                for prop_name, prop_value in data["properties"].items():
+                    ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+            for action_name, action_flag in data["actions"].items():
+                ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
+
+    def _add_link_xml_tags(self, folder_element, links):
+        """Adds the <p> tags for links to the XML tree."""
+        link_counters = defaultdict(int)
+        for link in links:
+            target_handle = self._handle_map.get(link["target_name"])
+            if not target_handle: continue
+            target_element = folder_element.find(f"./p[@h='{target_handle}']")
+            if target_element is None: continue
+
+            link_count = link_counters[link["target_name"]]
+            link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
+            link_counters[link["target_name"]] += 1
+
+            link_element = ET.SubElement(target_element, "p", {"n": link_name, "t": link["link_type"]})
+            ET.SubElement(link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]})
+            ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"})
+            ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]})
+            if link["link_type"] == "b:ConversionLink":
+                ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": "conv:StatusBooleanToStatusNumeric"})
+
+    # Helper methods from original file
+    def add_numeric_writable(self, name, default_value=0.0):
+        self.add_component("control:NumericWritable", name, properties={"defaultValue": default_value}, actions={"emergencyOverride": "h", "emergencyAuto": "h"})
+    def add_numeric_switch(self, name):
+        self.add_component("kitControl:NumericSwitch", name)
+    def add_boolean_writable(self, name, default_value=False):
+        self.add_component("control:BooleanWritable", name, properties={"fallback": {"value": str(default_value).lower()}}, actions={"emergencyActive": "h", "emergencyInactive": "h", "emergencyAuto": "h"})
+    def add_reduction_block(self, block_type, final_output_name, input_names):
+        assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"
+        MAX_INPUTS = 4
+        tier = 1
+        current_inputs = input_names[:]
+        self.start_sub_folder(f"{block_type}Calc")
+        while len(current_inputs) > MAX_INPUTS:
+            tier_outputs = []
+            for i in range(0, len(current_inputs), MAX_INPUTS):
+                chunk = current_inputs[i : i + MAX_INPUTS]
+                node_name = f"{block_type}_T{tier}_{i//MAX_INPUTS}"
+                self.add_component(f"kitControl:{block_type}", node_name)
+                for j, input_name in enumerate(chunk):
+                    self.add_link(input_name, "out", node_name, f"in{chr(65 + j)}")
+                tier_outputs.append(node_name)
+            current_inputs = tier_outputs
+            tier += 1
+        final_block = f"{block_type}_T{tier}_final"
+        self.add_component(f"kitControl:{block_type}", final_block)
+        for j, input_name in enumerate(current_inputs):
+            self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
+        self.end_sub_folder()
+        self.add_numeric_writable(name=final_output_name)
+        self.add_link(final_block, "out", final_output_name, "in16")
 
 
 
-The following are easy examples tested by the creator of this repo.
+The following are easy examples tested by the creator of this repo. Please make py file creations in the same format without exception handling.
 
 import sys
 import os
@@ -513,22 +492,27 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog file with automatic layout."
+        description="Build an 8-input adder .bog file with a clean, sub-foldered layout."
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )
     args = parser.parse_args()
 
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 2. Register all components. The builder will handle the layout.
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("ComplicatedAdder")
+
+    # 2. Register all TOP-LEVEL components.
+    # These are the clean inputs and the final output the user will see.
+    # --- Inputs ---
     builder.add_numeric_writable(name="Input1", default_value=10.0)
     builder.add_numeric_writable(name="Input2", default_value=20.0)
     builder.add_numeric_writable(name="Input3", default_value=30.0)
@@ -537,13 +521,35 @@ def main():
     builder.add_numeric_writable(name="Input6", default_value=60.0)
     builder.add_numeric_writable(name="Input7", default_value=70.0)
     builder.add_numeric_writable(name="Input8", default_value=80.0)
+    
+    # --- Output ---
     builder.add_numeric_writable(name="Total")
 
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will now place all the intermediate addition blocks into a sub-folder
+    # to keep the main wiresheet clean.
+
+    # STEP 1: Start the sub-folder.
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("AdditionLogic")
+
+    # --- Logic Blocks ---
+    # These 'Add' components are now created inside the "AdditionLogic" folder.
     builder.add_component(comp_type="kitControl:Add", name="Add1")
     builder.add_component(comp_type="kitControl:Add", name="Add2")
     builder.add_component(comp_type="kitControl:Add", name="Add3")
 
+    # STEP 2: End the sub-folder.
+    # This closes our "logic sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
     # 3. Register all links.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "AdditionLogic".
+
+    # Links from top-level inputs into the sub-folder's logic
     builder.add_link("Input1", "out", "Add1", "inA")
     builder.add_link("Input2", "out", "Add1", "inB")
     builder.add_link("Input3", "out", "Add1", "inC")
@@ -554,21 +560,23 @@ def main():
     builder.add_link("Input7", "out", "Add2", "inC")
     builder.add_link("Input8", "out", "Add2", "inD")
 
+    # Links between components that are both inside the sub-folder
     builder.add_link("Add1", "out", "Add3", "inA")
-    builder.add_link("Add2", "out", "Add3", "inA")
+    builder.add_link("Add2", "out", "Add3", "inB") # Corrected from inA to inB
 
+    # Link from the sub-folder's logic to the top-level output
     builder.add_link("Add3", "out", "Total", "in16")
 
     # 4. Save the file. This triggers the layout calculation and file writing.
-    output_path = os.path.join(args.output_dir, "addition_complicated.bog")
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 
 if __name__ == "__main__":
     main()
-
 
 import sys
 import os
@@ -576,22 +584,26 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a complex, multi-algorithm .bog file."
+        description="Build a complex, multi-algorithm .bog file with a clean, multi-folder layout."
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )
     args = parser.parse_args()
 
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
     # 1. Initialize the builder
     builder = BogFolderBuilder("MultiAlgorithmTest")
 
-    # Define input blocks and default values
+    # 2. Define TOP-LEVEL input and output blocks.
+    # --- Inputs ---
     builder.add_numeric_writable(name="Input1", default_value=10.0)
     builder.add_numeric_writable(name="Input2", default_value=20.0)
     builder.add_numeric_writable(name="Input3", default_value=30.0)
@@ -604,106 +616,113 @@ def main():
     builder.add_numeric_writable(name="Input10", default_value=100.0)
     builder.add_numeric_writable(name="Input11", default_value=110.0)
 
-    # Define final alg output blocks
+    # --- Outputs ---
     builder.add_numeric_writable(name="Min_Final")
     builder.add_numeric_writable(name="Max_Final")
     builder.add_numeric_writable(name="Avg_Final")
 
+    # TUTORIAL: USING MULTIPLE SUB-FOLDERS
+    # Since this script performs three separate calculations, we can give each one
+    # its own sub-folder for maximum organization.
+
+    # --- Average Calculation Sub-Folder ---
+    builder.start_sub_folder("AverageLogic")
     builder.add_component(comp_type="kitControl:Average", name="Avg1")
     builder.add_component(comp_type="kitControl:Average", name="Avg2")
     builder.add_component(comp_type="kitControl:Average", name="Avg3")
+    builder.add_component(comp_type="kitControl:Average", name="Avg4")
+    builder.end_sub_folder()
 
+    # --- Minimum Calculation Sub-Folder ---
+    builder.start_sub_folder("MinimumLogic")
     builder.add_component(comp_type="kitControl:Minimum", name="Min1")
     builder.add_component(comp_type="kitControl:Minimum", name="Min2")
     builder.add_component(comp_type="kitControl:Minimum", name="Min3")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
+    builder.end_sub_folder()
 
+    # --- Maximum Calculation Sub-Folder ---
+    builder.start_sub_folder("MaximumLogic")
     builder.add_component(comp_type="kitControl:Maximum", name="Max1")
     builder.add_component(comp_type="kitControl:Maximum", name="Max2")
     builder.add_component(comp_type="kitControl:Maximum", name="Max3")
-
-    # Define tier 2 blocks to handle 4 input limitations
-    builder.add_component(comp_type="kitControl:Average", name="Avg4")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
     builder.add_component(comp_type="kitControl:Maximum", name="Max4")
+    builder.end_sub_folder()
 
-    # Link Tier 1
+
+    # 3. Register all links.
+    # No changes are needed here. The builder will create proxies automatically
+    # as these links cross in and out of the three different sub-folders.
+
+    # --- Links for Average Logic ---
     builder.add_link("Input1", "out", "Avg1", "inA")
     builder.add_link("Input2", "out", "Avg1", "inB")
     builder.add_link("Input3", "out", "Avg1", "inC")
     builder.add_link("Input4", "out", "Avg1", "inD")
-
     builder.add_link("Input5", "out", "Avg2", "inA")
     builder.add_link("Input6", "out", "Avg2", "inB")
     builder.add_link("Input7", "out", "Avg2", "inC")
     builder.add_link("Input8", "out", "Avg2", "inD")
-
     builder.add_link("Input9", "out", "Avg3", "inA")
     builder.add_link("Input10", "out", "Avg3", "inB")
     builder.add_link("Input11", "out", "Avg3", "inC")
+    builder.add_link("Avg1", "out", "Avg4", "inA")
+    builder.add_link("Avg2", "out", "Avg4", "inB")
+    builder.add_link("Avg3", "out", "Avg4", "inC")
+    builder.add_link("Avg4", "out", "Avg_Final", "in16")
 
+    # --- Links for Minimum Logic ---
     builder.add_link("Input1", "out", "Min1", "inA")
     builder.add_link("Input2", "out", "Min1", "inB")
     builder.add_link("Input3", "out", "Min1", "inC")
     builder.add_link("Input4", "out", "Min1", "inD")
-
     builder.add_link("Input5", "out", "Min2", "inA")
     builder.add_link("Input6", "out", "Min2", "inB")
     builder.add_link("Input7", "out", "Min2", "inC")
     builder.add_link("Input8", "out", "Min2", "inD")
-
     builder.add_link("Input9", "out", "Min3", "inA")
     builder.add_link("Input10", "out", "Min3", "inB")
     builder.add_link("Input11", "out", "Min3", "inC")
+    builder.add_link("Min1", "out", "Min4", "inA")
+    builder.add_link("Min2", "out", "Min4", "inB")
+    builder.add_link("Min3", "out", "Min4", "inC")
+    builder.add_link("Min4", "out", "Min_Final", "in16")
 
+    # --- Links for Maximum Logic ---
     builder.add_link("Input1", "out", "Max1", "inA")
     builder.add_link("Input2", "out", "Max1", "inB")
     builder.add_link("Input3", "out", "Max1", "inC")
     builder.add_link("Input4", "out", "Max1", "inD")
-
     builder.add_link("Input5", "out", "Max2", "inA")
     builder.add_link("Input6", "out", "Max2", "inB")
     builder.add_link("Input7", "out", "Max2", "inC")
     builder.add_link("Input8", "out", "Max2", "inD")
-
     builder.add_link("Input9", "out", "Max3", "inA")
     builder.add_link("Input10", "out", "Max3", "inB")
     builder.add_link("Input11", "out", "Max3", "inC")
-
-    # link tier 2
-    builder.add_link("Avg1", "out", "Avg4", "inA")
-    builder.add_link("Avg2", "out", "Avg4", "inB")
-    builder.add_link("Avg3", "out", "Avg4", "inC")
-
-    builder.add_link("Min1", "out", "Min4", "inA")
-    builder.add_link("Min2", "out", "Min4", "inB")
-    builder.add_link("Min3", "out", "Min4", "inC")
-
     builder.add_link("Max1", "out", "Max4", "inA")
     builder.add_link("Max2", "out", "Max4", "inB")
     builder.add_link("Max3", "out", "Max4", "inC")
-
-    # link tier 3
-    builder.add_link("Avg4", "out", "Avg_Final", "in16")
     builder.add_link("Max4", "out", "Max_Final", "in16")
-    builder.add_link("Min4", "out", "Min_Final", "in16")
 
     # 4. Save the file.
-    output_path = os.path.join(args.output_dir, "avg_min_max.bog")
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 
 if __name__ == "__main__":
     main()
-
 
 import sys
 import os
 import argparse
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def main():
@@ -715,27 +734,17 @@ def main():
     )
     args = parser.parse_args()
 
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
     builder = BogFolderBuilder("BoolLogic_Playground", debug=True)
 
+    # 1. Define all TOP-LEVEL components first.
+    # These are the inputs and outputs the user will directly interact with.
     # === Inputs ===
     builder.add_boolean_writable("Bool_A", default_value=True)
     builder.add_boolean_writable("Bool_B", default_value=False)
     builder.add_numeric_writable("Num_A", default_value=5.0)
     builder.add_numeric_writable("Num_B", default_value=10.0)
-
-    # === Boolean Logic Blocks ===
-    builder.add_component("kitControl:And", "And_Block")
-    builder.add_component("kitControl:Or", "Or_Block")
-    builder.add_component("kitControl:Xor", "Xor_Block")
-    builder.add_component("kitControl:Not", "Not_Block")
-
-    # === Comparison Blocks ===
-    builder.add_component("kitControl:Equal", "Equal_Block")
-    builder.add_component("kitControl:NotEqual", "NotEqual_Block")
-    builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual_Block")
-    builder.add_component("kitControl:LessThan", "LessThan_Block")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
 
     # === Outputs ===
     builder.add_boolean_writable("Bool_Output_And")
@@ -749,8 +758,44 @@ def main():
     builder.add_boolean_writable("Bool_Output_LT")
     builder.add_boolean_writable("Bool_Output_LTE")
 
-    # === Wiring ===
-    # Boolean Logic: A and B
+
+    # TUTORIAL: USING MULTIPLE, SEPARATE SUB-FOLDERS
+    # We can create as many sub-folders as we need to organize our logic.
+    # Here, we will create one for the boolean operations and another for comparisons.
+
+    # STEP 1A: Start the first sub-folder for Boolean logic.
+    builder.start_sub_folder("BooleanLogic")
+
+    # These components will be placed inside the "BooleanLogic" folder.
+    builder.add_component("kitControl:And", "And_Block")
+    builder.add_component("kitControl:Or", "Or_Block")
+    builder.add_component("kitControl:Xor", "Xor_Block")
+    builder.add_component("kitControl:Not", "Not_Block")
+
+    # STEP 1B: End the first sub-folder.
+    builder.end_sub_folder()
+
+
+    # STEP 2A: Start the second sub-folder for Comparison logic.
+    builder.start_sub_folder("ComparisonLogic")
+
+    # These components will be placed inside the "ComparisonLogic" folder.
+    builder.add_component("kitControl:Equal", "Equal_Block")
+    builder.add_component("kitControl:NotEqual", "NotEqual_Block")
+    builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
+    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual_Block")
+    builder.add_component("kitControl:LessThan", "LessThan_Block")
+    builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
+
+    # STEP 2B: End the second sub-folder.
+    builder.end_sub_folder()
+
+
+    # 3. Register all links.
+    # Again, no changes are needed here. The builder knows which folder each
+    # component lives in and will create all necessary proxies automatically.
+
+    # === Wiring for Boolean Logic ===
     builder.add_link("Bool_A", "out", "And_Block", "inA")
     builder.add_link("Bool_B", "out", "And_Block", "inB")
     builder.add_link("And_Block", "out", "Bool_Output_And", "in16")
@@ -766,7 +811,7 @@ def main():
     builder.add_link("Bool_B", "out", "Not_Block", "in")
     builder.add_link("Not_Block", "out", "Bool_Output_Not", "in16")
 
-    # Comparisons: Num_A vs Num_B
+    # === Wiring for Comparisons ===
     builder.add_link("Num_A", "out", "Equal_Block", "inA")
     builder.add_link("Num_B", "out", "Equal_Block", "inB")
     builder.add_link("Equal_Block", "out", "Bool_Output_Equal", "in16")
@@ -792,284 +837,104 @@ def main():
     builder.add_link("LessThanEqual_Block", "out", "Bool_Output_LTE", "in16")
 
     # === Save file ===
-    output_path = os.path.join(args.output_dir, "bool_logic_playground.bog")
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 
 if __name__ == "__main__":
     main()
 
-
 import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog file with automatic layout."
+        description="Build a Boolean logic with NumericSwitch .bog file."
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )
     args = parser.parse_args()
 
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 2. Register all components. The builder will handle the layout.
-    builder.add_numeric_writable(name="Input1", default_value=10.0)
-    builder.add_numeric_writable(name="Input2", default_value=20.0)
-    builder.add_numeric_writable(name="Input3", default_value=30.0)
-    builder.add_numeric_writable(name="Input4", default_value=40.0)
-    builder.add_component(comp_type="kitControl:Add", name="Add")
-    builder.add_numeric_writable(name="Sum")
+    builder = BogFolderBuilder("BooleanLogicNumericSwitch", debug=True)
 
-    # 3. Register all links. This is CRITICAL for the layout engine.
-    builder.add_link("Input1", "out", "Add", "inA")
-    builder.add_link("Input2", "out", "Add", "inB")
-    builder.add_link("Input3", "out", "Add", "inC")
-    builder.add_link("Input4", "out", "Add", "inD")
-    builder.add_link("Add", "out", "Sum", "in16")
+    # 1. Define all TOP-LEVEL components first.
+    # These are the inputs and outputs the user will directly interact with.
+    # === Inputs ===
+    builder.add_numeric_writable("Input_A", default_value=100.0)
+    builder.add_numeric_writable("Input_B", default_value=40.0)
+    builder.add_boolean_writable("BooleanWritable", default_value=False)
 
-    # 4. Save the file. This triggers the layout calculation and file writing.
-    output_path = os.path.join(args.output_dir, "4_input_adder_auto.bog")
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    # === Output ===
+    builder.add_numeric_writable("Output")
 
 
-if __name__ == "__main__":
-    main()
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will place all the intermediate logic blocks (Add, Subtract, Equal, Switch)
+    # inside a single sub-folder to keep the main wiresheet clean.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("CalculationLogic")
+
+    # --- Logic Components ---
+    # These components are now created inside the "CalculationLogic" folder.
+    builder.add_component("kitControl:Add", "Add")
+    builder.add_component("kitControl:Subtract", "Subtract")
+    builder.add_component("kitControl:Equal", "Equal")
+    builder.add_numeric_switch("NumericSwitch")
+    # Note: Even this writable, used as a constant, is part of the logic,
+    # so it should also be created inside the sub-folder.
+    builder.add_numeric_writable("Const_True", default_value=1.0)
+
+    # STEP 2: End the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
 
 
-import sys
-import os
-import argparse
+    # 3. Register all links.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "CalculationLogic".
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Build a complex, multi-algorithm .bog file with the simple API."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    builder = BogFolderBuilder("TieredLogicTest")
-
-    input_names = []
-    for i in range(1, 12):
-        name = f"Input{i}"
-        builder.add_numeric_writable(name, default_value=i * 10.0)
-        input_names.append(name)
-
-    print("INPUT NAMES", input_names)
-
-    # Use single high-level API calls
-    builder.add_reduction_block("Average", "Avg_Final", input_names)
-    builder.add_reduction_block("Minimum", "Min_Final", input_names)
-    builder.add_reduction_block("Maximum", "Max_Final", input_names)
-
-    output_path = os.path.join(args.output_dir, "mod_avg_min_max.bog")
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"Successfully created {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-
-
-import sys
-import os
-import argparse
-
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
-
-
-def main():
-    """
-    This script tests the BogFolderBuilder with a more complex algorithm
-    that combines multiple math blocks to calculate:
-    Result = ((Input_A + Input_B) * Input_C) / Input_D
-    """
-    parser = argparse.ArgumentParser(
-        description="Build a complex math logic .bog file with automatic layout."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("ComplexMathEquation")
-
-    # 2. Register all components for the equation.
-    # The builder's layout engine will handle all positioning.
-
-    # --- Inputs ---
-    builder.add_numeric_writable(name="Input_A", default_value=20.0)
-    builder.add_numeric_writable(name="Input_B", default_value=10.0)
-    builder.add_numeric_writable(name="Input_C", default_value=2.0)
-    builder.add_numeric_writable(name="Input_D", default_value=3.0)
-
-    # --- Logic Blocks ---
-    builder.add_component(comp_type="kitControl:Add", name="Add_AB")
-    builder.add_component(comp_type="kitControl:Multiply", name="Multiply_ABC")
-    builder.add_component(comp_type="kitControl:Divide", name="Divide_ABCD")
-
-    # --- Output ---
-    builder.add_numeric_writable(name="Result")
-
-    # 3. Register all links to define the data flow.
-    # This is the most critical part for the automatic layout engine.
-
-    # First level of logic: (Input_A + Input_B)
-    builder.add_link("Input_A", "out", "Add_AB", "inA")
-    builder.add_link("Input_B", "out", "Add_AB", "inB")
-
-    # Second level of logic: (Result of Add) * Input_C
-    builder.add_link("Add_AB", "out", "Multiply_ABC", "inA")
-    builder.add_link("Input_C", "out", "Multiply_ABC", "inB")
-
-    # Third level of logic: (Result of Multiply) / Input_D
-    builder.add_link("Multiply_ABC", "out", "Divide_ABCD", "inA")
-    builder.add_link("Input_D", "out", "Divide_ABCD", "inB")
-
-    # Final output link
-    builder.add_link("Divide_ABCD", "out", "Result", "in16")
-
-    # 4. Save the file.
-    output_path = os.path.join(args.output_dir, "simple_math_logic_auto.bog")
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"Successfully created {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-
-
-import sys
-import os
-import argparse
-
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
-
-
-def main():
-    """
-    This script uses the BogFolderBuilder to create a wiresheet that
-    subtracts one number from another (Input_A - Input_B).
-    """
-    parser = argparse.ArgumentParser(
-        description="Build a subtraction logic .bog file with automatic layout."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("SubtractionLogic")
-
-    # 2. Register all components.
-    # The builder's layout engine will automatically place them.
-    builder.add_numeric_writable(name="Input_A", default_value=100.0)
-    builder.add_numeric_writable(name="Input_B", default_value=40.0)
-    builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
-    builder.add_numeric_writable(name="Difference")
-
-    # 3. Register all links. This is how the layout is determined.
+    # Wiring for math blocks (inside the sub-folder)
+    builder.add_link("Input_A", "out", "Add", "inA")
+    builder.add_link("Input_B", "out", "Add", "inB")
     builder.add_link("Input_A", "out", "Subtract", "inA")
     builder.add_link("Input_B", "out", "Subtract", "inB")
-    builder.add_link("Subtract", "out", "Difference", "in16")
 
-    # 4. Save the file. This triggers the layout calculation and file writing.
-    output_path = os.path.join(args.output_dir, "subtract_logic_auto.bog")
+    # Wiring for the comparison (inside the sub-folder)
+    builder.add_link("BooleanWritable", "out", "Equal", "inA")
+    builder.add_link("Const_True", "out", "Equal", "inB")
+
+    # Wiring for the final switch (inside the sub-folder)
+    builder.add_link("Equal", "out", "NumericSwitch", "inSwitch")
+    builder.add_link("Add", "out", "NumericSwitch", "inTrue")
+    builder.add_link("Subtract", "out", "NumericSwitch", "inFalse")
+
+    # Final Output link (from the sub-folder to the top-level output)
+    builder.add_link("NumericSwitch", "out", "Output", "in16")
+
+    # 4. Save file
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created {output_path}")
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 
 if __name__ == "__main__":
     main()
-
-
-
-import sys
-import os
-import argparse
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Zone Occupancy Setpoint Switching (Direct) .bog file."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    builder = BogFolderBuilder("Zone_Occ_Setpoint_Switch", debug=True)
-
-    # Inputs
-    builder.add_boolean_writable(
-        "Occ_Schedule", default_value=False
-    )  # Occupied (True) / Unoccupied (False)
-    builder.add_numeric_writable(
-        "Occ_Zone_Setpoint", default_value=72.0
-    )  # Occupied cooling temp (°F)
-    builder.add_numeric_writable(
-        "Unocc_Zone_Setpoint", default_value=78.0
-    )  # Unoccupied cooling temp (°F)
-
-    # Logic Components
-    builder.add_numeric_switch(
-        "Zone_Setpoint_Switch"
-    )  # Switch between occupied/unoccupied setpoints
-
-    # Output
-    builder.add_numeric_writable("Zone_Temp_SPt")  # Final Zone Setpoint
-
-    # Wiring:
-    # Pipe Occ_Schedule Boolean directly into NumericSwitch
-    builder.add_link("Occ_Schedule", "out", "Zone_Setpoint_Switch", "inSwitch")
-    builder.add_link("Occ_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inTrue")
-    builder.add_link("Unocc_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inFalse")
-
-    # Final output setpoint
-    builder.add_link("Zone_Setpoint_Switch", "out", "Zone_Temp_SPt", "in16")
-
-    # Save file
-    output_path = os.path.join(args.output_dir, "zone_occ_setpoint_switch.bog")
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"Successfully created {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-
 
 import sys
 import os
@@ -1077,21 +942,15 @@ import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
 
 
 def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     """
     Creates and links a GreaterThan and NumericSwitch block to find the maximum of two inputs.
-
-    Args:
-        builder (BogFolderBuilder): The BOG builder instance.
-        input_a_name (str): The name of the first numeric component.
-        input_b_name (str): The name of the second numeric component.
-        pair_id (str): A unique identifier for this comparison pair.
-
-    Returns:
-        str: The name of the NumericSwitch component which outputs the maximum value.
+    This function doesn't need to know about sub-folders; it will automatically
+    place components in whatever the builder's current "context" is.
     """
     gt_name = f"GT_{pair_id}"
     switch_name = f"Switch_{pair_id}"
@@ -1108,11 +967,9 @@ def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     builder.add_link(gt_name, "out", switch_name, "inSwitch")
 
     # Wire the original inputs to the true/false paths of the switch.
-    # If input_a > input_b, the GreaterThan output is true, so we select inTrue (input_a).
     builder.add_link(input_a_name, "out", switch_name, "inTrue")
     builder.add_link(input_b_name, "out", switch_name, "inFalse")
 
-    # The switch now outputs the greater of the two values.
     return switch_name
 
 
@@ -1123,28 +980,36 @@ def main():
     parser = argparse.ArgumentParser(
         description="Build a .bog file to find the max of 10 inputs using only GreaterThan and NumericSwitch blocks."
     )
-    # Updated argument to accept an output directory
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
     )
     args = parser.parse_args()
 
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
     # 1. Initialize the builder with a name for the logic folder
     builder = BogFolderBuilder("FindMaxValueWithSwitches")
 
-    # 2. Create 10 numeric writable inputs for the VAV boxes
+    # 2. Create TOP-LEVEL inputs and the final output point.
+    # These will remain visible on the main wiresheet.
     print("Adding 10 VAV box inputs...")
     inputs = [f"VAV_{i}" for i in range(1, 11)]
     for name in inputs:
-        # Set a default value based on the VAV number for easy testing
         builder.add_numeric_writable(name, default_value=float(name.split('_')[1]))
 
-    # 3. Create the final output point
     builder.add_numeric_writable("MaxValue")
 
-    # 4. Build the comparison tree algorithmically
-    # This loop creates a "tournament bracket" to find the max value.
-    # In each round (tier), it pairs up the winners from the last round.
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will place the entire dynamically-generated comparison tree
+    # inside a single sub-folder.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    builder.start_sub_folder("CalculationLogic")
+
+    # 3. Build the comparison tree algorithmically INSIDE the sub-folder.
+    # The while loop and the create_max_pair function will now create all
+    # their components inside the "CalculationLogic" folder.
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
     tier_num = 1
@@ -1152,18 +1017,15 @@ def main():
         print(f"  Processing Tier {tier_num} with {len(current_tier_outputs)} inputs...")
         next_tier_outputs = []
         
-        # Pair up components from the current tier
         for i in range(len(current_tier_outputs) // 2):
             input_a = current_tier_outputs[i*2]
             input_b = current_tier_outputs[i*2 + 1]
             pair_id = f"T{tier_num}_P{i}"
             
-            # Create a comparison block for the pair
+            # The builder automatically creates proxies for the inputs on the first pass
             winner = create_max_pair(builder, input_a, input_b, pair_id)
             next_tier_outputs.append(winner)
         
-        # If there's an odd number of components, the last one gets a "bye"
-        # and passes directly to the next tier.
         if len(current_tier_outputs) % 2 == 1:
             passthrough = current_tier_outputs[-1]
             next_tier_outputs.append(passthrough)
@@ -1172,19 +1034,23 @@ def main():
         current_tier_outputs = next_tier_outputs
         tier_num += 1
 
-    # 5. Link the final winner of the tournament to the output component
+    # This is the final component inside the sub-folder that holds the max value
     final_winner = current_tier_outputs[0]
+
+    # STEP 2: End the sub-folder "sandbox".
+    builder.end_sub_folder()
+
+
+    # 4. Link the final winner to the output component.
+    # The builder sees that 'final_winner' is inside the sub-folder and 'MaxValue'
+    # is outside, so it will automatically create a ProxyOut point.
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")
 
-    # 6. Define hardcoded filename and construct the full output path
-    bog_filename = "find_max_value.bog"
+    # 5. Save the file.
+    bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
-    
-    # Create the output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
-        
-    # Save the complete logic to the .bog file
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
@@ -1192,30 +1058,18 @@ def main():
 if __name__ == "__main__":
     main()
 
-
- *** N - 1 EXAMPLE that can be used in guideline 36 trim respond logic for rogue zone ***
-
- import sys
+import sys
 import os
 import argparse
 
 # Add the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder import BogFolderBuilder
+from src.bog_builder_new import BogFolderBuilder
 
 
 def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     """
     Creates a set of blocks to find the max and min of two inputs.
-
-    Args:
-        builder (BogFolderBuilder): The BOG builder instance.
-        input_a_name (str): The name of the first numeric component.
-        input_b_name (str): The name of the second numeric component.
-        node_id (str): A unique identifier for this comparison node.
-
-    Returns:
-        (str, str): A tuple containing the names of the (Max Output Component, Min Output Component).
     """
     gt_name = f"GT_{node_id}"
     max_switch_name = f"MaxSwitch_{node_id}"
@@ -1235,12 +1089,10 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     builder.add_link(gt_name, "out", min_switch_name, "inSwitch")
 
     # --- Max Switch Wiring ---
-    # If A > B, GT is true, so Max is A (inTrue)
     builder.add_link(input_a_name, "out", max_switch_name, "inTrue")
     builder.add_link(input_b_name, "out", max_switch_name, "inFalse")
 
     # --- Min Switch Wiring ---
-    # If A > B, GT is true, so Min is B (inFalse)
     builder.add_link(input_b_name, "out", min_switch_name, "inTrue")
     builder.add_link(input_a_name, "out", min_switch_name, "inFalse")
 
@@ -1249,23 +1101,11 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
 def create_combine_node(builder, max1_name, second1_name, max2_name, second2_name, node_id):
     """
     Creates blocks to find the top two values from two pairs of (max, second_max).
-
-    Args:
-        builder: The BOG builder instance.
-        max1_name (str): The max value from the first pair.
-        second1_name (str): The second value from the first pair.
-        max2_name (str): The max value from the second pair.
-        second2_name (str): The second value from the second pair.
-        node_id (str): A unique identifier for this combination node.
-
-    Returns:
-        (str, str): A tuple containing the names of the (Overall Max Component, Overall Second Max Component).
     """
     # 1. Find the overall max and the min of the two incoming maxes
     overall_max, min_of_maxes = create_comparison_node(builder, max1_name, max2_name, f"{node_id}_MaxCompare")
 
     # 2. Find the max of the remaining candidates for second place
-    # Candidate pool is: min_of_maxes, second1_name, second2_name
     intermediate_second, _ = create_comparison_node(builder, min_of_maxes, second1_name, f"{node_id}_Second_A")
     overall_second, _ = create_comparison_node(builder, intermediate_second, second2_name, f"{node_id}_Second_B")
 
@@ -1283,20 +1123,25 @@ def main():
         "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
     )
     args = parser.parse_args()
+    
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
     # 1. Initialize the builder
     builder = BogFolderBuilder("FindTopTwoOfSixDampers")
 
-    # 2. Create the 6 VAV damper position inputs
+    # 2. Create the TOP-LEVEL input and output points
     inputs = [f"VAV_Damper_{i}" for i in range(1, 7)]
     for i, name in enumerate(inputs):
         builder.add_numeric_writable(name, default_value=float(i * 10))
 
-    # 3. Create final output points
     builder.add_numeric_writable("HighestDamperPosition")
     builder.add_numeric_writable("SecondHighestDamperPosition")
 
-    # 4. Build the tournament tree
+    # --- FIX: Start a sub-folder to contain all the calculation logic ---
+    builder.start_sub_folder("CalculationLogic")
+    print("--- Entered CalculationLogic sub-folder ---")
+
+    # 3. Build the tournament tree INSIDE the sub-folder
     print("Building comparison logic tree for 6 inputs...")
 
     # Tier 1: Compare raw inputs to get (max, min) pairs for all 6 inputs
@@ -1304,6 +1149,7 @@ def main():
     for i in range(3): # 6 inputs = 3 pairs
         input_a = inputs[i*2]
         input_b = inputs[i*2 + 1]
+        # The add_link function will now automatically create proxies for these inputs
         max_comp, min_comp = create_comparison_node(builder, input_a, input_b, f"T1_P{i}")
         tier1_results.append((max_comp, min_comp))
     
@@ -1316,14 +1162,19 @@ def main():
     last_pair_max, last_pair_second = tier1_results[2]
     final_max, final_second = create_combine_node(builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0")
 
-    # 5. Link the final winner pair to the output components
+    # --- FIX: End the sub-folder context ---
+    builder.end_sub_folder()
+    print("--- Exited CalculationLogic sub-folder ---")
+
+    # 4. Link the final winner pair to the output components
+    # The builder will automatically create output proxies from the sub-folder
     print(f"\nFinal Max component is '{final_max}'.")
     print(f"Final Second Max component is '{final_second}'.")
     builder.add_link(final_max, "out", "HighestDamperPosition", "in16")
     builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
 
-    # 6. Save the complete logic to the .bog file
-    bog_filename = "find_top_two_of_6.bog"
+    # 5. Save the complete logic to the .bog file
+    bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
@@ -1332,3 +1183,478 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a 4-input adder .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("AutoLayoutFourInputAdder")
+
+    # 2. Register all TOP-LEVEL components.
+    # These are the clean inputs and the final output the user will interact with.
+    # --- Inputs ---
+    builder.add_numeric_writable(name="Input1", default_value=10.0)
+    builder.add_numeric_writable(name="Input2", default_value=20.0)
+    builder.add_numeric_writable(name="Input3", default_value=30.0)
+    builder.add_numeric_writable(name="Input4", default_value=40.0)
+    
+    # --- Output ---
+    builder.add_numeric_writable(name="Sum")
+
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # Even for a single logic block, we can use a sub-folder to keep the
+    # top-level wiresheet as clean as possible.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("CalculationLogic")
+
+    # --- Logic Block ---
+    # This 'Add' component is now created inside the "CalculationLogic" folder.
+    builder.add_component(comp_type="kitControl:Add", name="Add")
+
+    # STEP 2: End the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
+    # 3. Register all links.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "CalculationLogic".
+    builder.add_link("Input1", "out", "Add", "inA")
+    builder.add_link("Input2", "out", "Add", "inB")
+    builder.add_link("Input3", "out", "Add", "inC")
+    builder.add_link("Input4", "out", "Add", "inD")
+    builder.add_link("Add", "out", "Sum", "in16")
+
+    # 4. Save the file. This triggers the layout calculation and file writing.
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+if __name__ == "__main__":
+    main()
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a complex, multi-algorithm .bog file with a clean, multi-folder layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("MultiAlgorithmTest")
+
+    # 2. Define TOP-LEVEL input and output blocks.
+    # These will be the only components visible on the main wiresheet,
+    # alongside the folders containing the logic.
+    # --- Inputs ---
+    builder.add_numeric_writable(name="Input1", default_value=10.0)
+    builder.add_numeric_writable(name="Input2", default_value=20.0)
+    builder.add_numeric_writable(name="Input3", default_value=30.0)
+    builder.add_numeric_writable(name="Input4", default_value=40.0)
+    builder.add_numeric_writable(name="Input5", default_value=50.0)
+    builder.add_numeric_writable(name="Input6", default_value=60.0)
+    builder.add_numeric_writable(name="Input7", default_value=70.0)
+    builder.add_numeric_writable(name="Input8", default_value=80.0)
+    builder.add_numeric_writable(name="Input9", default_value=90.0)
+    builder.add_numeric_writable(name="Input10", default_value=100.0)
+    builder.add_numeric_writable(name="Input11", default_value=110.0)
+
+    # --- Outputs ---
+    builder.add_numeric_writable(name="Min_Final")
+    builder.add_numeric_writable(name="Max_Final")
+    builder.add_numeric_writable(name="Avg_Final")
+
+
+    # TUTORIAL: USING MULTIPLE SUB-FOLDERS
+    # Since this script performs three separate calculations, we can give each one
+    # its own sub-folder for maximum organization. This keeps the logic for
+    # Average, Minimum, and Maximum completely separate and easy to debug.
+
+    # --- Average Calculation Sub-Folder ---
+    # To see the Average logic flat, comment out the next two lines.
+    builder.start_sub_folder("AverageLogic")
+    builder.add_component(comp_type="kitControl:Average", name="Avg1")
+    builder.add_component(comp_type="kitControl:Average", name="Avg2")
+    builder.add_component(comp_type="kitControl:Average", name="Avg3")
+    builder.add_component(comp_type="kitControl:Average", name="Avg4")
+    builder.end_sub_folder()
+
+    # --- Minimum Calculation Sub-Folder ---
+    # To see the Minimum logic flat, comment out the next two lines.
+    builder.start_sub_folder("MinimumLogic")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min1")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min2")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min3")
+    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
+    builder.end_sub_folder()
+
+    # --- Maximum Calculation Sub-Folder ---
+    # To see the Maximum logic flat, comment out the next two lines.
+    builder.start_sub_folder("MaximumLogic")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max1")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max2")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max3")
+    builder.add_component(comp_type="kitControl:Maximum", name="Max4")
+    builder.end_sub_folder()
+
+
+    # 3. Register all links.
+    # No changes are needed here. The builder will create proxies automatically
+    # as these links cross in and out of the three different sub-folders.
+
+    # --- Links for Average Logic ---
+    builder.add_link("Input1", "out", "Avg1", "inA")
+    builder.add_link("Input2", "out", "Avg1", "inB")
+    builder.add_link("Input3", "out", "Avg1", "inC")
+    builder.add_link("Input4", "out", "Avg1", "inD")
+    builder.add_link("Input5", "out", "Avg2", "inA")
+    builder.add_link("Input6", "out", "Avg2", "inB")
+    builder.add_link("Input7", "out", "Avg2", "inC")
+    builder.add_link("Input8", "out", "Avg2", "inD")
+    builder.add_link("Input9", "out", "Avg3", "inA")
+    builder.add_link("Input10", "out", "Avg3", "inB")
+    builder.add_link("Input11", "out", "Avg3", "inC")
+    builder.add_link("Avg1", "out", "Avg4", "inA")
+    builder.add_link("Avg2", "out", "Avg4", "inB")
+    builder.add_link("Avg3", "out", "Avg4", "inC")
+    builder.add_link("Avg4", "out", "Avg_Final", "in16")
+
+    # --- Links for Minimum Logic ---
+    builder.add_link("Input1", "out", "Min1", "inA")
+    builder.add_link("Input2", "out", "Min1", "inB")
+    builder.add_link("Input3", "out", "Min1", "inC")
+    builder.add_link("Input4", "out", "Min1", "inD")
+    builder.add_link("Input5", "out", "Min2", "inA")
+    builder.add_link("Input6", "out", "Min2", "inB")
+    builder.add_link("Input7", "out", "Min2", "inC")
+    builder.add_link("Input8", "out", "Min2", "inD")
+    builder.add_link("Input9", "out", "Min3", "inA")
+    builder.add_link("Input10", "out", "Min3", "inB")
+    builder.add_link("Input11", "out", "Min3", "inC")
+    builder.add_link("Min1", "out", "Min4", "inA")
+    builder.add_link("Min2", "out", "Min4", "inB")
+    builder.add_link("Min3", "out", "Min4", "inC")
+    builder.add_link("Min4", "out", "Min_Final", "in16")
+
+    # --- Links for Maximum Logic ---
+    builder.add_link("Input1", "out", "Max1", "inA")
+    builder.add_link("Input2", "out", "Max1", "inB")
+    builder.add_link("Input3", "out", "Max1", "inC")
+    builder.add_link("Input4", "out", "Max1", "inD")
+    builder.add_link("Input5", "out", "Max2", "inA")
+    builder.add_link("Input6", "out", "Max2", "inB")
+    builder.add_link("Input7", "out", "Max2", "inC")
+    builder.add_link("Input8", "out", "Max2", "inD")
+    builder.add_link("Input9", "out", "Max3", "inA")
+    builder.add_link("Input10", "out", "Max3", "inB")
+    builder.add_link("Input11", "out", "Max3", "inC")
+    builder.add_link("Max1", "out", "Max4", "inA")
+    builder.add_link("Max2", "out", "Max4", "inB")
+    builder.add_link("Max3", "out", "Max4", "inC")
+    builder.add_link("Max4", "out", "Max_Final", "in16")
+
+    # 4. Save the file.
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
+
+
+def main():
+    """
+    This script tests the BogFolderBuilder with a more complex algorithm
+    that combines multiple math blocks to calculate:
+    Result = ((Input_A + Input_B) * Input_C) / Input_D
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a complex math logic .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("ComplexMathEquation")
+
+    # 2. Register all TOP-LEVEL components.
+    # These are the clean inputs and outputs the user will interact with.
+    # They are created before we enter the sub-folder "sandbox".
+
+    # --- Inputs ---
+    builder.add_numeric_writable(name="Input_A", default_value=20.0)
+    builder.add_numeric_writable(name="Input_B", default_value=10.0)
+    builder.add_numeric_writable(name="Input_C", default_value=2.0)
+    builder.add_numeric_writable(name="Input_D", default_value=3.0)
+
+    # --- Output ---
+    builder.add_numeric_writable(name="Result")
+
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # The concept is simple: we create a "sandbox" for our complex logic.
+    # Anything created inside this sandbox will be placed in a sub-folder.
+
+    # STEP 1: Start the sub-folder.
+    # We give it a descriptive name. This name will appear on the folder
+    # icon in the top-level wiresheet.
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("CalculationLogic")
+
+    # --- Logic Blocks ---
+    # Because the following add_component calls are inside the "sandbox",
+    # the builder will automatically place them inside the "CalculationLogic" folder.
+    builder.add_component(comp_type="kitControl:Add", name="Add_AB")
+    builder.add_component(comp_type="kitControl:Multiply", name="Multiply_ABC")
+    builder.add_component(comp_type="kitControl:Divide", name="Divide_ABCD")
+
+    # STEP 2: End the sub-folder.
+    # This closes the "sandbox". Any components added after this line will
+    # be back at the top level.
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
+    # 3. Register all links to define the data flow.
+    # You DO NOT need to change this section at all. The BogFolderBuilder is
+    # smart enough to see that a link like "Input_A" -> "Add_AB" is crossing
+    # a folder boundary. It will automatically create the necessary ProxyIn
+    # and ProxyOut points to make the connection work.
+
+    # First level of logic: (Input_A + Input_B)
+    builder.add_link("Input_A", "out", "Add_AB", "inA")
+    builder.add_link("Input_B", "out", "Add_AB", "inB")
+
+    # Second level of logic: (Result of Add) * Input_C
+    builder.add_link("Add_AB", "out", "Multiply_ABC", "inA")
+    builder.add_link("Input_C", "out", "Multiply_ABC", "inB")
+
+    # Third level of logic: (Result of Multiply) / Input_D
+    builder.add_link("Multiply_ABC", "out", "Divide_ABCD", "inA")
+    builder.add_link("Input_D", "out", "Divide_ABCD", "inB")
+
+    # Final output link
+    builder.add_link("Divide_ABCD", "out", "Result", "in16")
+
+    # 4. Save the file.
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+import sys
+import os
+import argparse
+
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
+
+
+def main():
+    """
+    This script uses the BogFolderBuilder to create a wiresheet that
+    subtracts one number from another (Input_A - Input_B).
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a subtraction logic .bog file with automatic layout."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    # 1. Initialize the builder
+    builder = BogFolderBuilder("SubtractionLogic")
+
+    # 2. Register all TOP-LEVEL components.
+    # These are the clean inputs and the final output the user will interact with.
+    # --- Inputs ---
+    builder.add_numeric_writable(name="Input_A", default_value=100.0)
+    builder.add_numeric_writable(name="Input_B", default_value=40.0)
+    
+    # --- Output ---
+    builder.add_numeric_writable(name="Difference")
+
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # Even for a single logic block, we can use a sub-folder to keep the
+    # top-level wiresheet as clean as possible.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("CalculationLogic")
+
+    # --- Logic Block ---
+    # This 'Subtract' component is now created inside the "CalculationLogic" folder.
+    builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
+
+    # STEP 2: End the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
+    # 3. Register all links. This is how the layout is determined.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "CalculationLogic".
+    builder.add_link("Input_A", "out", "Subtract", "inA")
+    builder.add_link("Input_B", "out", "Subtract", "inB")
+    builder.add_link("Subtract", "out", "Difference", "in16")
+
+    # 4. Save the file. This triggers the layout calculation and file writing.
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+import sys
+import os
+import argparse
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make sure you are importing the new builder with sub-folder capabilities
+from src.bog_builder_new import BogFolderBuilder
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Zone Occupancy Setpoint Switching (Direct) .bog file."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    builder = BogFolderBuilder("Zone_Occ_Setpoint_Switch", debug=True)
+
+    # 1. Define all TOP-LEVEL components first.
+    # These are the inputs and outputs the user will directly interact with.
+    # --- Inputs ---
+    builder.add_boolean_writable(
+        "Occ_Schedule", default_value=False
+    )  # Occupied (True) / Unoccupied (False)
+    builder.add_numeric_writable(
+        "Occ_Zone_Setpoint", default_value=72.0
+    )  # Occupied cooling temp (°F)
+    builder.add_numeric_writable(
+        "Unocc_Zone_Setpoint", default_value=78.0
+    )  # Unoccupied cooling temp (°F)
+
+    # --- Output ---
+    builder.add_numeric_writable("Zone_Temp_SPt")  # Final Zone Setpoint
+
+
+    # TUTORIAL: HOW TO USE SUB-FOLDERS
+    # We will place the NumericSwitch block inside a sub-folder to keep the
+    # main wiresheet clean and focused on the inputs and final output.
+
+    # STEP 1: Start the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.start_sub_folder("SetpointLogic")
+
+    # --- Logic Component ---
+    # This NumericSwitch is now created inside the "SetpointLogic" folder.
+    builder.add_numeric_switch(
+        "Zone_Setpoint_Switch"
+    )  # Switch between occupied/unoccupied setpoints
+
+    # STEP 2: End the sub-folder "sandbox".
+    # To see the logic flat for debugging, you can simply comment out this line.
+    builder.end_sub_folder()
+
+
+    # 3. Register all links.
+    # No changes are needed here. The builder will automatically create proxies
+    # for all links that cross the boundary into or out of "SetpointLogic".
+
+    # Pipe inputs from the top level into the switch inside the sub-folder
+    builder.add_link("Occ_Schedule", "out", "Zone_Setpoint_Switch", "inSwitch")
+    builder.add_link("Occ_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inTrue")
+    builder.add_link("Unocc_Zone_Setpoint", "out", "Zone_Setpoint_Switch", "inFalse")
+
+    # Pipe the result from the switch inside the sub-folder to the top-level output
+    builder.add_link("Zone_Setpoint_Switch", "out", "Zone_Temp_SPt", "in16")
+
+    # 4. Save file
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
