@@ -324,7 +324,7 @@ Each one replicates real-world HVAC control logic as seen in actual JACE backups
 
 ---
 
-### ✅ Math and Logic Tests:
+### ✅ Math and Logic Tests See [Simple Logic Examples](https://github.com/bbartling/pybog/tree/develop/examples/simple_logic):
 1. ✅ **four_in_add_logic.py**  
    Simple 4-input adder (`Input1 + Input2 + Input3 + Input4`).
 
@@ -356,16 +356,14 @@ Each one replicates real-world HVAC control logic as seen in actual JACE backups
     Finds the **highest** and **second-highest** values from 6 inputs.
 
 
-
 ---
 
-### 🧠 Combined Algorithm Tests:
+### 🧠 Complex Algorithm Tests:
 TODO
 
 ---
 
-### 🧩 Advanced Data Type & Optimization Tests (21–25):
-Exploritory processes to see if AI can create advanced wire sheet algorithms.
+### 🧩 Advanced Supervisory Level Tests:
 
 TODO
 
