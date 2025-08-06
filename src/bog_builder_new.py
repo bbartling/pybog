@@ -317,10 +317,17 @@ class BogFolderBuilder:
     # Helper methods from original file
     def add_numeric_writable(self, name, default_value=0.0):
         self.add_component("control:NumericWritable", name, properties={"defaultValue": default_value}, actions={"emergencyOverride": "h", "emergencyAuto": "h"})
+
     def add_numeric_switch(self, name):
         self.add_component("kitControl:NumericSwitch", name)
+
+    def add_numeric_select(self, name):
+        """Adds a NumericSelect component with default 10 inputs (A-J)."""
+        self.add_component("kitControl:NumericSelect", name, properties={"numberValues": "10"})
+
     def add_boolean_writable(self, name, default_value=False):
         self.add_component("control:BooleanWritable", name, properties={"fallback": {"value": str(default_value).lower()}}, actions={"emergencyActive": "h", "emergencyInactive": "h", "emergencyAuto": "h"})
+        
     def add_reduction_block(self, block_type, final_output_name, input_names):
         assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"
         MAX_INPUTS = 4
