@@ -5,12 +5,15 @@ import io
 import os
 import re
 import json
+import argparse
 
+# > python src\analyzer.py "C:\Users\ben\Niagara4.11\JENEsys\G36_VAV_Pressure_Req.bog" -o "C:\Users\ben\Niagara4.11\JENEsys\G36_VAV_Pressure_Req_analysis.json"
 
 class Analyzer:
     """
     A universal analyzer for Niagara .bog and .dist files. It extracts
     the core XML data and generates a structured JSON analysis.
+    
     """
 
     def __init__(self, file_path, debug=False):
@@ -162,3 +165,38 @@ class Analyzer:
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(analysis_data, f, indent=2)
         print(f"Station analysis saved to {output_file}")
+
+
+# --- NEW MAIN EXECUTION BLOCK ---
+# This code runs only when you execute the script directly from the command line.
+if __name__ == "__main__":
+    # Set up the parser to read command-line arguments
+    parser = argparse.ArgumentParser(description="Analyze Niagara .bog or .dist files.")
+    parser.add_argument("file_path", help="Path to the .bog or .dist file.")
+    parser.add_argument("-o", "--output_file", help="Path to save the JSON analysis file.")
+    parser.add_argument("-l", "--list_contents", action="store_true", help="List contents of the archive and exit.")
+    
+    args = parser.parse_args()
+
+    try:
+        # Create an instance of the Analyzer class
+        analyzer = Analyzer(args.file_path)
+
+        # If the -l flag is used, list contents and exit
+        if args.list_contents:
+            print("Archive contents:")
+            for name in analyzer.list_archive_contents():
+                print(f"- {name}")
+        else:
+            # Generate the analysis data
+            analysis_data = analyzer.generate_analysis_data()
+            if analysis_data:
+                # If an output file is specified, save it
+                if args.output_file:
+                    analyzer.save_analysis_to_file(analysis_data, args.output_file)
+                # Otherwise, print the JSON to the console
+                else:
+                    print(json.dumps(analysis_data, indent=2))
+    
+    except (FileNotFoundError, ValueError, ET.ParseError) as e:
+        print(f"Error: {e}")

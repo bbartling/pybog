@@ -53,73 +53,85 @@ def find_max_and_losers(builder, inputs, rank_label):
             input_a = current_inputs[i]
             input_b = current_inputs[i + 1]
             
-            # Create comparison and get both the max (winner) and min (loser)
             max_node, min_node = create_comparison_node(builder, input_a, input_b, f"{rank_label}_R{round_num}_P{i//2}")
             
             next_round_winners.append(max_node)
-            losers.append(min_node)  # Collect the loser of the pair
+            losers.append(min_node)
         
-        # Handle an odd number of inputs in the current round
         if len(current_inputs) % 2 == 1:
-            # The last element passes through to the next round of winners
             next_round_winners.append(current_inputs[-1])
             
         current_inputs = next_round_winners
         round_num += 1
     
-    # The final winner is the only component left
     max_winner = current_inputs[0]
     
     return max_winner, losers
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Find top 5 highest values from 15 damper positions.")
+    parser = argparse.ArgumentParser(description="Find top 5 highest values from 15 damper positions and add a selection filter.")
     parser.add_argument("-o", "--output_dir", default="examples", help="Output directory for the .bog file.")
     args = parser.parse_args()
 
     script_filename = os.path.basename(__file__).replace(".py", "")
     builder = BogFolderBuilder("FindTop5Of15Dampers")
 
-    # Inputs: 15 dampers
+    # --- TOP-LEVEL INPUTS ---
+    # These are the main controls the user will see.
     inputs = [f"VAV_Damper_{i}" for i in range(1, 16)]
     for i, name in enumerate(inputs):
         builder.add_numeric_writable(name, default_value=float((i + 1) * 10))
 
-    # Outputs: Top 5 winners
+    # G36 trim and respond Ignore Variable
+    builder.add_numeric_writable("I_ignore_var", default_value=1.0)
+
+    # --- TOP-LEVEL OUTPUTS ---
+    # These are the main results the user will see.
     for rank in range(1, 6):
         builder.add_numeric_writable(f"Rank_{rank}_Highest")
+    builder.add_numeric_writable("Filtered_Max")
 
-    # Start with the full list of initial inputs
     remaining_candidates = inputs[:]
+    top_5_winners = [] 
 
-    # Build top 5 ranking logic
     for rank in range(1, 6):
-        # Stop if there are no more candidates to rank
         if not remaining_candidates:
             break
             
         builder.start_sub_folder(f"Rank_{rank}")
         
-        # Find the winner and the list of losers from the current candidates
         winner, losers = find_max_and_losers(builder, remaining_candidates, f"Rank{rank}")
         
         builder.end_sub_folder()
         
-        # Link the winner of this tournament to the corresponding rank output
         if winner:
+            top_5_winners.append(winner)
             builder.add_link(winner, "out", f"Rank_{rank}_Highest", "in16")
         
-        # The inputs for the next tournament are the losers from this one
         remaining_candidates = losers
 
-    # Save file
+    builder.start_sub_folder("SelectionLogic")
+    builder.add_numeric_select("Ignore")
+    builder.end_sub_folder()
+
+    if top_5_winners:
+        print("\nWiring the top 5 winners into the 'Ignore' block inside the 'SelectionLogic' folder...")
+        for i, winner_name in enumerate(top_5_winners):
+            target_slot = f"in{chr(65 + i)}"
+            builder.add_link(winner_name, "out", "Ignore", target_slot)
+    
+        builder.add_link("I_ignore_var", "out", "Ignore", "select")
+        builder.add_link("Ignore", "out", "Filtered_Max", "in16")
+
+
+    # --- Save file ---
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
-
+    
 
 if __name__ == "__main__":
     main()

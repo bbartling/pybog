@@ -31,6 +31,8 @@ def main():
     # These are the clean inputs and outputs the user will interact with.
     # They are created before we enter the sub-folder "sandbox".
 
+    builder.start_sub_folder("CalculationLogic")
+    
     # --- Inputs ---
     builder.add_numeric_writable(name="Input_A", default_value=20.0)
     builder.add_numeric_writable(name="Input_B", default_value=10.0)
@@ -49,7 +51,7 @@ def main():
     # We give it a descriptive name. This name will appear on the folder
     # icon in the top-level wiresheet.
     # To see the logic flat for debugging, you can simply comment out this line.
-    builder.start_sub_folder("CalculationLogic")
+
 
     # --- Logic Blocks ---
     # Because the following add_component calls are inside the "sandbox",

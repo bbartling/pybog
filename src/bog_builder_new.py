@@ -77,41 +77,40 @@ class BogFolderBuilder:
         if target_comp_name not in self._components:
             raise ValueError(f"Target component '{target_comp_name}' not found.")
 
-        source_folder = self._component_to_folder[source_comp_name]
-        target_folder = self._component_to_folder[target_comp_name]
-
-        if source_folder != target_folder:
-            # Case 1: Going INTO a sub-folder (Target is deeper)
-            if len(target_folder) > len(source_folder):
-                proxy_name = f"ProxyIn_{target_comp_name}_{target_slot}"
-                if proxy_name not in self._components:
-                    original_folder_ctx = self._current_folder_path
-                    self._current_folder_path = target_folder # Create proxy in target folder
-                    self.add_numeric_writable(proxy_name)
-                    self._current_folder_path = original_folder_ctx
-                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
-                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
-            # Case 2: Coming OUT OF a sub-folder (Source is deeper)
-            else:
-                proxy_name = f"ProxyOut_{source_comp_name}_{source_slot}"
-                if proxy_name not in self._components:
-                    original_folder_ctx = self._current_folder_path
-                    self._current_folder_path = source_folder # Create proxy in source folder
-                    self.add_numeric_writable(proxy_name)
-                    self._current_folder_path = original_folder_ctx
-                self._add_direct_link(source_comp_name, source_slot, proxy_name, "in16")
-                self._add_direct_link(proxy_name, "out", target_comp_name, target_slot)
-        else:
-            # This is a direct link within the same folder.
-            self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
+        self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
 
     def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """Internal method to add a link to the global registry."""
+        """
+        (Revised) Internal method to add a link to the global registry, now handling
+        multiple types of conversion links.
+        """
         source_type = self._components[source_comp_name]["type"]
+        target_type = self._components[target_comp_name]["type"]
+        
+        # Set the defaults for a standard link
         link_type = "b:Link"
+        converter_type = None
+
+        # PRESERVED LOGIC: Check for the original Boolean-to-Numeric conversion case.
         if "Boolean" in source_type and target_slot.startswith("in"):
             link_type = "b:ConversionLink"
-        self._links.append({"source_name": source_comp_name, "source_slot": source_slot, "target_name": target_comp_name, "target_slot": target_slot, "link_type": link_type})
+            converter_type = "conv:StatusBooleanToStatusNumeric"
+
+        # NEW LOGIC: Check for the NumericSelect 'select' slot case you found.
+        # This uses 'elif' to ensure it's checked only if the first case is false.
+        elif target_type == "kitControl:NumericSelect" and target_slot == "select":
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusNumericToStatusEnum"
+
+        # Append all the necessary info for the XML generation stage.
+        self._links.append({
+            "source_name": source_comp_name, 
+            "source_slot": source_slot, 
+            "target_name": target_comp_name, 
+            "target_slot": target_slot, 
+            "link_type": link_type,
+            "converter_type": converter_type
+        })
 
     def save(self, file_path):
         """Constructs the XML and saves it to a .bog file."""
@@ -151,7 +150,7 @@ class BogFolderBuilder:
             sub_folders_in_this_view = self._sub_folders.get(folder_path_tuple, [])
             comp_coords = self._position_top_level_interface(components_in_folder, sub_folders_in_this_view)
 
-            # 🔧 Flatten Y only for sub-folder icons at top level
+            # Flatten Y only for sub-folder icons at top level
             for sf in sub_folders_in_this_view:
                 if sf in comp_coords:
                     old_x, old_y = comp_coords[sf]
@@ -295,7 +294,7 @@ class BogFolderBuilder:
                 ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
 
     def _add_link_xml_tags(self, folder_element, links):
-        """Adds the <p> tags for links to the XML tree."""
+        """(Revised) Adds the <p> tags for links to the XML tree."""
         link_counters = defaultdict(int)
         for link in links:
             target_handle = self._handle_map.get(link["target_name"])
@@ -311,8 +310,12 @@ class BogFolderBuilder:
             ET.SubElement(link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]})
             ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"})
             ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]})
-            if link["link_type"] == "b:ConversionLink":
-                ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": "conv:StatusBooleanToStatusNumeric"})
+
+            # REVISED LOGIC IS HERE
+            # This is no longer hardcoded. It checks if a converter is needed
+            # and uses the specific type that was stored with the link.
+            if link.get("converter_type"):
+                ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": link["converter_type"]})
 
     # Helper methods from original file
     def add_numeric_writable(self, name, default_value=0.0):

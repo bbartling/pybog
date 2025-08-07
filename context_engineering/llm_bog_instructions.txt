@@ -7,6 +7,8 @@ Put together an algorithm with the Niagara API based on the Python API to make a
 
 To maintain a consistent and simple style, ensure all generated Python scripts for creating .bog files directly append to the system path for imports (e.g., sys.path.append(...)) without using try/except error handling, accept an output directory with an -o command-line argument, and define the final .bog filename as a hardcoded string within the script.
 
+The Niagara framework has strict rules for component names, so we learned that names cannot begin with a number, requiring us to change names like "50percent" to "Calc_50_percent". We also discovered that time-based properties for components like the BooleanDelay block must be specified as a string of milliseconds. This meant we had to convert intuitive values like "1m" into the required format, which is "60000". Following these naming and data format conventions is essential for creating a valid .bog file.
+
 Niagara4 kitcontrol_components:
   - description: "A reference list of available components from the kitControl palette."
   - alarm:
@@ -132,6 +134,37 @@ Niagara4 kitcontrol_components:
     - Random
     - SineWave
     - StatusDemux
+
+TODO make a blocks.yaml
+Add:
+  type: "kitControl:Add"
+  category: "math"
+  inputs:
+    - "inA"
+    - "inB"
+    - "inC"
+    - "inD"
+  outputs:
+    - "out"
+
+NumericSwitch:
+  type: "kitControl:NumericSwitch"
+  category: "util"
+  inputs:
+    - "inSwitch"
+    - "inTrue"
+    - "inFalse"
+  outputs:
+    - "out"
+
+GreaterThan:
+  type: "kitControl:GreaterThan"
+  category: "logic"
+  inputs:
+    - "inA"
+    - "inB"
+  outputs:
+    - "out"
 
 
 # src/bog_builder.py
