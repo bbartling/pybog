@@ -46,8 +46,11 @@ def main():
 
     # --- Sub-Folder for Percentage Calculations ---
     builder.start_sub_folder("PercentageCalculations")
-    builder.add_component("kitControl:Multiply", "Calc_50_percent", properties={"inB": 0.50})
-    builder.add_component("kitControl:Multiply", "Calc_70_percent", properties={"inB": 0.70})
+    builder.add_component("kitControl:Multiply", "Calc_50_percent")
+    builder.add_component("kitControl:Multiply", "Calc_70_percent")
+    # MODIFIED: Create explicit NumericConst blocks for the constant values.
+    builder.add_component("kitControl:NumericConst", "Const_0_5", properties={"out": 0.5})
+    builder.add_component("kitControl:NumericConst", "Const_0_7", properties={"out": 0.7})
     builder.end_sub_folder()
 
     # --- Sub-Folder for 3 Requests Logic ---
@@ -55,7 +58,6 @@ def main():
     builder.add_component("kitControl:LessThan", "LessThan_Flow_50pct")
     builder.add_component("kitControl:GreaterThan", "GreaterThan_Damper_95")
     builder.add_component("kitControl:And", "Generate3requests")
-    # FIXED: Changed onDelay to milliseconds. 1m = 60000ms
     builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay1", properties={"onDelay": "60000"})
     builder.add_numeric_switch("NumericSwitch_3_Req")
     builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
@@ -64,9 +66,7 @@ def main():
     # --- Sub-Folder for 2 Requests Logic ---
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_component("kitControl:LessThan", "LessThan_Flow_70pct")
-    # Note: We will link to the GreaterThan block in the other folder
     builder.add_component("kitControl:And", "Generate2requests")
-    # FIXED: Changed onDelay to milliseconds. 1m = 60000ms
     builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay2", properties={"onDelay": "60000"})
     builder.add_numeric_switch("NumericSwitch_2_Req")
     builder.add_component("kitControl:NumericConst", "Const_2", properties={"out": 2.0})
@@ -74,8 +74,6 @@ def main():
 
     # --- Sub-Folder for 1 Request Logic ---
     builder.start_sub_folder("Generate1RequestLogic")
-    # Note: We will link to the GreaterThan block again
-    # FIXED: Changed onDelay to milliseconds. 1m = 60000ms
     builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"})
     builder.add_numeric_switch("NumericSwitch_1_Req")
     builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
@@ -92,7 +90,10 @@ def main():
 
     # --- Wire Percentage Calculations ---
     builder.add_link("VavFlowSpt", "out", "Calc_50_percent", "inA")
+    # MODIFIED: Link the new NumericConst to the Multiply block's input.
+    builder.add_link("Const_0_5", "out", "Calc_50_percent", "inB")
     builder.add_link("VavFlowSpt", "out", "Calc_70_percent", "inA")
+    builder.add_link("Const_0_7", "out", "Calc_70_percent", "inB")
 
     # --- Wire Logic for 3 Requests ---
     builder.add_link("VavFlow", "out", "LessThan_Flow_50pct", "inA")

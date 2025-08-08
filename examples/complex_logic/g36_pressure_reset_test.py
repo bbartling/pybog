@@ -9,15 +9,7 @@ from src.bog_builder_new import BogFolderBuilder
 
 def main():
     """
-    This script builds a simple test case to demonstrate time-delayed logic
-    and a setpoint reset, which are core concepts for Guideline 36
-    "Trim and Respond" sequences.
-
-    Logic:
-    1. Compares a Zone Temperature to a Setpoint.
-    2. If the temperature is too high, a 10-second timer starts.
-    3. If the condition remains true for the full 10 seconds, a 'Reset'
-       block is triggered to adjust a Supply Air Temperature (SAT) Setpoint.
+    Program for a VAV box only to count requests for pressure.
     """
     parser = argparse.ArgumentParser(
         description="Build a .bog file to test time-delayed reset logic."

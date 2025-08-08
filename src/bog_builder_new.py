@@ -79,38 +79,6 @@ class BogFolderBuilder:
 
         self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
 
-    def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """
-        (Revised) Internal method to add a link to the global registry, now handling
-        multiple types of conversion links.
-        """
-        source_type = self._components[source_comp_name]["type"]
-        target_type = self._components[target_comp_name]["type"]
-        
-        # Set the defaults for a standard link
-        link_type = "b:Link"
-        converter_type = None
-
-        # PRESERVED LOGIC: Check for the original Boolean-to-Numeric conversion case.
-        if "Boolean" in source_type and target_slot.startswith("in"):
-            link_type = "b:ConversionLink"
-            converter_type = "conv:StatusBooleanToStatusNumeric"
-
-        # NEW LOGIC: Check for the NumericSelect 'select' slot case you found.
-        # This uses 'elif' to ensure it's checked only if the first case is false.
-        elif target_type == "kitControl:NumericSelect" and target_slot == "select":
-            link_type = "b:ConversionLink"
-            converter_type = "conv:StatusNumericToStatusEnum"
-
-        # Append all the necessary info for the XML generation stage.
-        self._links.append({
-            "source_name": source_comp_name, 
-            "source_slot": source_slot, 
-            "target_name": target_comp_name, 
-            "target_slot": target_slot, 
-            "link_type": link_type,
-            "converter_type": converter_type
-        })
 
     def save(self, file_path):
         """Constructs the XML and saves it to a .bog file."""
@@ -264,6 +232,39 @@ class BogFolderBuilder:
                 levels.append(current_level)
         return levels
 
+
+    def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
+        """
+        (Revised) Internal method to add a link to the global registry, now handling
+        multiple types of conversion links correctly.
+        """
+        source_type = self._components[source_comp_name]["type"]
+        target_type = self._components[target_comp_name]["type"]
+        
+        # Set the defaults for a standard link
+        link_type = "b:Link"
+        converter_type = None
+
+        # This logic now correctly ignores the 'inSwitch' slot, which does not need conversion.
+        if "Boolean" in source_type and target_slot.startswith("in") and target_slot != "inSwitch":
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusBooleanToStatusNumeric"
+
+        # This logic for the NumericSelect remains correct.
+        elif target_type == "kitControl:NumericSelect" and target_slot == "select":
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusNumericToStatusEnum"
+
+        # Append all the necessary info for the XML generation stage.
+        self._links.append({
+            "source_name": source_comp_name, 
+            "source_slot": source_slot, 
+            "target_name": target_comp_name, 
+            "target_slot": target_slot, 
+            "link_type": link_type,
+            "converter_type": converter_type
+        })
+
     def _add_component_xml_tags(self, folder_element, components, coords):
         """Adds the <p> tags for components to the XML tree."""
         for name, data in components.items():
@@ -285,13 +286,47 @@ class BogFolderBuilder:
                 ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
                 ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
             elif data["type"] == "control:BooleanWritable":
+                fallback_prop = data["properties"].get("fallback", {})
+                fallback_val = fallback_prop.get("value", "false")
                 fallback_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusBoolean"})
-                ET.SubElement(fallback_slot, "p", {"n": "value", "v": data["properties"]["fallback"]["value"]})
-            else:
+                ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(fallback_val).lower()})
+            elif data["type"] == "kitControl:NumericConst":
+                const_val = data["properties"].get("out", 0.0)
+                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
+                ET.SubElement(out_slot, "p", {"n": "value", "v": str(const_val)})
+            
+            # This revised logic now correctly generates the full XML for a NumericSwitch
+            elif data["type"] == "kitControl:NumericSwitch":
+                # Define the 'inSwitch' slot with its full structure
+                in_switch_slot = ET.SubElement(element, "p", {"n": "inSwitch", "f": "sL", "t": "b:StatusBoolean"})
+                ET.SubElement(in_switch_slot, "p", {"n": "value", "v": "false"})
+                ET.SubElement(in_switch_slot, "p", {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"})
+
+                # Define the 'inTrue' slot with its full structure
+                in_true_slot = ET.SubElement(element, "p", {"n": "inTrue", "f": "sL", "t": "b:StatusNumeric"})
+                ET.SubElement(in_true_slot, "p", {"n": "value", "v": "0.0"})
+                
+                # Define the 'inFalse' slot with its full structure
+                in_false_slot = ET.SubElement(element, "p", {"n": "inFalse", "f": "sL", "t": "b:StatusNumeric"})
+                ET.SubElement(in_false_slot, "p", {"n": "value", "v": "0.0"})
+
+                # Also handle any other simple properties passed in
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
+            else:
+                # This is the generic logic for all other component types
+                for prop_name, prop_value in data["properties"].items():
+                    if isinstance(prop_value, dict) and 'type' in prop_value and 'value' in prop_value:
+                        prop_element = ET.SubElement(element, "p", {"n": prop_name, "t": prop_value['type']})
+                        ET.SubElement(prop_element, "p", {"n": "value", "v": str(prop_value['value'])})
+                    else:
+                        ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
             for action_name, action_flag in data["actions"].items():
                 ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
+
+
 
     def _add_link_xml_tags(self, folder_element, links):
         """(Revised) Adds the <p> tags for links to the XML tree."""
