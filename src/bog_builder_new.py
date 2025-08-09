@@ -233,37 +233,59 @@ class BogFolderBuilder:
         return levels
 
 
-    def _add_direct_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """
-        (Revised) Internal method to add a link to the global registry, now handling
-        multiple types of conversion links correctly.
-        """
-        source_type = self._components[source_comp_name]["type"]
-        target_type = self._components[target_comp_name]["type"]
-        
-        # Set the defaults for a standard link
+    def _add_direct_link(self, source_name, source_slot, target_name, target_slot):
+        s_type = self._components[source_name]["type"]
+        t_type = self._components[target_name]["type"]
+
         link_type = "b:Link"
         converter_type = None
 
-        # This logic now correctly ignores the 'inSwitch' slot, which does not need conversion.
-        if "Boolean" in source_type and target_slot.startswith("in") and target_slot != "inSwitch":
-            link_type = "b:ConversionLink"
-            converter_type = "conv:StatusBooleanToStatusNumeric"
+        # Helpers
+        def target_is_boolean_like(t, slot):
+            # Boolean blocks / slots that expect boolean input
+            if t in (
+                "kitControl:And", "kitControl:Or", "kitControl:Xor",
+                "kitControl:BooleanDelay", "kitControl:OneShot",
+            ):
+                return True
+            # NumericSwitch inSwitch is boolean
+            if t == "kitControl:NumericSwitch" and slot == "inSwitch":
+                return True
+            return False
 
-        # This logic for the NumericSelect remains correct.
-        elif target_type == "kitControl:NumericSelect" and target_slot == "select":
+        def target_is_numeric_like(t, slot):
+            # Numeric math / clamp blocks or numeric inputs
+            if t.startswith("kitControl:") and t.split(":")[1] in (
+                "Add","Subtract","Multiply","Divide",
+                "Average","Minimum","Maximum",
+            ):
+                return True
+            # Generic heuristic: many kitControl numeric blocks use StatusNumeric on 'in*'
+            return "Numeric" in t
+
+        # 1) Enum case: NumericSelect.select expects enum (from numeric)
+        if t_type == "kitControl:NumericSelect" and target_slot == "select":
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusNumericToStatusEnum"
 
-        # Append all the necessary info for the XML generation stage.
+        # 2) Boolean → Numeric ONLY when target is numeric-like (and not inSwitch)
+        elif "Boolean" in s_type and target_slot.startswith("in") \
+            and not target_is_boolean_like(t_type, target_slot) \
+            and target_is_numeric_like(t_type, target_slot):
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusBooleanToStatusNumeric"
+
+        # else: keep as plain b:Link (Boolean→Boolean is plain link)
+
         self._links.append({
-            "source_name": source_comp_name, 
-            "source_slot": source_slot, 
-            "target_name": target_comp_name, 
-            "target_slot": target_slot, 
+            "source_name": source_name,
+            "source_slot": source_slot,
+            "target_name": target_name,
+            "target_slot": target_slot,
             "link_type": link_type,
             "converter_type": converter_type
         })
+
 
     def _add_component_xml_tags(self, folder_element, components, coords):
         """Adds the <p> tags for components to the XML tree."""
@@ -279,11 +301,24 @@ class BogFolderBuilder:
 
             if data["type"] == "control:NumericWritable":
                 default_val = data["properties"].get("defaultValue", 0.0)
+
                 out_slot = ET.SubElement(element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"})
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(default_val)})
                 ET.SubElement(out_slot, "p", {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"})
+
                 fallback_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusNumeric"})
                 ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
+
+                # NEW: emit facets if provided
+                facets_prop = data["properties"].get("facets")
+                if isinstance(facets_prop, dict) and facets_prop.get("type") == "b:Facets":
+                    ET.SubElement(
+                        element, "p",
+                        {"n": "facets", "t": "b:Facets", "v": str(facets_prop.get("value", ""))}
+                    )
+                elif isinstance(facets_prop, str):
+                    ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": facets_prop})
+
                 ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
             elif data["type"] == "control:BooleanWritable":
                 fallback_prop = data["properties"].get("fallback", {})
@@ -314,6 +349,25 @@ class BogFolderBuilder:
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
 
+            elif data["type"] == "control:TimeTrigger":
+                # Emit triggerMode as a scalar value (required by Niagara)
+                tm = data["properties"].get("triggerMode")
+                if isinstance(tm, dict) and "value" in tm:
+                    ET.SubElement(
+                        element, "p",
+                        {"n": "triggerMode", "t": "control:IntervalTriggerMode", "v": str(tm["value"])}
+                    )
+                elif isinstance(tm, str):
+                    ET.SubElement(
+                        element, "p",
+                        {"n": "triggerMode", "t": "control:IntervalTriggerMode", "v": tm}
+                    )
+                # emit any other simple properties for TimeTrigger
+                for prop_name, prop_value in data["properties"].items():
+                    if prop_name == "triggerMode":
+                        continue  # already handled
+                    ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
             else:
                 # This is the generic logic for all other component types
                 for prop_name, prop_value in data["properties"].items():
@@ -325,7 +379,6 @@ class BogFolderBuilder:
 
             for action_name, action_flag in data["actions"].items():
                 ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
-
 
 
     def _add_link_xml_tags(self, folder_element, links):
@@ -353,8 +406,17 @@ class BogFolderBuilder:
                 ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": link["converter_type"]})
 
     # Helper methods from original file
-    def add_numeric_writable(self, name, default_value=0.0):
-        self.add_component("control:NumericWritable", name, properties={"defaultValue": default_value}, actions={"emergencyOverride": "h", "emergencyAuto": "h"})
+    def add_numeric_writable(self, name, default_value=0.0, precision=2, units="u:null"):
+        facets_value = f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
+        self.add_component(
+            "control:NumericWritable",
+            name,
+            properties={
+                "defaultValue": default_value,
+                "facets": {"type": "b:Facets", "value": facets_value},
+            },
+            actions={"emergencyOverride": "h", "emergencyAuto": "h"},
+        )
 
     def add_numeric_switch(self, name):
         self.add_component("kitControl:NumericSwitch", name)
