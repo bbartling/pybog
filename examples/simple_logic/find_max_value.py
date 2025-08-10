@@ -49,11 +49,8 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder with a name for the logic folder
     builder = BogFolderBuilder("FindMaxValueWithSwitches")
 
-    # 2. Create TOP-LEVEL inputs and the final output point.
-    # These will remain visible on the main wiresheet.
     print("Adding 10 VAV box inputs...")
     inputs = [f"VAV_{i}" for i in range(1, 11)]
     for name in inputs:
@@ -61,17 +58,8 @@ def main():
 
     builder.add_numeric_writable("MaxValue")
 
-
-    # TUTORIAL: HOW TO USE SUB-FOLDERS
-    # We will place the entire dynamically-generated comparison tree
-    # inside a single sub-folder.
-
-    # STEP 1: Start the sub-folder "sandbox".
     builder.start_sub_folder("CalculationLogic")
 
-    # 3. Build the comparison tree algorithmically INSIDE the sub-folder.
-    # The while loop and the create_max_pair function will now create all
-    # their components inside the "CalculationLogic" folder.
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
     tier_num = 1
@@ -84,7 +72,6 @@ def main():
             input_b = current_tier_outputs[i*2 + 1]
             pair_id = f"T{tier_num}_P{i}"
             
-            # The builder automatically creates proxies for the inputs on the first pass
             winner = create_max_pair(builder, input_a, input_b, pair_id)
             next_tier_outputs.append(winner)
         
@@ -96,20 +83,13 @@ def main():
         current_tier_outputs = next_tier_outputs
         tier_num += 1
 
-    # This is the final component inside the sub-folder that holds the max value
     final_winner = current_tier_outputs[0]
 
-    # STEP 2: End the sub-folder "sandbox".
     builder.end_sub_folder()
 
-
-    # 4. Link the final winner to the output component.
-    # The builder sees that 'final_winner' is inside the sub-folder and 'MaxValue'
-    # is outside, so it will automatically create a ProxyOut point.
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")
 
-    # 5. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)

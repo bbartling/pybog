@@ -19,10 +19,8 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
     builder = BogFolderBuilder("MultiAlgorithmTest")
 
-    # 2. Define TOP-LEVEL input and output blocks.
     # --- Inputs ---
     builder.add_numeric_writable(name="Input1", default_value=10.0)
     builder.add_numeric_writable(name="Input2", default_value=20.0)
@@ -40,10 +38,6 @@ def main():
     builder.add_numeric_writable(name="Min_Final")
     builder.add_numeric_writable(name="Max_Final")
     builder.add_numeric_writable(name="Avg_Final")
-
-    # TUTORIAL: USING MULTIPLE SUB-FOLDERS
-    # Since this script performs three separate calculations, we can give each one
-    # its own sub-folder for maximum organization.
 
     # --- Average Calculation Sub-Folder ---
     builder.start_sub_folder("AverageLogic")
@@ -69,12 +63,6 @@ def main():
     builder.add_component(comp_type="kitControl:Maximum", name="Max4")
     builder.end_sub_folder()
 
-
-    # 3. Register all links.
-    # No changes are needed here. The builder will create proxies automatically
-    # as these links cross in and out of the three different sub-folders.
-
-    # --- Links for Average Logic ---
     builder.add_link("Input1", "out", "Avg1", "inA")
     builder.add_link("Input2", "out", "Avg1", "inB")
     builder.add_link("Input3", "out", "Avg1", "inC")
@@ -125,7 +113,6 @@ def main():
     builder.add_link("Max3", "out", "Max4", "inC")
     builder.add_link("Max4", "out", "Max_Final", "in16")
 
-    # 4. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)

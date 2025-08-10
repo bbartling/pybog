@@ -275,7 +275,12 @@ class BogFolderBuilder:
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusBooleanToStatusNumeric"
 
-        # else: keep as plain b:Link (Boolean→Boolean is plain link)
+        # 3) Numeric (StatusNumeric) -> Counter.countIncrement needs Number
+        elif t_type == "kitControl:Counter" and target_slot == "countIncrement":
+            # Niagara expects a numeric->number converter here
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusNumericToNumber"
+
 
         self._links.append({
             "source_name": source_name,
@@ -320,11 +325,13 @@ class BogFolderBuilder:
                     ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": facets_prop})
 
                 ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
+
             elif data["type"] == "control:BooleanWritable":
                 fallback_prop = data["properties"].get("fallback", {})
                 fallback_val = fallback_prop.get("value", "false")
                 fallback_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusBoolean"})
                 ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(fallback_val).lower()})
+
             elif data["type"] == "kitControl:NumericConst":
                 const_val = data["properties"].get("out", 0.0)
                 out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
@@ -349,6 +356,21 @@ class BogFolderBuilder:
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
 
+            elif data["type"] == "kitControl:BooleanDelay":
+                # Input slot stub (so a link target exists even before wiring)
+                ET.SubElement(element, "p", {"n": "in", "f": "sL"})
+
+                # onDelay / offDelay must be RelTime
+                on_d = data["properties"].get("onDelay", "0")
+                off_d = data["properties"].get("offDelay", "0")
+                if isinstance(on_d, dict):
+                    on_d = on_d.get("value", "0")
+                if isinstance(off_d, dict):
+                    off_d = off_d.get("value", "0")
+
+                ET.SubElement(element, "p", {"n": "onDelay",  "t": "b:RelTime", "v": str(on_d)})
+                ET.SubElement(element, "p", {"n": "offDelay", "t": "b:RelTime", "v": str(off_d)})
+
             elif data["type"] == "control:TimeTrigger":
                 # Emit triggerMode as a scalar value (required by Niagara)
                 tm = data["properties"].get("triggerMode")
@@ -367,6 +389,57 @@ class BogFolderBuilder:
                     if prop_name == "triggerMode":
                         continue  # already handled
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
+            elif data["type"] == "kitControl:MultiVibrator":
+                # Emit scalar RelTime for 'period' like: <p n="period" t="b:RelTime" v="10000"/>
+                per = data["properties"].get("period", "10000")
+                if isinstance(per, dict):
+                    per = per.get("value", "10000")
+                ET.SubElement(element, "p", {"n": "period", "t": "b:RelTime", "v": str(per)})
+
+            elif data["type"] == "kitControl:OneShot":
+                ET.SubElement(element, "p", {"n": "in", "f": "sL"})
+
+            elif data["type"] == "kitControl:Counter":
+                props = data.get("properties", {})
+
+                # --- OUT: StatusNumeric with optional value + precision ---
+                # Always create the out slot as a StatusNumeric "s" (structured) value.
+                out_slot = ET.SubElement(element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"})
+
+                init_out = props.get("outValue")
+                if init_out is not None:
+                    # Optionally round to precision for nicer initial render
+                    prec = props.get("precision")
+                    if prec is not None:
+                        try:
+                            init_out = round(float(init_out), int(prec))
+                        except Exception:
+                            pass
+                    ET.SubElement(out_slot, "p", {"n": "value", "v": str(init_out)})
+
+                precision = props.get("precision")
+                if precision is not None:
+                    ET.SubElement(out_slot, "p", {"n": "precision", "v": str(int(precision))})
+
+                # --- INPUTS: typed boolean link targets for control ---
+                # Count up / down direction inputs should be StatusBoolean link targets
+                ET.SubElement(element, "p", {"n": "countUp", "f": "sL", "t": "b:StatusBoolean"})
+                # Provide countDown too (harmless if unused; useful for ping-pong patterns)
+                ET.SubElement(element, "p", {"n": "countDown", "f": "sL", "t": "b:StatusBoolean"})
+
+                # --- CONFIG: numeric parameters as Floats ---
+                inc = props.get("countIncrement")
+                if inc is not None:
+                    ET.SubElement(element, "p", {"n": "countIncrement", "f": "L", "t": "b:Float", "v": str(inc)})
+
+                init_val = props.get("initialValue")
+                if init_val is not None:
+                    ET.SubElement(element, "p", {"n": "initialValue", "f": "L", "t": "b:Float", "v": str(init_val)})
+
+                # --- ACTION: clear (action link target) ---
+                ET.SubElement(element, "a", {"n": "clear", "f": "aL"})
+
 
             else:
                 # This is the generic logic for all other component types
@@ -427,6 +500,18 @@ class BogFolderBuilder:
 
     def add_boolean_writable(self, name, default_value=False):
         self.add_component("control:BooleanWritable", name, properties={"fallback": {"value": str(default_value).lower()}}, actions={"emergencyActive": "h", "emergencyInactive": "h", "emergencyAuto": "h"})
+
+    def add_multi_vibrator(self, name, period_ms="10000"):
+        # period_ms may be string or int; we emit b:RelTime scalar
+        self.add_component("kitControl:MultiVibrator", name, properties={"period": str(period_ms)})
+
+    def add_counter(self, name, count_increment=1.0, initial_value=0.0, precision=None, properties=None):
+        props = dict(properties or {})
+        props.setdefault("countIncrement", count_increment)
+        props.setdefault("initialValue", initial_value)
+        if precision is not None:
+            props["precision"] = int(precision)
+        self.add_component("kitControl:Counter", name, properties=props)
         
     def add_reduction_block(self, block_type, final_output_name, input_names):
         assert block_type in ("Average", "Minimum", "Maximum"), "Unsupported block type"

@@ -78,7 +78,6 @@ def main():
     builder = BogFolderBuilder("FindTop5Of15Dampers")
 
     # --- TOP-LEVEL INPUTS ---
-    # These are the main controls the user will see.
     inputs = [f"VAV_Damper_{i}" for i in range(1, 16)]
     for i, name in enumerate(inputs):
         builder.add_numeric_writable(name, default_value=float((i + 1) * 10))
@@ -87,7 +86,6 @@ def main():
     builder.add_numeric_writable("I_ignore_var", default_value=1.0)
 
     # --- TOP-LEVEL OUTPUTS ---
-    # These are the main results the user will see.
     for rank in range(1, 6):
         builder.add_numeric_writable(f"Rank_{rank}_Highest")
     builder.add_numeric_writable("Filtered_Max")

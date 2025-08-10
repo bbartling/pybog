@@ -22,47 +22,29 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
     builder = BogFolderBuilder("NumericSwitch_Isolation_Test")
-
-    # 2. Create the necessary top-level components.
     print("Creating top-level components for the test...")
 
     # --- Inputs ---
-    # A boolean to control the switch
     builder.add_boolean_writable("Switch_Control", default_value=True)
     
     # --- Output ---
-    # A point to see the result
     builder.add_numeric_writable("Final_Output")
 
-    # 3. Encapsulate the logic in a sub-folder
     print("Creating logic components inside 'CalculationLogic' folder...")
     builder.start_sub_folder("CalculationLogic")
 
     # --- Logic Blocks ---
-    # A numeric constant for the 'inTrue' slot
     builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
-    # The NumericSwitch component we are testing
     builder.add_numeric_switch("Test_NumericSwitch")
 
     builder.end_sub_folder()
 
-
-    # 4. Register all links.
     print("Wiring components...")
-
-    # Wire the boolean control to the 'inSwitch' slot
     builder.add_link("Switch_Control", "out", "Test_NumericSwitch", "inSwitch")
-
-    # Wire the constant value to the 'inTrue' slot
     builder.add_link("Const_1", "out", "Test_NumericSwitch", "inTrue")
-
-    # Wire the output of the switch to the final output point
     builder.add_link("Test_NumericSwitch", "out", "Final_Output", "in16")
 
-
-    # 5. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)

@@ -20,8 +20,6 @@ def main():
 
     builder = BogFolderBuilder("BoolLogic_Playground", debug=True)
 
-    # 1. Define all TOP-LEVEL components first.
-    # These are the inputs and outputs the user will directly interact with.
     # === Inputs ===
     builder.add_boolean_writable("Bool_A", default_value=True)
     builder.add_boolean_writable("Bool_B", default_value=False)
@@ -40,28 +38,17 @@ def main():
     builder.add_boolean_writable("Bool_Output_LT")
     builder.add_boolean_writable("Bool_Output_LTE")
 
-
-    # TUTORIAL: USING MULTIPLE, SEPARATE SUB-FOLDERS
-    # We can create as many sub-folders as we need to organize our logic.
-    # Here, we will create one for the boolean operations and another for comparisons.
-
-    # STEP 1A: Start the first sub-folder for Boolean logic.
     builder.start_sub_folder("BooleanLogic")
 
-    # These components will be placed inside the "BooleanLogic" folder.
     builder.add_component("kitControl:And", "And_Block")
     builder.add_component("kitControl:Or", "Or_Block")
     builder.add_component("kitControl:Xor", "Xor_Block")
     builder.add_component("kitControl:Not", "Not_Block")
 
-    # STEP 1B: End the first sub-folder.
     builder.end_sub_folder()
 
-
-    # STEP 2A: Start the second sub-folder for Comparison logic.
     builder.start_sub_folder("ComparisonLogic")
 
-    # These components will be placed inside the "ComparisonLogic" folder.
     builder.add_component("kitControl:Equal", "Equal_Block")
     builder.add_component("kitControl:NotEqual", "NotEqual_Block")
     builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
@@ -69,13 +56,7 @@ def main():
     builder.add_component("kitControl:LessThan", "LessThan_Block")
     builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
 
-    # STEP 2B: End the second sub-folder.
     builder.end_sub_folder()
-
-
-    # 3. Register all links.
-    # Again, no changes are needed here. The builder knows which folder each
-    # component lives in and will create all necessary proxies automatically.
 
     # === Wiring for Boolean Logic ===
     builder.add_link("Bool_A", "out", "And_Block", "inA")
@@ -118,7 +99,6 @@ def main():
     builder.add_link("Num_B", "out", "LessThanEqual_Block", "inB")
     builder.add_link("LessThanEqual_Block", "out", "Bool_Output_LTE", "in16")
 
-    # === Save file ===
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)

@@ -22,56 +22,40 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder. No sub-folders will be used.
     builder = BogFolderBuilder("NumericSelectTest")
 
-    # 2. Create all the top-level components.
     print("Creating components...")
 
     builder.start_sub_folder("CalculationLogic")
 
     # --- Inputs ---
-    # The numeric values that can be selected from.
     builder.add_numeric_writable("Input_A", default_value=100.0)
     builder.add_numeric_writable("Input_B", default_value=200.0)
     builder.add_numeric_writable("Input_C", default_value=300.0)
     builder.add_numeric_writable("Input_D", default_value=400.0)
     builder.add_numeric_writable("Input_E", default_value=500.0)
 
-    # The input that controls which value is selected.
-    # A value of 1 selects Input_A, 2 selects Input_B, etc.
     builder.add_numeric_writable("Selector", default_value=1.0)
 
-    # --- Logic Block ---
-    # The NumericSelect component itself.
     builder.add_numeric_select("MySelect")
 
     # --- Output ---
-    # The final selected value will be written here.
     builder.add_numeric_writable("Selected_Value")
 
     builder.end_sub_folder()
 
-
-    # 3. Register all links.
     print("Wiring components...")
 
-    # Wire the data inputs into the NumericSelect block.
     builder.add_link("Input_A", "out", "MySelect", "inA")
     builder.add_link("Input_B", "out", "MySelect", "inB")
     builder.add_link("Input_C", "out", "MySelect", "inC")
     builder.add_link("Input_D", "out", "MySelect", "inD")
     builder.add_link("Input_E", "out", "MySelect", "inE")
 
-    # Wire the selector input. This is the critical link that tests the new logic.
-    # Note the target slot is "select", not "inSelect".
     builder.add_link("Selector", "out", "MySelect", "select")
 
-    # Wire the output of the select block to the final output point.
     builder.add_link("MySelect", "out", "Selected_Value", "in16")
 
-
-    # 4. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
