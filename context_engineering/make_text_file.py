@@ -16,7 +16,9 @@ with open(output_file, "a", encoding="utf-8") as out_f:  # append mode
                     code = f"<<Error reading file: {e}>>"
 
                 out_f.write(f"\n=== FILE: {filename} ===\n")
+                print("Doing ",filename)
                 out_f.write(f"DIR: {dirpath}\n")
                 out_f.write("=== CODE START ===\n")
                 out_f.write(code)
                 out_f.write("\n=== CODE END ===\n")
+                print("All Done...")

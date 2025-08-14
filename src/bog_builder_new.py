@@ -71,13 +71,22 @@ class BogFolderBuilder:
         self._component_to_folder[name] = self._current_folder_path
 
     def add_link(self, source_comp_name, source_slot, target_comp_name, target_slot):
-        """Adds a link, creating directional proxies if it crosses a folder boundary."""
+        """Adds a link, recording if it crosses a folder boundary."""
         if source_comp_name not in self._components:
             raise ValueError(f"Source component '{source_comp_name}' not found.")
         if target_comp_name not in self._components:
             raise ValueError(f"Target component '{target_comp_name}' not found.")
 
-        self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
+        same_folder = (
+            self._component_to_folder[source_comp_name] ==
+            self._component_to_folder[target_comp_name]
+        )
+
+        link = self._add_direct_link(source_comp_name, source_slot, target_comp_name, target_slot)
+        # Store extra metadata
+        if not same_folder:
+            self._links[-1]["cross_folder"] = True
+
 
 
     def save(self, file_path):
@@ -440,6 +449,15 @@ class BogFolderBuilder:
                 # --- ACTION: clear (action link target) ---
                 ET.SubElement(element, "a", {"n": "clear", "f": "aL"})
 
+            elif data["type"] == "kitControl:BooleanLatch":
+                # FIX: Generate the full slot structure for 'in' and 'clock'
+                # to match the XML from a manually-wired component.
+                ET.SubElement(element, "p", {"n": "clock", "f": "tsoL"})
+
+                # Create the 'in' slot with its full structure
+                in_slot = ET.SubElement(element, "p", {"n": "in", "f": "sL", "t": "b:StatusBoolean"})
+                ET.SubElement(in_slot, "p", {"n": "value", "v": "false"})
+                ET.SubElement(in_slot, "p", {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"})
 
             else:
                 # This is the generic logic for all other component types
@@ -453,15 +471,18 @@ class BogFolderBuilder:
             for action_name, action_flag in data["actions"].items():
                 ET.SubElement(element, "a", {"n": action_name, "f": action_flag})
 
-
     def _add_link_xml_tags(self, folder_element, links):
-        """(Revised) Adds the <p> tags for links to the XML tree."""
+        """Adds <p> link tags for all links targeting components in this folder."""
         link_counters = defaultdict(int)
         for link in links:
             target_handle = self._handle_map.get(link["target_name"])
-            if not target_handle: continue
+            if not target_handle:
+                continue
+
+            # If this is a cross-folder link, still write the link inside the target component
             target_element = folder_element.find(f"./p[@h='{target_handle}']")
-            if target_element is None: continue
+            if target_element is None:
+                continue
 
             link_count = link_counters[link["target_name"]]
             link_name = f"Link{link_count + 1}" if link_count > 0 else "Link"
@@ -472,11 +493,11 @@ class BogFolderBuilder:
             ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"})
             ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]})
 
-            # REVISED LOGIC IS HERE
-            # This is no longer hardcoded. It checks if a converter is needed
-            # and uses the specific type that was stored with the link.
             if link.get("converter_type"):
-                ET.SubElement(link_element, "p", {"n": "converter", "m": "conv=converters", "t": link["converter_type"]})
+                ET.SubElement(link_element, "p", {
+                    "n": "converter", "m": "conv=converters",
+                    "t": link["converter_type"]
+                })
 
     # Helper methods from original file
     def add_numeric_writable(self, name, default_value=0.0, precision=2, units="u:null"):
