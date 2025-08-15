@@ -1,18 +1,17 @@
+# grok_mini_test.py
 import os
 import time
 import textwrap
 from pathlib import Path
 from typing import List
 import re
+import argparse
 
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import SystemMessage, UserMessage
 from azure.core.credentials import AzureKeyCredential
 
-from pathlib import Path
-
-
-# ----------------- CONFIG -----------------
+# ----------------- CONFIG (defaults; can be overridden by CLI) -----------------
 ENDPOINT = "https://models.github.ai/inference"
 MODEL = "xai/grok-3-mini"
 
@@ -20,17 +19,23 @@ GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
 CONTEXT_PATH = r"C:\Users\ben\Documents\llm-bog-gen\context_engineering\llm_bog_instructions_token_optimized.txt"
 
 MODE = "bog"  # "bog" or "code"
-# OUT_DIR = os.getcwd()
-OUT_DIR = r"C:\Users\ben\OneDrive\Desktop\testing\examples\ai_generated_files"
-Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
-
+DEFAULT_OUT_DIR = r"C:\Users\ben\Documents\llm-bog-gen\examples\ai_generated_files"
 
 # Token budgeting (approx: 1 token ~ 4 chars)
 MAX_REQUEST_TOKENS = 8000
-RESERVE_FOR_RESPONSE = 1500           # budget for model output
+RESERVE_FOR_RESPONSE = 1500
 TARGET_PROMPT_TOKENS = MAX_REQUEST_TOKENS - RESERVE_FOR_RESPONSE
-TOK_PER_CHAR = 1/4                    # heuristic
+TOK_PER_CHAR = 1/4
 TARGET_PROMPT_CHARS = int(TARGET_PROMPT_TOKENS / TOK_PER_CHAR)
+
+"""
+USAGE
+# 1) Set your token if not already set
+$env:GITHUB_TOKEN = "<your token>"
+
+# 2) Run with output dir + test name
+python context_engineering\grok_mini_test.py -o ..\examples\ai_generated_files -n thermostat_stat
+"""
 
 # ----------------- TASKS ------------------
 THERMOSTAT_TASK = """
@@ -56,8 +61,6 @@ Return [PYTHON] and [TESTS] blocks. Write a Python script that:
 - Creates a list of N random numbers (N=50), sorts ascending with an in-place algorithm (e.g., insertion sort), prints first/last.
 - Include unit tests that validate ascending order and length.
 """
-
-TASK = THERMOSTAT_TASK if MODE == "bog" else PLAIN_CODE_TASK
 
 # --------------- HELPERS ------------------
 MODAL_RE = re.compile(r"\b(MUST|SHOULD|NEVER|ALWAYS|REQUIRED|PROHIBITED|MUST NOT|SHALL|SHALL NOT)\b", re.I)
@@ -92,33 +95,24 @@ def keep_line(s: str) -> bool:
 def compress_context(raw: str, target_chars: int) -> str:
     lines = raw.splitlines()
     kept = [ln for ln in lines if keep_line(ln)]
-    # de-dup preserve order
     seen = set(); dedup = []
     for ln in kept:
         key = ln.strip()
         if key not in seen:
-            dedup.append(ln.rstrip())
-            seen.add(key)
-    # collapse blank runs
+            dedup.append(ln.rstrip()); seen.add(key)
     collapsed = []
     blank = 0
     for ln in dedup:
         if ln.strip() == "":
             blank += 1
-            if blank <= 1:
-                collapsed.append("")
+            if blank <= 1: collapsed.append("")
         else:
-            blank = 0
-            collapsed.append(ln)
+            blank = 0; collapsed.append(ln)
     txt = ("\n".join(collapsed)).strip() + "\n"
-
-    # If still too big, hard trim from the tail (keep “rulesy” head)
     if len(txt) > target_chars:
         txt = txt[:target_chars]
-        # try not to cut mid-line
         last_nl = txt.rfind("\n")
-        if last_nl > 0:
-            txt = txt[:last_nl] + "\n"
+        if last_nl > 0: txt = txt[:last_nl] + "\n"
     return txt
 
 def approx_tokens_from_chars(n_chars: int) -> int:
@@ -133,11 +127,9 @@ def extract_between(text: str, tag: str) -> str:
 
 def extract_code_fallback(text: str) -> str:
     m = re.search(r"```python\s+(.*?)```", text, re.S | re.I)
-    if m:
-        return m.group(1).strip()
+    if m: return m.group(1).strip()
     m = re.search(r"```\s+(.*?)```", text, re.S)
-    if m:
-        return m.group(1).strip()
+    if m: return m.group(1).strip()
     return ""
 
 def chunk_text(s: str, max_len: int = 6000) -> List[str]:
@@ -148,29 +140,39 @@ def build_messages(context_text: str, task: str):
     msgs.append(SystemMessage(content="You are a careful code generator. Follow the context exactly and obey output tags."))
     msgs.append(UserMessage(content="### OUTPUT SPEC\nReturn only:\n[PYTHON]\n# code here\n[/PYTHON]\n(Optional)\n[TESTS]\n# tests here\n[/TESTS]\nDO NOT include any other prose outside these tags."))
 
-    # compress + enforce budget
-    compressed = compress_context(context_text, TARGET_PROMPT_CHARS // 2)  # use ~half budget for context
-    # put compressed context into 1–2 chunks
+    compressed = compress_context(context_text, TARGET_PROMPT_CHARS // 2)
     chunks = chunk_text(compressed, max_len=6000)
     for idx, ch in enumerate(chunks, start=1):
         msgs.append(UserMessage(content=f"[CONTEXT CHUNK {idx}]\n{ch}"))
 
-    # keep task small
     msgs.append(UserMessage(content=f"### TASK\n{task.strip()}"))
-    # Print budgeting info
     total_chars = sum(len(m.content) for m in msgs)
     print(f"[Budget] prompt chars ~{total_chars} (~{approx_tokens_from_chars(total_chars)} tokens)")
     return msgs
 
-# --------------- MAIN ---------------------
+# ----------------- MAIN -----------------
 def main():
+    # CLI args: -o/--out for base folder, -n/--name for subfolder name
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-o", "--out", default=DEFAULT_OUT_DIR, help="Base output folder (will be created if missing)")
+    ap.add_argument("-n", "--name", default="thermostat_stat", help="Test name (subfolder under base output)")
+    ap.add_argument("--mode", choices=["bog","code"], default=MODE, help="Generation mode")
+    ap.add_argument("--model", default=MODEL, help="Model ID (e.g., xai/grok-3-mini)")
+    ap.add_argument("--context", default=CONTEXT_PATH, help="Path to context file")
+    args = ap.parse_args()
+
+    out_base = Path(args.out)
+    sub_dir = out_base / args.name
+    sub_dir.mkdir(parents=True, exist_ok=True)
+
     token = os.environ.get(GITHUB_TOKEN_ENV)
     if not token:
         raise RuntimeError(f"Missing environment variable {GITHUB_TOKEN_ENV}")
 
     t0 = time.time()
-    context_text = Path(CONTEXT_PATH).read_text(encoding="utf-8")
-    messages = build_messages(context_text, THERMOSTAT_TASK if MODE == "bog" else PLAIN_CODE_TASK)
+    context_text = Path(args.context).read_text(encoding="utf-8")
+    task = THERMOSTAT_TASK if args.mode == "bog" else PLAIN_CODE_TASK
+    messages = build_messages(context_text, task)
 
     client = ChatCompletionsClient(endpoint=ENDPOINT, credential=AzureKeyCredential(token))
 
@@ -178,7 +180,7 @@ def main():
     response = client.complete(
         stream=True,
         messages=messages,
-        model=MODEL,
+        model=args.model,
         model_extras={'stream_options': {'include_usage': True}},
     )
 
@@ -195,34 +197,31 @@ def main():
     print("\n\n>>> Done.\n")
     raw = "".join(full_text)
 
-    py_code = extract_between(raw, "PYTHON")
-    if not py_code:
-        py_code = extract_code_fallback(raw)
+    # Save the raw API response first
+    raw_path = sub_dir / "response.txt"
+    raw_path.write_text(raw, encoding="utf-8")
+    print(f"Saved full API response to: {raw_path}")
+
+    # Extract code/tests
+    py_code = extract_between(raw, "PYTHON") or extract_code_fallback(raw)
     tests = extract_between(raw, "TESTS")
 
     if not py_code:
         print("[DEBUG] No [PYTHON] block or code fences found. First 600 chars:\n", raw[:600])
         raise RuntimeError("No [PYTHON] block found in the model output.")
 
-    Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
+    # Decide a filename for the Python script
+    py_name = f"{args.name}.py" if args.mode != "bog" else f"{args.name}_builder.py"
+    out_py = sub_dir / py_name
+    out_py.write_text(py_code, encoding="utf-8")
+    print(f"Saved generated Python file to: {out_py}")
 
-    if MODE == "bog":
-        out_py = Path(OUT_DIR) / "thermostat_demo_builder.py"
-        out_py.write_text(py_code, encoding="utf-8")
-        print(f"Saved builder script to: {out_py}")
-        # Optional: run it to produce the .bog
-        # import subprocess; subprocess.run(["python", str(out_py), "-o", OUT_DIR], check=True)
-    else:
-        full_code = textwrap.dedent(f"""
-        {py_code}
+    # Optionally run the generated builder to produce .bog (commented by default)
+    # if args.mode == "bog":
+    #     import subprocess
+    #     subprocess.run(["python", str(out_py), "-o", str(sub_dir)], check=True)
 
-        {tests if tests else ""}
-        print("All tests passed!" if '{tests}'.strip() else "No tests block provided.")
-        """)
-        print("\n=== Running Generated Code ===")
-        exec_globals = {}
-        exec(full_code, exec_globals, exec_globals)
-
+    # Print usage (if returned) and timing
     if usage:
         print("\n--- Usage (as reported by API) ---")
         for k, v in usage.items():
