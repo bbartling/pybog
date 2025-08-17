@@ -1,51 +1,227 @@
-# pybog: A Python Toolkit for Niagara BOG & DIST Files
+# Bog Builder
 
-![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
+`bog_builder` is a Python package for constructing Niagara `.bog` files programmatically.
 
+It exposes a `BogFolderBuilder` class which lets you assemble logic blocks, group them
+into sub‑folders, link them together, and save the result as a `.bog` archive.  All
+user input is validated via [Pydantic](https://docs.pydantic.dev/), so invalid names,
+component types or link definitions produce clear error messages rather than mysterious
+failures at runtime.  Time‑based properties such as delays and periods accept both
+millisecond strings and human‑friendly formats like ``"1s"`` or ``"1m"``.
 
-This project provides a Python library to **analyze**, **parse**, and **generate** Tridium Niagara `.bog` and `.dist` files. It allows developers, controls engineers, and AI systems to work with Niagara control logic **offline**, without requiring Workbench.
+The repository follows a standard PyPI layout using a top‑level ``src/`` directory for
+the package code and a ``tests/`` folder containing functional examples.  The tests
+demonstrate how to use the builder API to reproduce a variety of Niagara Workbench
+programs—including average/min/max calculators, Boolean latches, ping‑pong counters and
+top‑N selection algorithms.  To run the tests, install the package in editable mode
+and invoke ``pytest``:
 
-By parsing complex JACE backup files into formats that AI/LLMs can understand, the tool enables powerful new workflows for **commissioning agents**, **field technicians**, and **consulting engineers**—such as conversing with an LLM to explain how the supervisory logic is structured.
-
-The **ultimate goal** of the project is to enable AI to **generate Niagara Wiresheet logic**—from basic control sequences to advanced supervisory strategies, such as those defined in **ASHRAE Guideline 36**. Looking ahead, the tool aims to support **AI-driven translation** of control algorithms written in **Python**, **C++**, **JavaScript**, or other general-purpose, high-level C-style languages into Niagara Wiresheet logic. This would allow complex, algorithmic control logic authored by AI to be exported as `.bog` files, ready for human users to import, inspect, and test directly within the Niagara environment.
-
-
-[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
-
----
-
-<details>
-<summary><strong>🔧 Dump a .dist or .bog to JSON </strong></summary>
-
-You can now use `main.py` to:
-
-- Analyze any `.bog` or `.dist` file
-- Extract the logic structure into clean **JSON**
-- Enable downstream processing, such as LLM prompting, visualization, or diagnostics
-
-```bash
-python main.py "C:\your\path\to\backup_Ahu4.dist" -o "C:\your\path\to\backup_Ahu4.json" -l
+```sh
+pip install -e .
+pytest
 ```
----
 
-### ✅ Argument Descriptions
+If you wish to see how specific Workbench examples are recreated programmatically,
+inspect the files under ``tests/test_more_examples.py`` and ``tests/test_workbench_examples.py``.
+Each test constructs a graph matching the corresponding script found at the root of
+this repository (e.g. ``manual_average_min_max.py``, ``ping_pong_counter.py``) and asserts
+that the resulting `.bog` file is created successfully.
 
-| Argument                                | Meaning                                                                                                                                                                     |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"C:\your\path\to\backup_Ahu4.dist"`    | **Positional argument**: path to the `.dist` or `.bog` file you want to analyze.                                                                                            |
-| `-o "C:\your\path\to\backup_Ahu4.json"` | **Optional** `--output` flag: specifies the output path for the generated `.json` file.                                                                                     |
-| `-l`                                    | **Optional** `--list` flag: tells the script to **print a list** of control logic components or metadata from the file, instead of (or in addition to) writing full output. |
+> **Note**
+>
+> The tests expect the ``bog_builder`` package to be importable.  When running
+> tests without first installing the package, a ``conftest.py`` in the ``tests``
+> directory automatically adds the project’s ``src`` folder to ``sys.path`` so
+> that imports resolve correctly.  Alternatively, you can install the package
+> in editable mode prior to running the tests:
+>
+> ```sh
+> pip install -e .
+> pytest
+> ```
+>
 
-</details>
+## Building a simple thermostat
 
----
+The ``BogFolderBuilder`` can be used to assemble more complex control logic.  As an
+illustrative example, here’s how you might build a simple thermostat with heating,
+cooling and fan commands.  The thermostat exposes numeric and boolean writables for
+the current space temperature, setpoints, hysteresis, mode and fan‐auto selection, and
+produces outputs for each command:
 
-<details>
-<summary><strong>👷 Write Your Own `.bog` File in XML from scratch</strong></summary>
+- ``SpaceTemp`` – current space temperature (numeric)
+- ``HeatSP`` – heating setpoint (numeric)
+- ``CoolSP`` – cooling setpoint (numeric)
+- ``Hysteresis`` – deadband around the setpoints (numeric)
+- ``Mode`` – 0=Off, 1=Heat, 2=Cool (numeric)
+- ``FanAuto`` – if ``False`` then the fan runs whenever either Heat or Cool is active (boolean)
+- ``Output_HeatCmd`` – command to enable heating (boolean)
+- ``Output_CoolCmd`` – command to enable cooling (boolean)
+- ``Output_FanCmd`` – command to enable the fan (boolean)
+
+The logic is as follows:
+
+* When ``Mode == 1`` (heat) **and** ``SpaceTemp < HeatSP − Hysteresis`` then ``HeatCmd`` is ``True``.
+* When ``Mode == 2`` (cool) **and** ``SpaceTemp > CoolSP + Hysteresis`` then ``CoolCmd`` is ``True``.
+* The fan command is ``True`` whenever either ``HeatCmd`` or ``CoolCmd`` is ``True``.  If ``FanAuto``
+  is ``False`` the fan runs regardless of the heating/cooling state.
+
+Here’s a complete example using the builder API to create this thermostat and
+write it to a ``.bog`` file:
+
+```python
+from bog_builder import BogFolderBuilder
+
+builder = BogFolderBuilder("Thermostat")
+
+# Define inputs
+builder.add_numeric_writable("SpaceTemp", default_value=72.0)
+builder.add_numeric_writable("HeatSP", default_value=68.0)
+builder.add_numeric_writable("CoolSP", default_value=74.0)
+builder.add_numeric_writable("Hysteresis", default_value=1.0)
+builder.add_numeric_writable("Mode", default_value=0.0)  # 0=Off, 1=Heat, 2=Cool
+builder.add_boolean_writable("FanAuto", default_value=True)
+
+# Define outputs
+builder.add_boolean_writable("Output_HeatCmd")
+builder.add_boolean_writable("Output_CoolCmd")
+builder.add_boolean_writable("Output_FanCmd")
+
+# Constants for comparing the mode value
+builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
+builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
+
+# Blocks to detect heating/cooling modes
+builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
+builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
+builder.add_component("kitControl:And", "IsHeatMode")
+
+builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
+builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
+builder.add_component("kitControl:And", "IsCoolMode")
+
+# Compute ``SpaceTemp + Hysteresis`` and ``CoolSP + Hysteresis``
+builder.add_component("kitControl:Add", "SpacePlusHyst")
+builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
+
+# Comparisons against setpoints
+builder.add_component("kitControl:LessThanEqual", "IsBelowHeat")
+builder.add_component("kitControl:GreaterThanEqual", "IsAboveCool")
+
+# Gates and logic combining blocks
+builder.add_component("kitControl:And", "HeatCmdGate")
+builder.add_component("kitControl:And", "CoolCmdGate")
+builder.add_component("kitControl:Or", "HeatOrCool")
+builder.add_component("kitControl:Not", "FanAutoNot")
+builder.add_component("kitControl:Or", "FanCmdGate")
+
+# Wiring for mode comparisons (Mode == 1)
+builder.add_link("Mode", "out", "Mode_GE_1", "inA")
+builder.add_link("Const1", "out", "Mode_GE_1", "inB")
+builder.add_link("Mode", "out", "Mode_LE_1", "inA")
+builder.add_link("Const1", "out", "Mode_LE_1", "inB")
+builder.add_link("Mode_GE_1", "out", "IsHeatMode", "inA")
+builder.add_link("Mode_LE_1", "out", "IsHeatMode", "inB")
+
+# Wiring for mode comparisons (Mode == 2)
+builder.add_link("Mode", "out", "Mode_GE_2", "inA")
+builder.add_link("Const2", "out", "Mode_GE_2", "inB")
+builder.add_link("Mode", "out", "Mode_LE_2", "inA")
+builder.add_link("Const2", "out", "Mode_LE_2", "inB")
+builder.add_link("Mode_GE_2", "out", "IsCoolMode", "inA")
+builder.add_link("Mode_LE_2", "out", "IsCoolMode", "inB")
+
+# Sum the hysteresis with the space and cooling setpoints
+builder.add_link("SpaceTemp", "out", "SpacePlusHyst", "inA")
+builder.add_link("Hysteresis", "out", "SpacePlusHyst", "inB")
+builder.add_link("CoolSP", "out", "CoolSP_plus_Hyst", "inA")
+builder.add_link("Hysteresis", "out", "CoolSP_plus_Hyst", "inB")
+
+# Compare ``SpaceTemp + Hyst <= HeatSP``  (heat threshold)
+builder.add_link("SpacePlusHyst", "out", "IsBelowHeat", "inA")
+builder.add_link("HeatSP", "out", "IsBelowHeat", "inB")
+
+# Compare ``SpaceTemp >= CoolSP + Hyst`` (cool threshold)
+builder.add_link("SpaceTemp", "out", "IsAboveCool", "inA")
+builder.add_link("CoolSP_plus_Hyst", "out", "IsAboveCool", "inB")
+
+# Combine heat mode and threshold
+builder.add_link("IsHeatMode", "out", "HeatCmdGate", "inA")
+builder.add_link("IsBelowHeat", "out", "HeatCmdGate", "inB")
+
+# Combine cool mode and threshold
+builder.add_link("IsCoolMode", "out", "CoolCmdGate", "inA")
+builder.add_link("IsAboveCool", "out", "CoolCmdGate", "inB")
+
+# OR heat and cool commands for fan logic
+builder.add_link("HeatCmdGate", "out", "HeatOrCool", "inA")
+builder.add_link("CoolCmdGate", "out", "HeatOrCool", "inB")
+
+# Invert FanAuto to produce a manual fan override
+builder.add_link("FanAuto", "out", "FanAutoNot", "in")
+
+# Combine heat/cool or manual override for the fan command
+builder.add_link("HeatOrCool", "out", "FanCmdGate", "inA")
+builder.add_link("FanAutoNot", "out", "FanCmdGate", "inB")
+
+# Wire the gates to the final outputs
+builder.add_link("HeatCmdGate", "out", "Output_HeatCmd", "in16")
+builder.add_link("CoolCmdGate", "out", "Output_CoolCmd", "in16")
+builder.add_link("FanCmdGate", "out", "Output_FanCmd", "in16")
+
+# Save the `.bog` archive.  On Windows you can direct this to your Workbench
+# user directory by passing an absolute path, e.g. ``"C:\\Users\\ben\\Niagara4.11\\JENEsys\\Thermostat.bog"``.
+builder.save("Thermostat.bog")
+```
+
+To place the resulting ``.bog`` file directly into your Niagara workbench user
+directory, pass the desired output path to the ``save`` method (or to your own
+script via a command‑line ``-o`` flag) and ensure the directory exists.  For example on
+Windows:
+
+```sh
+python build_thermostat.py -o "C:\Users\ben\Niagara4.11\JENEsys"
+```
+
+This will create ``Thermostat.bog`` in the specified folder.  You can then import
+and test it within Niagara Workbench.
+
+## Creating a hot water reset block
+
+Linear reset blocks are another common pattern in Niagara programming.  A reset
+performs a linear interpolation between two pairs of limits.  For example,
+you might want to reset a hot water supply temperature setpoint based on
+outdoor air temperature.  The `Reset` component takes five inputs:
+
+* ``inA`` – the current process value (e.g. outdoor air temperature).
+* ``inputLowLimit`` and ``inputHighLimit`` – the range of the process value.
+* ``outputLowLimit`` and ``outputHighLimit`` – the corresponding range of the output.
+
+The output value is interpolated between ``outputLowLimit`` and
+``outputHighLimit`` depending on where ``inA`` sits between the input limits.
+
+The package ships with an example script `examples/hot_water_reset_example.py` that
+constructs a hot water reset.  The script defines numeric writables for the
+process value and its limits, instantiates a `kitControl:Reset` block with
+matching fallback values, wires up the inputs and output, and saves the
+resulting `.bog` file.  The generated XML mirrors the structure exported by
+Workbench, including nested `Link` elements under the target components and
+status slots on the `Reset` block.
+
+Run the example like so:
+
+```sh
+python examples/hot_water_reset_example.py -o "C:\Users\ben\Niagara4.11\JENEsys"
+```
+
+This creates ``HotWaterTempReset.bog`` in your chosen directory, ready for
+import into Workbench.  You can modify the limit values in the script to suit
+your application or use it as a template for chilled water resets.
+
+
+## 👷 Write Your Own `.bog` File in XML from scratch
 
 The Python script operates by creating the entire XML structure of the Niagara .bog file as a single, multi-line text string. This string contains all the necessary tags to define each component, its properties, and the links between them. Finally, the script writes this complete XML string directly into a new file, which Niagara can then open and display as a standard wiresheet.
-
-### ✨ Code Example
 
 ```python
 xml_content = '''<bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
@@ -143,231 +319,6 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 
 ![Adder Logic Created with Python](snips/addrMadeWithPy.jpg)
-
-
-</details>
-
----
-
-<details>
-<summary><strong>🐍 Py Bog Building Example</strong></summary>
-
-```python
-import sys
-import os
-import argparse
-
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
-from src.bog_builder_new import BogFolderBuilder
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Build a complex, multi-algorithm .bog file with a clean, multi-folder layout."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    script_filename = os.path.basename(__file__).replace(".py", "")
-
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("MultiAlgorithmTest")
-
-    # 2. Define TOP-LEVEL input and output blocks.
-    # These will be the only components visible on the main wiresheet,
-    # alongside the folders containing the logic.
-    # --- Inputs ---
-    builder.add_numeric_writable(name="Input1", default_value=10.0)
-    builder.add_numeric_writable(name="Input2", default_value=20.0)
-    builder.add_numeric_writable(name="Input3", default_value=30.0)
-    builder.add_numeric_writable(name="Input4", default_value=40.0)
-    builder.add_numeric_writable(name="Input5", default_value=50.0)
-    builder.add_numeric_writable(name="Input6", default_value=60.0)
-    builder.add_numeric_writable(name="Input7", default_value=70.0)
-    builder.add_numeric_writable(name="Input8", default_value=80.0)
-    builder.add_numeric_writable(name="Input9", default_value=90.0)
-    builder.add_numeric_writable(name="Input10", default_value=100.0)
-    builder.add_numeric_writable(name="Input11", default_value=110.0)
-
-    # --- Outputs ---
-    builder.add_numeric_writable(name="Min_Final")
-    builder.add_numeric_writable(name="Max_Final")
-    builder.add_numeric_writable(name="Avg_Final")
-
-
-    # TUTORIAL: USING MULTIPLE SUB-FOLDERS
-    # Since this script performs three separate calculations, we can give each one
-    # its own sub-folder for maximum organization. This keeps the logic for
-    # Average, Minimum, and Maximum completely separate and easy to debug.
-
-    # --- Average Calculation Sub-Folder ---
-    # To see the Average logic flat, comment out the next two lines.
-    builder.start_sub_folder("AverageLogic")
-    builder.add_component(comp_type="kitControl:Average", name="Avg1")
-    builder.add_component(comp_type="kitControl:Average", name="Avg2")
-    builder.add_component(comp_type="kitControl:Average", name="Avg3")
-    builder.add_component(comp_type="kitControl:Average", name="Avg4")
-    builder.end_sub_folder()
-
-    # --- Minimum Calculation Sub-Folder ---
-    # To see the Minimum logic flat, comment out the next two lines.
-    builder.start_sub_folder("MinimumLogic")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min1")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min2")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min3")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
-    builder.end_sub_folder()
-
-    # --- Maximum Calculation Sub-Folder ---
-    # To see the Maximum logic flat, comment out the next two lines.
-    builder.start_sub_folder("MaximumLogic")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max1")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max2")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max3")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max4")
-    builder.end_sub_folder()
-
-
-    # 3. Register all links.
-    # No changes are needed here. The builder will create proxies automatically
-    # as these links cross in and out of the three different sub-folders.
-
-    # --- Links for Average Logic ---
-    builder.add_link("Input1", "out", "Avg1", "inA")
-    builder.add_link("Input2", "out", "Avg1", "inB")
-    builder.add_link("Input3", "out", "Avg1", "inC")
-    builder.add_link("Input4", "out", "Avg1", "inD")
-    builder.add_link("Input5", "out", "Avg2", "inA")
-    builder.add_link("Input6", "out", "Avg2", "inB")
-    builder.add_link("Input7", "out", "Avg2", "inC")
-    builder.add_link("Input8", "out", "Avg2", "inD")
-    builder.add_link("Input9", "out", "Avg3", "inA")
-    builder.add_link("Input10", "out", "Avg3", "inB")
-    builder.add_link("Input11", "out", "Avg3", "inC")
-    builder.add_link("Avg1", "out", "Avg4", "inA")
-    builder.add_link("Avg2", "out", "Avg4", "inB")
-    builder.add_link("Avg3", "out", "Avg4", "inC")
-    builder.add_link("Avg4", "out", "Avg_Final", "in16")
-
-    # --- Links for Minimum Logic ---
-    builder.add_link("Input1", "out", "Min1", "inA")
-    builder.add_link("Input2", "out", "Min1", "inB")
-    builder.add_link("Input3", "out", "Min1", "inC")
-    builder.add_link("Input4", "out", "Min1", "inD")
-    builder.add_link("Input5", "out", "Min2", "inA")
-    builder.add_link("Input6", "out", "Min2", "inB")
-    builder.add_link("Input7", "out", "Min2", "inC")
-    builder.add_link("Input8", "out", "Min2", "inD")
-    builder.add_link("Input9", "out", "Min3", "inA")
-    builder.add_link("Input10", "out", "Min3", "inB")
-    builder.add_link("Input11", "out", "Min3", "inC")
-    builder.add_link("Min1", "out", "Min4", "inA")
-    builder.add_link("Min2", "out", "Min4", "inB")
-    builder.add_link("Min3", "out", "Min4", "inC")
-    builder.add_link("Min4", "out", "Min_Final", "in16")
-
-    # --- Links for Maximum Logic ---
-    builder.add_link("Input1", "out", "Max1", "inA")
-    builder.add_link("Input2", "out", "Max1", "inB")
-    builder.add_link("Input3", "out", "Max1", "inC")
-    builder.add_link("Input4", "out", "Max1", "inD")
-    builder.add_link("Input5", "out", "Max2", "inA")
-    builder.add_link("Input6", "out", "Max2", "inB")
-    builder.add_link("Input7", "out", "Max2", "inC")
-    builder.add_link("Input8", "out", "Max2", "inD")
-    builder.add_link("Input9", "out", "Max3", "inA")
-    builder.add_link("Input10", "out", "Max3", "inB")
-    builder.add_link("Input11", "out", "Max3", "inC")
-    builder.add_link("Max1", "out", "Max4", "inA")
-    builder.add_link("Max2", "out", "Max4", "inB")
-    builder.add_link("Max3", "out", "Max4", "inC")
-    builder.add_link("Max4", "out", "Max_Final", "in16")
-
-    # 4. Save the file.
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-### Top-Level WireSheet Made from Python Script
-This example shows the same **Min/Max/Average** logic built directly on the **top-level wiresheet**:
-
-![Top-Level Layout](https://github.com/bbartling/pybog/blob/develop/snips/manualMinMaxAvgTopLevel.png)
-
-### Average Folder Contents
-This example shows the **Min/Max/Average** logic grouped within a dedicated folder:
-
-![Folder Layout](https://github.com/bbartling/pybog/blob/develop/snips/manualMinMaxAvgFolder.png)
-
-## The real question will be can AI create advanced supervisory level algorithms for HVAC in Wiresheet format perhaps in a style like this?
-
-</details>
-
-
-<details>
-<summary><strong>Bog Builder Test Plan: Common HVAC Algorithms</strong></summary>
-
-## Tested `.bog` Builder Scripts
-
-Here is a list of tested scripts that generate `.bog` files for **bog file building**.  
-Each one replicates real-world HVAC control logic as seen in actual JACE backups created by field DDC technicians.
-
----
-
-### ✅ Math and Logic Tests See [Simple Logic Examples](https://github.com/bbartling/pybog/tree/develop/examples/simple_logic):
-1. ✅ **four_in_add_logic.py**  
-   Simple 4-input adder (`Input1 + Input2 + Input3 + Input4`).
-
-2. ✅ **subtract_simple.py**  
-   Basic subtraction (`Input_A - Input_B`).
-
-3. ✅ **simple_math_logic.py**  
-   Multi-step math: `((Input_A + Input_B) * Input_C) / Input_D`.
-
-4. ✅ **addition_complicated.py**  
-   8-input adder organized with a **sub-folder** (`Input1-8 summed`).
-
-5. ✅ **average_min_max.py**  
-   Calculates **average**, **minimum**, and **maximum** across 11 inputs using **three organized sub-folders**.
-
-6. ✅ **bool_logic_playground.py**  
-   Playground for `AND`, `OR`, `XOR`, `NOT`, `EQUAL`, `NOT EQUAL`, `GT`, `GTE`, `LT`, `LTE`.
-
-7. ✅ **boolean_numeric_switch.py**  
-   Combines boolean logic with a numeric switch for selecting between math results.
-
-8. ✅ **zone_occ_setpoint_switch.py**  
-   Occupied/unoccupied zone setpoint selection using a **NumericSwitch**.
-
-9. ✅ **find_max_value.py**  
-   Finds the **maximum value** from 10 VAV damper positions using a tournament tree.
-
-10. ✅ **find_second_highest_of_6.py**  
-    Finds the **highest** and **second-highest** values from 6 inputs.
-
-
----
-
-### 🧠 Complex Algorithm Tests:
-TODO
-
----
-
-### 🧩 Advanced Supervisory Level Tests:
-
-TODO
-
-</details>
 
 
 ---
