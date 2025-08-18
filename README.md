@@ -1,41 +1,12 @@
 # pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-`bog_builder` is a Python package for constructing Niagara `.bog` files programmatically.
+`bog_builder` is a Python package for constructing Niagara Baja Object Graphs `.bog` files programmatically.
 
 ![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
-It exposes a `BogFolderBuilder` class which lets you assemble logic blocks, group them
-into sub‑folders, link them together, and save the result as a `.bog` archive.  All
-user input is validated via [Pydantic](https://docs.pydantic.dev/), so invalid names,
-component types or link definitions produce clear error messages rather than mysterious
-failures at runtime.  Time‑based properties such as delays and periods accept both
-millisecond strings and human‑friendly formats like ``"1s"`` or ``"1m"``.
 
-The repository follows a standard PyPI layout using a top‑level ``src/`` directory for
-the package code and a ``tests/`` folder containing functional examples.  The tests
-demonstrate how to use the builder API to reproduce a variety of Niagara Workbench
-programs—including average/min/max calculators, Boolean latches, ping‑pong counters and
-top‑N selection algorithms.  To run the tests, install the package in editable mode
-and invoke ``pytest``:
-
-```sh
-pip install -e .
-pytest
-```
-
-If you wish to see how specific Workbench examples are recreated programmatically,
-inspect the files under ``tests/test_more_examples.py`` and ``tests/test_workbench_examples.py``.
-Each test constructs a graph matching the corresponding script found at the root of
-this repository (e.g. ``manual_average_min_max.py``, ``ping_pong_counter.py``) and asserts
-that the resulting `.bog` file is created successfully.
-
-> **Note**
->
-> The tests expect the ``bog_builder`` package to be importable.  When running
-> tests without first installing the package, a ``conftest.py`` in the ``tests``
-> directory automatically adds the project’s ``src`` folder to ``sys.path`` so
-> that imports resolve correctly.  Alternatively, you can install the package
-> in editable mode prior to running the tests:
+## Local Python Project Setup
+On WSL in the root directory afer after cloning project run:
 >
 > ```sh
 > pip install -e .
@@ -43,8 +14,7 @@ that the resulting `.bog` file is created successfully.
 > ```
 >
 
-> **Note to uninstall bog_builer**
-> from within your virtual environment or wherever you installed it
+To uninstall bog_builer
 > ```sh
 > pip uninstall bog_builder
 > ```
@@ -52,31 +22,8 @@ that the resulting `.bog` file is created successfully.
 
 ## Building a simple thermostat
 
-The ``BogFolderBuilder`` can be used to assemble more complex control logic.  As an
-illustrative example, here’s how you might build a simple thermostat with heating,
-cooling and fan commands.  The thermostat exposes numeric and boolean writables for
-the current space temperature, setpoints, hysteresis, mode and fan‐auto selection, and
-produces outputs for each command:
 
-- ``SpaceTemp`` – current space temperature (numeric)
-- ``HeatSP`` – heating setpoint (numeric)
-- ``CoolSP`` – cooling setpoint (numeric)
-- ``Hysteresis`` – deadband around the setpoints (numeric)
-- ``Mode`` – 0=Off, 1=Heat, 2=Cool (numeric)
-- ``FanAuto`` – if ``False`` then the fan runs whenever either Heat or Cool is active (boolean)
-- ``Output_HeatCmd`` – command to enable heating (boolean)
-- ``Output_CoolCmd`` – command to enable cooling (boolean)
-- ``Output_FanCmd`` – command to enable the fan (boolean)
-
-The logic is as follows:
-
-* When ``Mode == 1`` (heat) **and** ``SpaceTemp < HeatSP − Hysteresis`` then ``HeatCmd`` is ``True``.
-* When ``Mode == 2`` (cool) **and** ``SpaceTemp > CoolSP + Hysteresis`` then ``CoolCmd`` is ``True``.
-* The fan command is ``True`` whenever either ``HeatCmd`` or ``CoolCmd`` is ``True``.  If ``FanAuto``
-  is ``False`` the fan runs regardless of the heating/cooling state.
-
-Here’s a complete example using the builder API to create this thermostat and
-write it to a ``.bog`` file:
+Here’s a complete example using the builder API to create this thermostat and write it to a ``.bog`` file which can then be imported to JACE via the Workbench tool:
 
 ```python
 from bog_builder import BogFolderBuilder
@@ -195,38 +142,6 @@ python build_thermostat.py -o "C:\Users\ben\Niagara4.11\JENEsys"
 This will create ``Thermostat.bog`` in the specified folder.  You can then import
 and test it within Niagara Workbench.
 
-## Creating a hot water reset block
-
-Linear reset blocks are another common pattern in Niagara programming.  A reset
-performs a linear interpolation between two pairs of limits.  For example,
-you might want to reset a hot water supply temperature setpoint based on
-outdoor air temperature.  The `Reset` component takes five inputs:
-
-* ``inA`` – the current process value (e.g. outdoor air temperature).
-* ``inputLowLimit`` and ``inputHighLimit`` – the range of the process value.
-* ``outputLowLimit`` and ``outputHighLimit`` – the corresponding range of the output.
-
-The output value is interpolated between ``outputLowLimit`` and
-``outputHighLimit`` depending on where ``inA`` sits between the input limits.
-
-The package ships with an example script `examples/hot_water_reset_example.py` that
-constructs a hot water reset.  The script defines numeric writables for the
-process value and its limits, instantiates a `kitControl:Reset` block with
-matching fallback values, wires up the inputs and output, and saves the
-resulting `.bog` file.  The generated XML mirrors the structure exported by
-Workbench, including nested `Link` elements under the target components and
-status slots on the `Reset` block.
-
-Run the example like so:
-
-```sh
-python examples/hot_water_reset_example.py -o "C:\Users\ben\Niagara4.11\JENEsys"
-```
-
-This creates ``HotWaterTempReset.bog`` in your chosen directory, ready for
-import into Workbench.  You can modify the limit values in the script to suit
-your application or use it as a template for chilled water resets.
-
 
 ## 👷 Write Your Own `.bog` File in XML from scratch
 
@@ -334,14 +249,7 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ## LLM‑friendly documentation and MCP server
 
-As your collection of example scripts grows it becomes challenging for
-a large language model (LLM) to discover all of the available usage
-patterns without reading each file individually.  To make this easier
-the package includes a utility for generating LLM‑friendly
-documentation.  The ``scripts/generate_llm_docs.py`` script walks the
-``examples`` directory and writes two files into a specified output
-directory:
-
+In the context directory you will find:
 * **llms.txt** – a simple sitemap listing each example file name
   along with its relative directory.  This file can be used by
   automation to locate individual examples.
@@ -355,7 +263,7 @@ To generate the documentation, run the following from the root of
 the repository:
 
 ```sh
-python scripts/generate_llm_docs.py --examples examples --output context
+python src\bog_builder\generate_llm_docs.py --examples examples --output context
 ```
 
 This command will create a ``context`` folder (if it does not
