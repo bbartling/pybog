@@ -2,9 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def create_comparison_node(builder, input_a_name, input_b_name, node_id):
@@ -38,14 +36,23 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
 
     return (max_switch_name, min_switch_name)
 
-def create_combine_node(builder, max1_name, second1_name, max2_name, second2_name, node_id):
+
+def create_combine_node(
+    builder, max1_name, second1_name, max2_name, second2_name, node_id
+):
     """
     Creates blocks to find the top two values from two pairs of (max, second_max).
     """
-    overall_max, min_of_maxes = create_comparison_node(builder, max1_name, max2_name, f"{node_id}_MaxCompare")
+    overall_max, min_of_maxes = create_comparison_node(
+        builder, max1_name, max2_name, f"{node_id}_MaxCompare"
+    )
 
-    intermediate_second, _ = create_comparison_node(builder, min_of_maxes, second1_name, f"{node_id}_Second_A")
-    overall_second, _ = create_comparison_node(builder, intermediate_second, second2_name, f"{node_id}_Second_B")
+    intermediate_second, _ = create_comparison_node(
+        builder, min_of_maxes, second1_name, f"{node_id}_Second_A"
+    )
+    overall_second, _ = create_comparison_node(
+        builder, intermediate_second, second2_name, f"{node_id}_Second_B"
+    )
 
     return (overall_max, overall_second)
 
@@ -58,10 +65,13 @@ def main():
         description="Build a .bog file to find the N and N-1 max values from 6 damper positions."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
-    
+
     script_filename = os.path.basename(__file__).replace(".py", "")
 
     builder = BogFolderBuilder("FindTopTwoOfSixDampers")
@@ -80,17 +90,23 @@ def main():
 
     tier1_results = []
     for i in range(3):
-        input_a = inputs[i*2]
-        input_b = inputs[i*2 + 1]
-        max_comp, min_comp = create_comparison_node(builder, input_a, input_b, f"T1_P{i}")
+        input_a = inputs[i * 2]
+        input_b = inputs[i * 2 + 1]
+        max_comp, min_comp = create_comparison_node(
+            builder, input_a, input_b, f"T1_P{i}"
+        )
         tier1_results.append((max_comp, min_comp))
-    
+
     max1, second1 = tier1_results[0]
     max2, second2 = tier1_results[1]
-    tier2_max, tier2_second = create_combine_node(builder, max1, second1, max2, second2, "T2_C0")
+    tier2_max, tier2_second = create_combine_node(
+        builder, max1, second1, max2, second2, "T2_C0"
+    )
 
     last_pair_max, last_pair_second = tier1_results[2]
-    final_max, final_second = create_combine_node(builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0")
+    final_max, final_second = create_combine_node(
+        builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0"
+    )
 
     builder.end_sub_folder()
 

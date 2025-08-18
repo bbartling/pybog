@@ -51,7 +51,9 @@ def test_bool_latch_playground(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def _create_comparison_node(builder: BogFolderBuilder, input_a_name: str, input_b_name: str, node_id: str) -> tuple[str, str]:
+def _create_comparison_node(
+    builder: BogFolderBuilder, input_a_name: str, input_b_name: str, node_id: str
+) -> tuple[str, str]:
     """Helper for building pairwise comparison logic: returns (max_switch, min_switch)."""
     gt_name = f"GT_{node_id}"
     max_switch_name = f"MaxSwitch_{node_id}"
@@ -70,11 +72,24 @@ def _create_comparison_node(builder: BogFolderBuilder, input_a_name: str, input_
     return max_switch_name, min_switch_name
 
 
-def _create_combine_node(builder: BogFolderBuilder, max1_name: str, second1_name: str, max2_name: str, second2_name: str, node_id: str) -> tuple[str, str]:
+def _create_combine_node(
+    builder: BogFolderBuilder,
+    max1_name: str,
+    second1_name: str,
+    max2_name: str,
+    second2_name: str,
+    node_id: str,
+) -> tuple[str, str]:
     """Combine two (max, second) pairs into a single (max, second) pair."""
-    overall_max, min_of_maxes = _create_comparison_node(builder, max1_name, max2_name, f"{node_id}_MaxCompare")
-    intermediate_second, _ = _create_comparison_node(builder, min_of_maxes, second1_name, f"{node_id}_Second_A")
-    overall_second, _ = _create_comparison_node(builder, intermediate_second, second2_name, f"{node_id}_Second_B")
+    overall_max, min_of_maxes = _create_comparison_node(
+        builder, max1_name, max2_name, f"{node_id}_MaxCompare"
+    )
+    intermediate_second, _ = _create_comparison_node(
+        builder, min_of_maxes, second1_name, f"{node_id}_Second_A"
+    )
+    overall_second, _ = _create_comparison_node(
+        builder, intermediate_second, second2_name, f"{node_id}_Second_B"
+    )
     return overall_max, overall_second
 
 
@@ -91,12 +106,18 @@ def test_find_second_highest_of_6(tmp_path: Path) -> None:
     for i in range(3):
         input_a = inputs[i * 2]
         input_b = inputs[i * 2 + 1]
-        tier1_results.append(_create_comparison_node(builder, input_a, input_b, f"T1_P{i}"))
+        tier1_results.append(
+            _create_comparison_node(builder, input_a, input_b, f"T1_P{i}")
+        )
     max1, second1 = tier1_results[0]
     max2, second2 = tier1_results[1]
-    tier2_max, tier2_second = _create_combine_node(builder, max1, second1, max2, second2, "T2_C0")
+    tier2_max, tier2_second = _create_combine_node(
+        builder, max1, second1, max2, second2, "T2_C0"
+    )
     last_pair_max, last_pair_second = tier1_results[2]
-    final_max, final_second = _create_combine_node(builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0")
+    final_max, final_second = _create_combine_node(
+        builder, tier2_max, tier2_second, last_pair_max, last_pair_second, "T3_C0"
+    )
     builder.end_sub_folder()
     builder.add_link(final_max, "out", "HighestDamperPosition", "in16")
     builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
@@ -269,7 +290,9 @@ def test_enum_schedule(tmp_path: Path) -> None:
         },
     )
     # Enum writable with the same facets and default fallback value duty1 (1@...)
-    builder.add_enum_writable("EnumWritable", facets=facets_map, default_value="1@{duty1=1,duty2=2,duty3=3}")
+    builder.add_enum_writable(
+        "EnumWritable", facets=facets_map, default_value="1@{duty1=1,duty2=2,duty3=3}"
+    )
     # Wire the schedule to the writable
     builder.add_link("EnumSchedule", "out", "EnumWritable", "in16")
     out_path = tmp_path / "enum_schedule.bog"
@@ -322,9 +345,17 @@ def test_manual_average_min_max(tmp_path: Path) -> None:
     builder.add_link("Avg4", "out", "Avg_Final", "in16")
     # Wiring for Min
     links_min = [
-        ("Input1", "Min1", "inA"), ("Input2", "Min1", "inB"), ("Input3", "Min1", "inC"), ("Input4", "Min1", "inD"),
-        ("Input5", "Min2", "inA"), ("Input6", "Min2", "inB"), ("Input7", "Min2", "inC"), ("Input8", "Min2", "inD"),
-        ("Input9", "Min3", "inA"), ("Input10", "Min3", "inB"), ("Input11", "Min3", "inC"),
+        ("Input1", "Min1", "inA"),
+        ("Input2", "Min1", "inB"),
+        ("Input3", "Min1", "inC"),
+        ("Input4", "Min1", "inD"),
+        ("Input5", "Min2", "inA"),
+        ("Input6", "Min2", "inB"),
+        ("Input7", "Min2", "inC"),
+        ("Input8", "Min2", "inD"),
+        ("Input9", "Min3", "inA"),
+        ("Input10", "Min3", "inB"),
+        ("Input11", "Min3", "inC"),
     ]
     for src, tgt, slot in links_min:
         builder.add_link(src, "out", tgt, slot)
@@ -334,9 +365,17 @@ def test_manual_average_min_max(tmp_path: Path) -> None:
     builder.add_link("Min4", "out", "Min_Final", "in16")
     # Wiring for Max
     links_max = [
-        ("Input1", "Max1", "inA"), ("Input2", "Max1", "inB"), ("Input3", "Max1", "inC"), ("Input4", "Max1", "inD"),
-        ("Input5", "Max2", "inA"), ("Input6", "Max2", "inB"), ("Input7", "Max2", "inC"), ("Input8", "Max2", "inD"),
-        ("Input9", "Max3", "inA"), ("Input10", "Max3", "inB"), ("Input11", "Max3", "inC"),
+        ("Input1", "Max1", "inA"),
+        ("Input2", "Max1", "inB"),
+        ("Input3", "Max1", "inC"),
+        ("Input4", "Max1", "inD"),
+        ("Input5", "Max2", "inA"),
+        ("Input6", "Max2", "inB"),
+        ("Input7", "Max2", "inC"),
+        ("Input8", "Max2", "inD"),
+        ("Input9", "Max3", "inA"),
+        ("Input10", "Max3", "inB"),
+        ("Input11", "Max3", "inC"),
     ]
     for src, tgt, slot in links_max:
         builder.add_link(src, "out", tgt, slot)
@@ -358,7 +397,9 @@ def test_ping_pong_counter(tmp_path: Path) -> None:
     builder.add_numeric_writable("LowLimit", -20.0)
     builder.add_boolean_writable("ManualResetCounter", default_value=False)
     builder.start_sub_folder("Logic")
-    builder.add_component("kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"})
+    builder.add_component(
+        "kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"}
+    )
     builder.add_component("kitControl:Counter", "Counter")
     builder.add_component("kitControl:OneShot", "IncrementUpOneShot")
     builder.add_component("kitControl:OneShot", "IncrementDownOneShot")
@@ -406,7 +447,9 @@ def test_test_periodic_trigger(tmp_path: Path) -> None:
     b.add_numeric_writable("Counter_Out", 0.0)
     # Interval subfolder
     b.start_sub_folder("Interval")
-    b.add_component("kitControl:BooleanDelay", "TickDelay", properties={"onDelay": "5000"})
+    b.add_component(
+        "kitControl:BooleanDelay", "TickDelay", properties={"onDelay": "5000"}
+    )
     b.add_component("kitControl:OneShot", "TickPulse")
     b.add_component("kitControl:Not", "PulseNot")
     b.add_component("kitControl:And", "Enable_AND_Hold")
@@ -420,7 +463,9 @@ def test_test_periodic_trigger(tmp_path: Path) -> None:
     # Increment subfolder
     b.start_sub_folder("Increment")
     b.add_component("kitControl:Add", "CounterPlusStep")
-    b.add_component("kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"})
+    b.add_component(
+        "kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"}
+    )
     b.add_numeric_switch("PulseGate")
     b.end_sub_folder()
     # Output stage
@@ -451,7 +496,9 @@ def test_test_periodic_trigger(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def _find_max_and_losers(builder: BogFolderBuilder, inputs: list[str], rank_label: str) -> tuple[str | None, list[str]]:
+def _find_max_and_losers(
+    builder: BogFolderBuilder, inputs: list[str], rank_label: str
+) -> tuple[str | None, list[str]]:
     """Tournament to find max value and collect losers."""
     if not inputs:
         return None, []
@@ -465,7 +512,9 @@ def _find_max_and_losers(builder: BogFolderBuilder, inputs: list[str], rank_labe
         for i in range(0, len(current_inputs) - 1, 2):
             a = current_inputs[i]
             b = current_inputs[i + 1]
-            max_node, min_node = _create_comparison_node(builder, a, b, f"{rank_label}_R{round_num}_P{i//2}")
+            max_node, min_node = _create_comparison_node(
+                builder, a, b, f"{rank_label}_R{round_num}_P{i//2}"
+            )
             next_round.append(max_node)
             losers.append(min_node)
         if len(current_inputs) % 2 == 1:
@@ -491,7 +540,9 @@ def test_top_five_of_fifteen(tmp_path: Path) -> None:
         if not remaining_candidates:
             break
         builder.start_sub_folder(f"Rank_{rank}")
-        winner, losers = _find_max_and_losers(builder, remaining_candidates, f"Rank{rank}")
+        winner, losers = _find_max_and_losers(
+            builder, remaining_candidates, f"Rank{rank}"
+        )
         builder.end_sub_folder()
         if winner:
             top_5_winners.append(winner)

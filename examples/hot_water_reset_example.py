@@ -1,43 +1,10 @@
-"""Example script for generating a hot water reset .bog file.
-
-This script demonstrates how to construct a linear hot water supply
-temperature reset using the :class:`BogFolderBuilder` from the
-``bog_builder`` package.  The reset linearly maps the outdoor air
-temperature (OAT) between low/high limits to a corresponding supply
-temperature setpoint between low and high limits.  The resulting
-.bog file can be imported directly into Niagara Workbench.
-
-Usage
------
-
-Run the script from the command line.  By default, the output is
-written into a folder named ``examples`` relative to the script
-location.  To specify a different directory, use the ``-o`` flag:
-
-```
-python hot_water_reset_example.py -o "C:\\Users\\ben\\Niagara4.11\\JENEsys"
-```
-
-This will generate ``HotWaterTempReset.bog`` in the provided path.  The
-top‑level folder in the .bog is named ``HotWaterTempReset`` to match
-Workbench conventions.
-"""
-
 from __future__ import annotations
 
 import argparse
 import os
 import sys
 
-# Attempt to import the installed bog_builder package.  If running this
-# example from a source checkout (``src`` layout), adjust sys.path
-try:
-    from bog_builder import BogFolderBuilder  # type: ignore
-except ImportError:
-    # Fallback: assume we're running from the repository root
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-    from bog_builder.builder import BogFolderBuilder  # type: ignore
-
+from bog_builder import BogFolderBuilder
 
 def build_hot_water_reset(output_directory: str) -> str:
     """Build the hot water reset .bog file.
@@ -96,7 +63,9 @@ def build_hot_water_reset(output_directory: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a hot water reset .bog file.")
+    parser = argparse.ArgumentParser(
+        description="Generate a hot water reset .bog file."
+    )
     parser.add_argument(
         "-o",
         "--output",

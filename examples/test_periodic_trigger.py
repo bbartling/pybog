@@ -1,12 +1,17 @@
 import sys, os, argparse
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder_new import BogFolderBuilder
+
+from bog_builder import BogFolderBuilder
 
 T_MS = "5000"
 
+
 def main():
-    parser = argparse.ArgumentParser(description="DIY interval: add 5 every 5s until Counter >= 20 (unit-delay fixed)")
-    parser.add_argument("-o", "--output_dir", default="examples", help="Output directory.")
+    parser = argparse.ArgumentParser(
+        description="DIY interval: add 5 every 5s until Counter >= 20 (unit-delay fixed)"
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
     args = parser.parse_args()
 
     script_filename = os.path.basename(__file__).replace(".py", "")
@@ -21,7 +26,9 @@ def main():
 
     # --------------- SUBFOLDER: Interval ---------------
     b.start_sub_folder("Interval")
-    b.add_component("kitControl:BooleanDelay", "TickDelay", properties={"onDelay": T_MS})
+    b.add_component(
+        "kitControl:BooleanDelay", "TickDelay", properties={"onDelay": T_MS}
+    )
     b.add_component("kitControl:OneShot", "TickPulse")
     b.add_component("kitControl:Not", "PulseNot")
     b.add_component("kitControl:And", "Enable_AND_Hold")
@@ -37,7 +44,9 @@ def main():
     # --------------- SUBFOLDER: Increment ---------------
     b.start_sub_folder("Increment")
     b.add_component("kitControl:Add", "CounterPlusStep")
-    b.add_component("kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"})
+    b.add_component(
+        "kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"}
+    )
     b.add_numeric_switch("PulseGate")
     b.end_sub_folder()
 
@@ -76,6 +85,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     b.save(output_path)
     print(f"\nCreated: {output_path}")
+
 
 if __name__ == "__main__":
     main()

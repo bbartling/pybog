@@ -55,7 +55,9 @@ def test_workbench_bool_latch_play_ground(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def _compare_pair(builder: BogFolderBuilder, a: str, b: str, node_id: str) -> tuple[str, str]:
+def _compare_pair(
+    builder: BogFolderBuilder, a: str, b: str, node_id: str
+) -> tuple[str, str]:
     """Helper to construct GreaterThan + two NumericSwitch blocks like the find_second example."""
     gt = f"GT_{node_id}"
     max_sw = f"MaxSwitch_{node_id}"
@@ -98,9 +100,15 @@ def test_workbench_find_second_highest_of_6(tmp_path: Path) -> None:
     t2_second, _ = _compare_pair(builder, inter_second, second2, "T2_C0_Second_B")
     # Tier 3: combine with last pair
     last_max, last_second = tier1[2]
-    final_max, min_of_t3_maxes = _compare_pair(builder, t2_max, last_max, "T3_C0_MaxCompare")
-    inter_second2, _ = _compare_pair(builder, min_of_t3_maxes, t2_second, "T3_C0_Second_A")
-    final_second, _ = _compare_pair(builder, inter_second2, last_second, "T3_C0_Second_B")
+    final_max, min_of_t3_maxes = _compare_pair(
+        builder, t2_max, last_max, "T3_C0_MaxCompare"
+    )
+    inter_second2, _ = _compare_pair(
+        builder, min_of_t3_maxes, t2_second, "T3_C0_Second_A"
+    )
+    final_second, _ = _compare_pair(
+        builder, inter_second2, last_second, "T3_C0_Second_B"
+    )
     builder.end_sub_folder()
     builder.add_link(final_max, "out", "HighestDamperPosition", "in16")
     builder.add_link(final_second, "out", "SecondHighestDamperPosition", "in16")
@@ -206,7 +214,9 @@ def test_workbench_ping_pong_counter(tmp_path: Path) -> None:
     builder.add_boolean_writable("ManualResetCounter", default_value=False)
     # Subfolder (Logic)
     builder.start_sub_folder("Logic")
-    builder.add_component("kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"})
+    builder.add_component(
+        "kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"}
+    )
     builder.add_component("kitControl:Counter", "Counter")
     builder.add_component("kitControl:OneShot", "IncrementUpOneShot")
     builder.add_component("kitControl:OneShot", "IncrementDownOneShot")
@@ -255,7 +265,9 @@ def test_workbench_test_periodic_trigger(tmp_path: Path) -> None:
     builder.add_numeric_writable("Counter_Out", 0.0)
     # Interval
     builder.start_sub_folder("Interval")
-    builder.add_component("kitControl:BooleanDelay", "TickDelay", properties={"onDelay": "5000"})
+    builder.add_component(
+        "kitControl:BooleanDelay", "TickDelay", properties={"onDelay": "5000"}
+    )
     builder.add_component("kitControl:OneShot", "TickPulse")
     builder.add_component("kitControl:Not", "PulseNot")
     builder.add_component("kitControl:And", "Enable_AND_Hold")
@@ -269,7 +281,9 @@ def test_workbench_test_periodic_trigger(tmp_path: Path) -> None:
     # Increment
     builder.start_sub_folder("Increment")
     builder.add_component("kitControl:Add", "CounterPlusStep")
-    builder.add_component("kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"})
+    builder.add_component(
+        "kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"}
+    )
     builder.add_numeric_switch("PulseGate")
     builder.end_sub_folder()
     # Output stage
@@ -301,7 +315,9 @@ def test_workbench_test_periodic_trigger(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def _tournament_find_max(builder: BogFolderBuilder, inputs: list[str], rank_label: str) -> tuple[str | None, list[str]]:
+def _tournament_find_max(
+    builder: BogFolderBuilder, inputs: list[str], rank_label: str
+) -> tuple[str | None, list[str]]:
     """Internal helper for the top_five_of_fifteen test (mimics script logic)."""
     if not inputs:
         return None, []
@@ -315,7 +331,9 @@ def _tournament_find_max(builder: BogFolderBuilder, inputs: list[str], rank_labe
         for i in range(0, len(current) - 1, 2):
             a = current[i]
             b = current[i + 1]
-            max_node, min_node = _compare_pair(builder, a, b, f"{rank_label}_R{round_num}_P{i//2}")
+            max_node, min_node = _compare_pair(
+                builder, a, b, f"{rank_label}_R{round_num}_P{i//2}"
+            )
             next_round.append(max_node)
             losers.append(min_node)
         if len(current) % 2 == 1:

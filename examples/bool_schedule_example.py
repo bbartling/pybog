@@ -1,27 +1,3 @@
-"""Example script for generating a simple boolean schedule.
-
-This script illustrates how to construct a very basic boolean schedule using
-``bog_builder``.  In Niagara, schedules are typically represented with
-``sch:BooleanSchedule`` objects that can be configured with date and time
-patterns.  The builder does not currently provide a high‑level API for
-composing the full schedule hierarchy (date ranges, weekly patterns, etc.),
-so this example creates a minimal schedule that simply outputs ``True`` at
-all times.  It then links the schedule's output to a boolean writable.
-
-To use this as a starting point for a more complex schedule, you could
-extend the example by adding properties to the ``BooleanSchedule`` component
-or by constructing the schedule tree manually via additional ``add_component``
-calls with ``sch:`` types.
-
-Run the script and specify an output directory with ``-o`` to write the
-resulting `.bog` file into your Workbench user folder.
-
-Example:
-
-```
-python bool_schedule_example.py -o "C:\\Users\\ben\\Niagara4.11\\JENEsys"
-```
-"""
 
 from __future__ import annotations
 
@@ -29,12 +5,8 @@ import argparse
 import os
 import sys
 
-try:
-    from bog_builder import BogFolderBuilder  # type: ignore
-except ImportError:
-    # Running from repository checkout
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-    from bog_builder.builder import BogFolderBuilder  # type: ignore
+
+from src.bog_builder import BogFolderBuilder
 
 
 def build_bool_schedule(output_directory: str) -> str:

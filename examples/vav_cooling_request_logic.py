@@ -2,9 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path to find the builder
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -19,7 +17,10 @@ def main():
         description="Build a .bog file for VAV Cooling Request logic."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -34,11 +35,12 @@ def main():
     # --- Inputs ---
     builder.add_numeric_writable("ZoneTemp", default_value=78.0)
     builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
-    builder.add_numeric_writable("ZoneDemand", default_value=96.0) # Represents the cooling loop command
+    builder.add_numeric_writable(
+        "ZoneDemand", default_value=96.0
+    )  # Represents the cooling loop command
 
     # --- Outputs ---
     builder.add_numeric_writable("VAVCoolingRequestsTotal")
-
 
     # 3. Build the logic, encapsulating each part in its own sub-folder.
     print("Creating and organizing logic components in sub-folders...")
@@ -54,32 +56,43 @@ def main():
     # --- Sub-Folder for 3 Requests Logic (Temp > SP + 5F) ---
     builder.start_sub_folder("Generate3RequestsLogic")
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
-    builder.add_component("kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}) # 2 minutes
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
+    )  # 2 minutes
     builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_component("kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0})
+    builder.add_component(
+        "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
+    )
     builder.end_sub_folder()
-    
+
     # --- Sub-Folder for 2 Requests Logic (Temp > SP + 3F) ---
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
-    builder.add_component("kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}) # 2 minutes
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
+    )  # 2 minutes
     builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_component("kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0})
+    builder.add_component(
+        "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}
+    )
     builder.end_sub_folder()
 
     # --- Sub-Folder for 1 Request Logic (ZoneDemand > 95%) ---
     builder.start_sub_folder("Generate1RequestLogic")
     builder.add_component("kitControl:GreaterThan", "Demand_GT_95")
     builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_component("kitControl:NumericConst", "Const_95", properties={"out": 95.0})
-    builder.add_component("kitControl:NumericConst", "Const_1_Req", properties={"out": 1.0})
+    builder.add_component(
+        "kitControl:NumericConst", "Const_95", properties={"out": 95.0}
+    )
+    builder.add_component(
+        "kitControl:NumericConst", "Const_1_Req", properties={"out": 1.0}
+    )
     builder.end_sub_folder()
 
     # --- Sub-Folder for Final Prioritization ---
     builder.start_sub_folder("Prioritization")
     builder.add_component("kitControl:Maximum", "Maximum")
     builder.end_sub_folder()
-
 
     # 4. Register all links to define the data flow.
     print("Wiring components across all folders...")
@@ -115,7 +128,6 @@ def main():
     builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
     builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
     builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
-
 
     # 5. Save the file.
     bog_filename = f"{script_filename}.bog"

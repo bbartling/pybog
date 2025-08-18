@@ -58,7 +58,10 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         "outputs": ["out"],
     },
     # Boolean latch: supports in, clock, set, reset inputs and an out output
-    "kitControl:BooleanLatch": {"inputs": ["in", "clock", "set", "reset"], "outputs": ["out"]},
+    "kitControl:BooleanLatch": {
+        "inputs": ["in", "clock", "set", "reset"],
+        "outputs": ["out"],
+    },
     # OneShot: pulse edge detector.  Single input and output.
     "kitControl:OneShot": {"inputs": ["in"], "outputs": ["out"]},
     # BooleanDelay and NumericDelay provide a delayed copy of their input.
@@ -81,7 +84,6 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "control:BooleanWritable": {"outputs": ["out"]},
     # Constants
     "kitControl:NumericConst": {"inputs": [], "outputs": ["out"]},
-
     # Reset block: linear interpolation between input and two limit pairs
     # The Reset block accepts five inputs (inA, inputLowLimit, inputHighLimit,
     # outputLowLimit, outputHighLimit) and produces a single out output.  This
@@ -108,7 +110,6 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         ],
         "outputs": ["out"],
     },
-
     # Boolean schedule: schedules from the schedule palette have a single
     # ``out`` slot which conveys the active boolean value.  We omit inputs since
     # schedules are configured via properties rather than links.
@@ -246,7 +247,10 @@ class LinkDefinition(BaseModel):
         validator triggers after all fields have been validated and constructed
         into a model instance.
         """
-        if model.source_name == model.target_name and model.source_slot == model.target_slot:
+        if (
+            model.source_name == model.target_name
+            and model.source_slot == model.target_slot
+        ):
             raise ValueError(
                 f"Invalid link: source ({model.source_name}:{model.source_slot}) and target "
                 f"({model.target_name}:{model.target_slot}) are identical."

@@ -86,9 +86,17 @@ def test_average_min_max(tmp_path: Path) -> None:
     builder.add_link("Avg4", "out", "Avg_Final", "in16")
     # Wiring for Minimum
     links_min = [
-        ("Input1", "Min1", "inA"), ("Input2", "Min1", "inB"), ("Input3", "Min1", "inC"), ("Input4", "Min1", "inD"),
-        ("Input5", "Min2", "inA"), ("Input6", "Min2", "inB"), ("Input7", "Min2", "inC"), ("Input8", "Min2", "inD"),
-        ("Input9", "Min3", "inA"), ("Input10", "Min3", "inB"), ("Input11", "Min3", "inC"),
+        ("Input1", "Min1", "inA"),
+        ("Input2", "Min1", "inB"),
+        ("Input3", "Min1", "inC"),
+        ("Input4", "Min1", "inD"),
+        ("Input5", "Min2", "inA"),
+        ("Input6", "Min2", "inB"),
+        ("Input7", "Min2", "inC"),
+        ("Input8", "Min2", "inD"),
+        ("Input9", "Min3", "inA"),
+        ("Input10", "Min3", "inB"),
+        ("Input11", "Min3", "inC"),
     ]
     for src, tgt, slot in links_min:
         builder.add_link(src, "out", tgt, slot)
@@ -98,9 +106,17 @@ def test_average_min_max(tmp_path: Path) -> None:
     builder.add_link("Min4", "out", "Min_Final", "in16")
     # Wiring for Maximum
     links_max = [
-        ("Input1", "Max1", "inA"), ("Input2", "Max1", "inB"), ("Input3", "Max1", "inC"), ("Input4", "Max1", "inD"),
-        ("Input5", "Max2", "inA"), ("Input6", "Max2", "inB"), ("Input7", "Max2", "inC"), ("Input8", "Max2", "inD"),
-        ("Input9", "Max3", "inA"), ("Input10", "Max3", "inB"), ("Input11", "Max3", "inC"),
+        ("Input1", "Max1", "inA"),
+        ("Input2", "Max1", "inB"),
+        ("Input3", "Max1", "inC"),
+        ("Input4", "Max1", "inD"),
+        ("Input5", "Max2", "inA"),
+        ("Input6", "Max2", "inB"),
+        ("Input7", "Max2", "inC"),
+        ("Input8", "Max2", "inD"),
+        ("Input9", "Max3", "inA"),
+        ("Input10", "Max3", "inB"),
+        ("Input11", "Max3", "inC"),
     ]
     for src, tgt, slot in links_max:
         builder.add_link(src, "out", tgt, slot)
@@ -222,7 +238,9 @@ def test_counter_smoke_test(tmp_path: Path) -> None:
     builder.add_multi_vibrator("Pulse", period_ms="2000")
     builder.add_component("kitControl:OneShot", "PulseEdge")
     builder.add_component(
-        "kitControl:BooleanDelay", "Delay", properties={"onDelay": "3000", "offDelay": "0"}
+        "kitControl:BooleanDelay",
+        "Delay",
+        properties={"onDelay": "3000", "offDelay": "0"},
     )
     builder.add_counter("C", count_increment=1.0, initial_value=0.0)
     builder.add_link("Pulse", "out", "PulseEdge", "in")
@@ -242,7 +260,7 @@ def test_find_max_value(tmp_path: Path) -> None:
     inputs = [f"VAV_{i}" for i in range(1, 11)]
     for name in inputs:
         # use numeric part of name for default_value
-        builder.add_numeric_writable(name, default_value=float(name.split('_')[1]))
+        builder.add_numeric_writable(name, default_value=float(name.split("_")[1]))
     builder.add_numeric_writable("MaxValue")
     builder.start_sub_folder("CalculationLogic")
     current_tier_outputs = inputs[:]

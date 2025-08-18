@@ -1,6 +1,8 @@
-# Bog Builder
+# pybog: A Python Toolkit for Niagara BOG & DIST Files
 
 `bog_builder` is a Python package for constructing Niagara `.bog` files programmatically.
+
+![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
 It exposes a `BogFolderBuilder` class which lets you assemble logic blocks, group them
 into sub‑folders, link them together, and save the result as a `.bog` archive.  All
@@ -38,6 +40,13 @@ that the resulting `.bog` file is created successfully.
 > ```sh
 > pip install -e .
 > pytest
+> ```
+>
+
+> **Note to uninstall bog_builer**
+> from within your virtual environment or wherever you installed it
+> ```sh
+> pip uninstall bog_builder
 > ```
 >
 
@@ -320,6 +329,108 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ![Adder Logic Created with Python](snips/addrMadeWithPy.jpg)
 
+
+---
+
+## LLM‑friendly documentation and MCP server
+
+As your collection of example scripts grows it becomes challenging for
+a large language model (LLM) to discover all of the available usage
+patterns without reading each file individually.  To make this easier
+the package includes a utility for generating LLM‑friendly
+documentation.  The ``scripts/generate_llm_docs.py`` script walks the
+``examples`` directory and writes two files into a specified output
+directory:
+
+* **llms.txt** – a simple sitemap listing each example file name
+  along with its relative directory.  This file can be used by
+  automation to locate individual examples.
+* **llms-full.txt** – the full source code of every example with
+  clear delimiters.  Each section begins with ``=== FILE: ... ===``
+  followed by the directory, the code contents, and an ``=== CODE END ===``
+  marker.  These files can be consumed directly by LLMs to provide
+  them with concrete examples of using the builder API.
+
+To generate the documentation, run the following from the root of
+the repository:
+
+```sh
+python scripts/generate_llm_docs.py --examples examples --output context
+```
+
+This command will create a ``context`` folder (if it does not
+already exist) and populate it with ``llms.txt`` and ``llms-full.txt``.
+
+In addition to the documentation generator, the repository contains
+``mcp_server.py``, a lightweight HTTP service powered by
+[FastAPI](https://fastapi.tiangolo.com/).  While not a complete
+implementation of the Model Context Protocol, it demonstrates how to
+expose your example scripts as callable endpoints – much like the
+``@tool`` decorator in FastMCP.  You can run the service locally
+with:
+
+```sh
+uvicorn bog_pkg_mod.mcp_server:app --reload
+```
+
+Once running, a ``GET`` request to ``/examples`` returns the list of
+available example scripts.  A ``POST`` request to
+``/examples/{example_name}`` with an optional JSON body containing an
+``output_dir`` will execute the named script and write its `.bog`
+output to the specified directory.  The response includes the
+standard output and error streams so you can inspect any issues.
+
+## Traversing Baja Object Graphs
+
+Niagara represents the contents of a station as a directed graph of
+objects and properties.  When working with the raw XML stored inside
+``.bog`` and ``.dist`` archives you are effectively traversing this
+graph.  The graph is not strictly hierarchical: components can have
+links and references to other components across folders, and cycles
+may exist in more complex projects.  The following best practices
+apply when traversing Baja object graphs programmatically:
+
+* **Parse once, traverse many.**  Extract the ``file.xml`` contents
+  into an ``xml.etree.ElementTree`` and hold onto the root element.
+  Re‑parsing the XML repeatedly is expensive.
+* **Use breadth‑first or depth‑first search with a visited set.**
+  Each component element has a unique handle (the ``h`` attribute).
+  Keep a set of visited handles to avoid infinite loops when
+  following links and references.
+* **Follow both containment and link relationships.**  Components are
+  nested via ``<p h=...>`` elements, but logical connections are
+  represented via ``b:Link`` child elements.  To reconstruct the
+  full dependency graph you must consider both.
+* **Build a handle→name map.**  It is common to refer to components
+  by their handle in link definitions (e.g. ``s="h:123"``).  Create
+  a dictionary mapping ``h:<handle>`` strings to component names so
+  you can resolve these references during traversal.
+* **Be mindful of palettes.**  The ``type`` attribute on each
+  component encodes the palette and the block name (e.g.
+  ``kitControl:Add``).  Grouping components by palette can help
+  narrow your search or generate statistics.
+
+The ``Analyzer`` class in ``bog_builder.analyzer`` encapsulates these
+patterns.  It parses a station or BOG file, extracts a flat list of
+components along with their properties and links, and can build a
+handle map for you.  Beyond basic analysis, it includes helpers to
+count how many ``kitControl`` components of each type are used and
+generate visualisations of this data.  For example, to analyse a
+``.dist`` file and produce bar and pie charts summarising the
+kitControl blocks it contains:
+
+```sh
+python -m bog_builder.analyzer path/to/station.dist --count --plots analysis/plots
+```
+
+This command writes JSON analysis to stdout, prints a sorted list of
+kitControl counts, and saves two images into ``analysis/plots``: one
+bar chart and one pie chart.  These charts can provide insight into
+which Niagara control blocks are most common in a given station.
+
+---
+
+[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
 
 ---
 

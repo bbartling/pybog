@@ -9,5 +9,11 @@ description = "Niagara .bog file builder with robust Pydantic validation"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "pydantic>=2.0"
+    "pydantic>=2.0",
+    "fastapi[all]",  # Adds fastapi and an ASGI server like uvicorn
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
 ]

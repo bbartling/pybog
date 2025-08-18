@@ -2,10 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -28,7 +25,7 @@ def main():
     # --- Inputs ---
     builder.add_numeric_writable(name="Input_A", default_value=100.0)
     builder.add_numeric_writable(name="Input_B", default_value=40.0)
-    
+
     # --- Output ---
     builder.add_numeric_writable(name="Difference")
 

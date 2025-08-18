@@ -23,6 +23,16 @@ from .models import (
     _parse_time_to_ms,
 )
 
+# Optionally expose the Analyzer for users who want to inspect existing
+# Niagara archives.  The import is done lazily so that environments
+# without matplotlib can still import bog_builder without pulling in
+# heavy dependencies.  If the analyzer cannot be imported it will
+# simply be absent from __all__.
+try:
+    from .analyzer import Analyzer  # type: ignore
+except Exception:
+    Analyzer = None
+
 __all__ = [
     "BogFolderBuilder",
     "ComponentDefinition",
@@ -30,4 +40,5 @@ __all__ = [
     "ReductionBlockDefinition",
     "COMPONENT_SLOT_MAP",
     "_parse_time_to_ms",
+    "Analyzer",
 ]

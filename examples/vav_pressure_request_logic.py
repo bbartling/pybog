@@ -2,9 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path to find the builder
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -19,7 +17,10 @@ def main():
         description="Build a .bog file for VAV Static Pressure Request logic."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -33,13 +34,14 @@ def main():
 
     # --- Inputs ---
     builder.add_numeric_writable("VavDamperCmd", default_value=96.0)
-    builder.add_numeric_writable("VavDamperSpt", default_value=95.0) # From manual build
+    builder.add_numeric_writable(
+        "VavDamperSpt", default_value=95.0
+    )  # From manual build
     builder.add_numeric_writable("VavFlow", default_value=580.0)
     builder.add_numeric_writable("VavFlowSpt", default_value=970.0)
 
     # --- Outputs ---
     builder.add_numeric_writable("VAVrequestsTotal")
-
 
     # 3. Build the logic, encapsulating each part in its own sub-folder.
     print("Creating and organizing logic components in sub-folders...")
@@ -49,8 +51,12 @@ def main():
     builder.add_component("kitControl:Multiply", "Calc_50_percent")
     builder.add_component("kitControl:Multiply", "Calc_70_percent")
     # MODIFIED: Create explicit NumericConst blocks for the constant values.
-    builder.add_component("kitControl:NumericConst", "Const_0_5", properties={"out": 0.5})
-    builder.add_component("kitControl:NumericConst", "Const_0_7", properties={"out": 0.7})
+    builder.add_component(
+        "kitControl:NumericConst", "Const_0_5", properties={"out": 0.5}
+    )
+    builder.add_component(
+        "kitControl:NumericConst", "Const_0_7", properties={"out": 0.7}
+    )
     builder.end_sub_folder()
 
     # --- Sub-Folder for 3 Requests Logic ---
@@ -58,23 +64,29 @@ def main():
     builder.add_component("kitControl:LessThan", "LessThan_Flow_50pct")
     builder.add_component("kitControl:GreaterThan", "GreaterThan_Damper_95")
     builder.add_component("kitControl:And", "Generate3requests")
-    builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay1", properties={"onDelay": "60000"})
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_1min_Delay1", properties={"onDelay": "60000"}
+    )
     builder.add_numeric_switch("NumericSwitch_3_Req")
     builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
     builder.end_sub_folder()
-    
+
     # --- Sub-Folder for 2 Requests Logic ---
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_component("kitControl:LessThan", "LessThan_Flow_70pct")
     builder.add_component("kitControl:And", "Generate2requests")
-    builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay2", properties={"onDelay": "60000"})
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_1min_Delay2", properties={"onDelay": "60000"}
+    )
     builder.add_numeric_switch("NumericSwitch_2_Req")
     builder.add_component("kitControl:NumericConst", "Const_2", properties={"out": 2.0})
     builder.end_sub_folder()
 
     # --- Sub-Folder for 1 Request Logic ---
     builder.start_sub_folder("Generate1RequestLogic")
-    builder.add_component("kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"})
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"}
+    )
     builder.add_numeric_switch("NumericSwitch_1_Req")
     builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
     builder.end_sub_folder()
@@ -83,7 +95,6 @@ def main():
     builder.start_sub_folder("Prioritization")
     builder.add_component("kitControl:Maximum", "Maximum")
     builder.end_sub_folder()
-
 
     # 4. Register all links to define the data flow.
     print("Wiring components across all folders...")
@@ -125,7 +136,6 @@ def main():
     builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
     builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
     builder.add_link("Maximum", "out", "VAVrequestsTotal", "in16")
-
 
     # 5. Save the file.
     bog_filename = f"{script_filename}.bog"

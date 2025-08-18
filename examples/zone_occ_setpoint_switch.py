@@ -2,9 +2,8 @@ import sys
 import os
 import argparse
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -20,24 +19,16 @@ def main():
     builder = BogFolderBuilder("Zone_Occ_Setpoint_Switch", debug=True)
 
     # --- Inputs ---
-    builder.add_boolean_writable(
-        "Occ_Schedule", default_value=False
-    )
-    builder.add_numeric_writable(
-        "Occ_Zone_Setpoint", default_value=72.0
-    )
-    builder.add_numeric_writable(
-        "Unocc_Zone_Setpoint", default_value=78.0
-    )
+    builder.add_boolean_writable("Occ_Schedule", default_value=False)
+    builder.add_numeric_writable("Occ_Zone_Setpoint", default_value=72.0)
+    builder.add_numeric_writable("Unocc_Zone_Setpoint", default_value=78.0)
 
     # --- Output ---
     builder.add_numeric_writable("Zone_Temp_SPt")
 
     builder.start_sub_folder("SetpointLogic")
 
-    builder.add_numeric_switch(
-        "Zone_Setpoint_Switch"
-    ) 
+    builder.add_numeric_switch("Zone_Setpoint_Switch")
 
     builder.end_sub_folder()
 

@@ -2,10 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -27,7 +24,7 @@ def main():
     builder = BogFolderBuilder("ComplexMathEquation")
 
     builder.start_sub_folder("CalculationLogic")
-    
+
     # --- Inputs ---
     builder.add_numeric_writable(name="Input_A", default_value=20.0)
     builder.add_numeric_writable(name="Input_B", default_value=10.0)

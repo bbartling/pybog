@@ -64,7 +64,7 @@ class BogFolderBuilder:
         self.START_X = 10
         self.START_Y = 10
         self.X_COLUMN_WIDTH = 20  # Increased for better visual separation
-        self.Y_INCREMENT = 15     # Increased for better visual separation
+        self.Y_INCREMENT = 15  # Increased for better visual separation
 
     # ------------------------------------------------------------------
     # Logging
@@ -208,9 +208,17 @@ class BogFolderBuilder:
         self._component_to_folder[comp_def.name] = self._current_folder_path
 
     # Helper methods for common component types
-    def add_numeric_writable(self, name: str, default_value: float = 0.0, precision: int = 2, units: str = "u:null") -> None:
+    def add_numeric_writable(
+        self,
+        name: str,
+        default_value: float = 0.0,
+        precision: int = 2,
+        units: str = "u:null",
+    ) -> None:
         """Add a NumericWritable with sensible default facets."""
-        facets_value = f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
+        facets_value = (
+            f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
+        )
         self.add_component(
             "control:NumericWritable",
             name,
@@ -229,7 +237,9 @@ class BogFolderBuilder:
             properties={"fallback": {"value": str(default_value).lower()}},
         )
 
-    def add_enum_writable(self, name: str, facets: str, default_value: str = "0") -> None:
+    def add_enum_writable(
+        self, name: str, facets: str, default_value: str = "0"
+    ) -> None:
         """
         Add an EnumWritable with a facets mapping and an initial fallback value.
 
@@ -264,7 +274,9 @@ class BogFolderBuilder:
 
     def add_numeric_select(self, name: str) -> None:
         """Adds a NumericSelect component with default 10 inputs (A‑J)."""
-        self.add_component("kitControl:NumericSelect", name, properties={"numberValues": "10"})
+        self.add_component(
+            "kitControl:NumericSelect", name, properties={"numberValues": "10"}
+        )
 
     def add_multi_vibrator(self, name: str, period_ms: str | int = "10000") -> None:
         """Add a MultiVibrator component.
@@ -541,7 +553,10 @@ class BogFolderBuilder:
     ) -> None:
         """Builds the XML for a single folder, flattening only sub‑folder icons at the top level."""
         folder_name = folder_path_tuple[-1]
-        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
+        self.log(
+            f"--- Building folder: {'/'.join(folder_path_tuple)} ---",
+            is_layout_log=True,
+        )
         # Create XML <p> element for this folder
         folder_element = ET.SubElement(
             parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"}
@@ -578,12 +593,17 @@ class BogFolderBuilder:
         self._add_link_xml_tags(folder_element, links_targeting_this_folder)
         # Recurse into subfolders
         for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
-            self.log(f"About to recurse into sub‑folder: {sub_folder_name}", is_layout_log=True)
+            self.log(
+                f"About to recurse into sub‑folder: {sub_folder_name}",
+                is_layout_log=True,
+            )
             self._build_folder_contents(
                 folder_element, folder_path_tuple + (sub_folder_name,)
             )
 
-    def _position_top_level_interface(self, components: Dict[str, Dict], sub_folders: List[str]) -> Dict[str, Tuple[int, int]]:
+    def _position_top_level_interface(
+        self, components: Dict[str, Dict], sub_folders: List[str]
+    ) -> Dict[str, Tuple[int, int]]:
         """Special layout for the root folder: Inputs (left) | Folders (center) | Outputs (right)."""
         self.log("Using TOP‑LEVEL interface layout.", is_layout_log=True)
         coords: Dict[str, Tuple[int, int]] = {}
@@ -608,37 +628,56 @@ class BogFolderBuilder:
         y = self.START_Y
         for name in sorted(inputs):
             coords[name] = (self.START_X, y)
-            self.log(f"Positioned INPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            self.log(
+                f"Positioned INPUT '{name}' at ({coords[name][0]}, {coords[name][1]})",
+                is_layout_log=True,
+            )
             y += self.Y_INCREMENT
         # Place SUB‑FOLDERS (middle column, flat at START_Y)
         folder_x = self.START_X + self.X_COLUMN_WIDTH * 3
         for folder_name in sorted(sub_folders):
             coords[folder_name] = (folder_x, self.START_Y)
-            self.log(f"Positioned FOLDER '{folder_name}' flat at ({coords[folder_name][0]}, {coords[folder_name][1]})", is_layout_log=True)
+            self.log(
+                f"Positioned FOLDER '{folder_name}' flat at ({coords[folder_name][0]}, {coords[folder_name][1]})",
+                is_layout_log=True,
+            )
         # Place OUTPUTS (right column)
         y = self.START_Y
         output_x = self.START_X + self.X_COLUMN_WIDTH * 3
         for name in sorted(outputs):
             coords[name] = (output_x, y)
-            self.log(f"Positioned OUTPUT '{name}' at ({coords[name][0]}, {coords[name][1]})", is_layout_log=True)
+            self.log(
+                f"Positioned OUTPUT '{name}' at ({coords[name][0]}, {coords[name][1]})",
+                is_layout_log=True,
+            )
             y += self.Y_INCREMENT
         return coords
 
-    def _position_components_normally(self, levels: List[List[str]]) -> Dict[str, Tuple[int, int]]:
+    def _position_components_normally(
+        self, levels: List[List[str]]
+    ) -> Dict[str, Tuple[int, int]]:
         """Calculates X,Y coordinates for components inside a logic folder."""
-        self.log(f"Using NORMAL component layout across {len(levels)} tiers.", is_layout_log=True)
+        self.log(
+            f"Using NORMAL component layout across {len(levels)} tiers.",
+            is_layout_log=True,
+        )
         comp_coords: Dict[str, Tuple[int, int]] = {}
         current_x = self.START_X
         for i, level in enumerate(levels):
             y_pos = self.START_Y
-            self.log(f"  Positioning Tier {i + 1} with {len(level)} components.", is_layout_log=True)
+            self.log(
+                f"  Positioning Tier {i + 1} with {len(level)} components.",
+                is_layout_log=True,
+            )
             for name in level:
                 comp_coords[name] = (current_x, y_pos)
                 y_pos += self.Y_INCREMENT
             current_x += self.X_COLUMN_WIDTH
         return comp_coords
 
-    def _calculate_levels(self, components_in_scope: Dict[str, Dict]) -> List[List[str]]:
+    def _calculate_levels(
+        self, components_in_scope: Dict[str, Dict]
+    ) -> List[List[str]]:
         """Performs a topological sort to determine the layout tiers."""
         in_degree = {name: 0 for name in components_in_scope}
         adj: Dict[str, List[str]] = defaultdict(list)
@@ -677,6 +716,7 @@ class BogFolderBuilder:
         t_type = self._components[target_name]["type"]
         link_type = "b:Link"
         converter_type = None
+
         # Helpers to determine whether a slot expects boolean or numeric values
         def target_is_boolean_like(t: str, slot: str) -> bool:
             # Boolean blocks / slots that expect boolean input
@@ -692,6 +732,7 @@ class BogFolderBuilder:
             if t == "kitControl:NumericSwitch" and slot == "inSwitch":
                 return True
             return False
+
         def target_is_numeric_like(t: str, slot: str) -> bool:
             # Numeric math / clamp blocks or numeric inputs
             if t.startswith("kitControl:") and t.split(":")[1] in (
@@ -706,6 +747,7 @@ class BogFolderBuilder:
                 return True
             # Generic heuristic: many kitControl numeric blocks use StatusNumeric on 'in*'
             return "Numeric" in t
+
         # 1) Enum case: NumericSelect.select expects enum (from numeric)
         if t_type == "kitControl:NumericSelect" and target_slot == "select":
             link_type = "b:ConversionLink"
@@ -735,7 +777,10 @@ class BogFolderBuilder:
         )
 
     def _add_component_xml_tags(
-        self, folder_element: ET.Element, components: Dict[str, Dict], coords: Dict[str, Tuple[int, int]]
+        self,
+        folder_element: ET.Element,
+        components: Dict[str, Dict],
+        coords: Dict[str, Tuple[int, int]],
     ) -> None:
         """Adds the <p> tags for components to the XML tree."""
         for name, data in components.items():
@@ -786,7 +831,10 @@ class BogFolderBuilder:
                 ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
                 # emit facets if provided
                 facets_prop = data["properties"].get("facets")
-                if isinstance(facets_prop, dict) and facets_prop.get("type") == "b:Facets":
+                if (
+                    isinstance(facets_prop, dict)
+                    and facets_prop.get("type") == "b:Facets"
+                ):
                     ET.SubElement(
                         element,
                         "p",
@@ -915,7 +963,9 @@ class BogFolderBuilder:
                     ET.SubElement(out_slot, "p", {"n": "value", "v": str(init_out)})
                 precision = props.get("precision")
                 if precision is not None:
-                    ET.SubElement(out_slot, "p", {"n": "precision", "v": str(int(precision))})
+                    ET.SubElement(
+                        out_slot, "p", {"n": "precision", "v": str(int(precision))}
+                    )
                 ET.SubElement(
                     element, "p", {"n": "countUp", "f": "sL", "t": "b:StatusBoolean"}
                 )
@@ -987,7 +1037,10 @@ class BogFolderBuilder:
                     ET.SubElement(
                         slot_el,
                         "p",
-                        {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
+                        {
+                            "n": "status",
+                            "v": "0;activeLevel=e:17@control:PriorityLevel",
+                        },
                     )
             elif data["type"] == "kitControl:LoopPoint":
                 # LoopPoint implements a PID control loop.  It exposes a
@@ -1008,7 +1061,9 @@ class BogFolderBuilder:
                     "p",
                     {"n": "loopEnable", "f": "L", "t": "b:StatusBoolean"},
                 )
-                ET.SubElement(enable_slot, "p", {"n": "value", "v": str(loop_enable_val).lower()})
+                ET.SubElement(
+                    enable_slot, "p", {"n": "value", "v": str(loop_enable_val).lower()}
+                )
                 ET.SubElement(
                     enable_slot,
                     "p",
@@ -1150,7 +1205,11 @@ class BogFolderBuilder:
                 # enumeration.
                 facets_val = props.get("facets")
                 if facets_val is not None:
-                    ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": str(facets_val)})
+                    ET.SubElement(
+                        element,
+                        "p",
+                        {"n": "facets", "t": "b:Facets", "v": str(facets_val)},
+                    )
                 # Determine the out value.  Accept either a dict with a
                 # ``value`` key or a bare string.  Default to ``0``.
                 out_val = "0"
@@ -1168,7 +1227,9 @@ class BogFolderBuilder:
             elif data["type"] == "sch:BooleanSchedule":
                 # BooleanSchedule outputs a boolean status.  Use the provided
                 # ``out`` property to initialise the default value if supplied.
-                out_prop = data["properties"].get("out") if data.get("properties") else None
+                out_prop = (
+                    data["properties"].get("out") if data.get("properties") else None
+                )
                 val = False
                 if isinstance(out_prop, dict):
                     val = bool(out_prop.get("value", val))
@@ -1230,14 +1291,24 @@ class BogFolderBuilder:
             link_counters[target_name] += 1
             # Create the link element.  Use the specified link_type if provided.
             link_type = link.get("link_type", "b:Link")
-            link_element = ET.SubElement(target_element, "p", {"n": link_name, "t": link_type})
+            link_element = ET.SubElement(
+                target_element, "p", {"n": link_name, "t": link_type}
+            )
             # Add required child properties.  relationTags is always empty and relationId
             # is "n:dataLink" for standard data links.
-            ET.SubElement(link_element, "p", {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"})
+            ET.SubElement(
+                link_element,
+                "p",
+                {"n": "sourceOrd", "v": f"h:{self._handle_map[link['source_name']]}"},
+            )
             ET.SubElement(link_element, "p", {"n": "relationTags", "v": ""})
             ET.SubElement(link_element, "p", {"n": "relationId", "v": "n:dataLink"})
-            ET.SubElement(link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]})
-            ET.SubElement(link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]})
+            ET.SubElement(
+                link_element, "p", {"n": "sourceSlotName", "v": link["source_slot"]}
+            )
+            ET.SubElement(
+                link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]}
+            )
             # If a converter type is specified, include a converter definition with
             # the appropriate module prefix.  Niagara expects ``m="conv=converters"``.
             conv_type = link.get("converter_type")

@@ -2,11 +2,8 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
 import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from src.bog_builder_new import BogFolderBuilder
-
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -30,7 +27,7 @@ def main():
     builder.add_numeric_writable(name="Input6", default_value=60.0)
     builder.add_numeric_writable(name="Input7", default_value=70.0)
     builder.add_numeric_writable(name="Input8", default_value=80.0)
-    
+
     # --- Output ---
     builder.add_numeric_writable(name="Total")
 

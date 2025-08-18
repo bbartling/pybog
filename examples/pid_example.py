@@ -25,27 +25,11 @@ import argparse
 import os
 import sys
 
-try:
-    from bog_builder import BogFolderBuilder  # type: ignore
-except ImportError:
-    # Running from repository checkout
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-    from bog_builder.builder import BogFolderBuilder  # type: ignore
 
+from bog_builder import BogFolderBuilder
 
 def build_pid_loop(output_directory: str) -> str:
-    """Build a PID loop example and write a `.bog` file.
 
-    Parameters
-    ----------
-    output_directory : str
-        Directory to write the output file.  Created if it doesn’t exist.
-
-    Returns
-    -------
-    str
-        Path to the generated `.bog` file.
-    """
     builder = BogFolderBuilder("PID", debug=False)
 
     # Define process variable and setpoint numeric writables

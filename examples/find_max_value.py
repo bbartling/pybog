@@ -2,10 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Make sure you are importing the new builder with sub-folder capabilities
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def create_max_pair(builder, input_a_name, input_b_name, pair_id):
@@ -43,7 +40,10 @@ def main():
         description="Build a .bog file to find the max of 10 inputs using only GreaterThan and NumericSwitch blocks."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -54,7 +54,7 @@ def main():
     print("Adding 10 VAV box inputs...")
     inputs = [f"VAV_{i}" for i in range(1, 11)]
     for name in inputs:
-        builder.add_numeric_writable(name, default_value=float(name.split('_')[1]))
+        builder.add_numeric_writable(name, default_value=float(name.split("_")[1]))
 
     builder.add_numeric_writable("MaxValue")
 
@@ -64,22 +64,24 @@ def main():
     current_tier_outputs = inputs[:]
     tier_num = 1
     while len(current_tier_outputs) > 1:
-        print(f"  Processing Tier {tier_num} with {len(current_tier_outputs)} inputs...")
+        print(
+            f"  Processing Tier {tier_num} with {len(current_tier_outputs)} inputs..."
+        )
         next_tier_outputs = []
-        
+
         for i in range(len(current_tier_outputs) // 2):
-            input_a = current_tier_outputs[i*2]
-            input_b = current_tier_outputs[i*2 + 1]
+            input_a = current_tier_outputs[i * 2]
+            input_b = current_tier_outputs[i * 2 + 1]
             pair_id = f"T{tier_num}_P{i}"
-            
+
             winner = create_max_pair(builder, input_a, input_b, pair_id)
             next_tier_outputs.append(winner)
-        
+
         if len(current_tier_outputs) % 2 == 1:
             passthrough = current_tier_outputs[-1]
             next_tier_outputs.append(passthrough)
             print(f"    '{passthrough}' passes to the next tier.")
-        
+
         current_tier_outputs = next_tier_outputs
         tier_num += 1
 

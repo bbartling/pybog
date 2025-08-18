@@ -2,9 +2,7 @@ import sys
 import os
 import argparse
 
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.bog_builder_new import BogFolderBuilder
+from bog_builder import BogFolderBuilder
 
 
 def main():
@@ -28,7 +26,7 @@ def main():
     builder.add_component(
         "kitControl:BooleanDelay",
         "BooleanDelay",
-        properties={"onDelay": "2000", "offDelay": "0"}  # 2-second hold time
+        properties={"onDelay": "2000", "offDelay": "0"},  # 2-second hold time
     )
     builder.end_sub_folder()
 
