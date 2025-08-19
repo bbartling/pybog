@@ -40,14 +40,9 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-# (Analyzer import logic remains the same...)
-try:
-    from bog_builder.analyzer import Analyzer
-except Exception:
-    try:
-        from bog_pkg_mod.src.bog_builder.analyzer import Analyzer
-    except Exception:
-        Analyzer = None
+
+from bog_builder.analyzer import Analyzer
+
 
 
 BASE_DIR = Path(__file__).resolve().parent
