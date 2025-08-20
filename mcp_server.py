@@ -23,26 +23,30 @@ Once running, the available endpoints are:
   descriptions and input schemas.
 * ``POST /examples/{example_name}`` – executes the named example,
   writing its output to a directory provided in the request body.
-
-The request body for ``POST`` should be JSON with an optional
-``output_dir`` field.  If omitted, a ``generated`` directory will
-be created alongside this module.
+* ``GET /source-code`` – returns a detailed introspection of the bog_builder.builder module.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
-import ast  # <-- Import the Abstract Syntax Tree module
+import ast
+import inspect
+import types
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-
-from bog_builder.analyzer import Analyzer
-
+# Assuming bog_builder is installed and accessible
+try:
+    from bog_builder import builder
+    from bog_builder.analyzer import Analyzer
+except ImportError:
+    print("Warning: bog_builder or its dependencies are not installed. Analyzer and source code introspection may fail.")
+    builder = None
+    Analyzer = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -52,12 +56,11 @@ EXAMPLES_DIR = BASE_DIR / "examples"
 app = FastAPI(
     title="Bog Builder MCP Server",
     description="Expose example scripts as callable endpoints. This is a demonstration of the Model Context Protocol.",
-    version="0.2.0",  # Version bumped to reflect changes
+    version="0.3.0",  # Version bumped to reflect new endpoint
 )
 
 
 # --- MCP Metadata Models ---
-# These new models define the structure for service introspection.
 
 
 class ExampleParameter(BaseModel):
@@ -97,7 +100,7 @@ class AnalyzeRequest(BaseModel):
     plots_dir: Optional[str] = None
 
 
-# --- Helper function for Introspection ---
+# --- Helper functions ---
 
 
 def get_example_details(script_path: Path) -> ExampleDetails:
@@ -112,8 +115,6 @@ def get_example_details(script_path: Path) -> ExampleDetails:
     except Exception:
         docstring = "Could not parse docstring."
 
-    # For this server, all examples share the same input schema.
-    # A more advanced server could parse this from the script as well.
     inputs = [
         ExampleParameter(
             name="output_dir",
@@ -125,6 +126,64 @@ def get_example_details(script_path: Path) -> ExampleDetails:
 
     return ExampleDetails(name=script_path.name, description=docstring, inputs=inputs)
 
+# NEW: This function encapsulates your provided introspection script.
+def inspect_source_code(mod) -> Dict[str, Any]:
+    """
+    Performs introspection on a given module and returns a structured dictionary.
+    """
+    if mod is None:
+        return {"error": "Module not loaded"}
+    
+    try:
+        mod_file = inspect.getsourcefile(mod) or inspect.getfile(mod)
+    except TypeError:
+        mod_file = None
+
+    def is_defined_here(obj):
+        try:
+            f = inspect.getsourcefile(obj) or inspect.getfile(obj)
+            return mod_file is not None and f == mod_file
+        except (TypeError, OSError):
+            return False
+
+    result = {
+        "module_name": mod.__name__,
+        "file_path": mod_file,
+        "classes": [],
+        "functions": [],
+        "constants": [],
+    }
+
+    # Introspect classes
+    classes = [(n, c) for n, c in inspect.getmembers(mod, inspect.isclass) if is_defined_here(c)]
+    for name, cls in classes:
+        bases = [b.__name__ for b in cls.__bases__ if b is not object]
+        class_details = {
+            "name": name,
+            "bases": bases,
+            "methods": [],
+            "properties": [],
+        }
+        for attr_name, attr_val in cls.__dict__.items():
+            if attr_name.startswith("__") and attr_name.endswith("__"):
+                continue
+            if isinstance(attr_val, (types.FunctionType, types.BuiltinFunctionType, staticmethod, classmethod)):
+                class_details["methods"].append(attr_name)
+            elif isinstance(attr_val, property):
+                class_details["properties"].append(attr_name)
+        result["classes"].append(class_details)
+
+    # Introspect functions
+    funcs = [(n, f) for n, f in inspect.getmembers(mod, inspect.isfunction) if is_defined_here(f)]
+    for name, fn in funcs:
+        result["functions"].append({"name": name, "signature": str(inspect.signature(fn))})
+        
+    # Introspect constants
+    for n, v in vars(mod).items():
+        if n.isupper() and (is_defined_here(v) or not callable(v)):
+            result["constants"].append(n)
+            
+    return result
 
 # --- API Endpoints ---
 
@@ -141,9 +200,23 @@ async def list_examples() -> List[ExampleDetails]:
         )
 
     scripts = sorted(f for f in EXAMPLES_DIR.glob("*.py") if not f.name.startswith("."))
-
-    # For each script, generate its detailed metadata
     return [get_example_details(script) for script in scripts]
+
+
+# NEW: Endpoint to expose the source code introspection.
+@app.get("/source-code")
+async def get_source_code() -> dict:
+    """
+    Returns a detailed, structured introspection of the `bog_builder.builder` module,
+    revealing its classes, methods, and functions.
+    """
+    if builder is None:
+        raise HTTPException(status_code=500, detail="bog_builder.builder module could not be imported.")
+    
+    try:
+        return inspect_source_code(builder)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to inspect source code: {e}")
 
 
 @app.post("/examples/{example_name}")
@@ -185,7 +258,6 @@ async def run_example(example_name: str, req: RunExampleRequest) -> dict:
 @app.post("/analyze")
 async def analyze_station(req: AnalyzeRequest) -> dict:
     """Analyze a Niagara archive and optionally generate kitControl charts."""
-    # (This endpoint remains unchanged)
     if Analyzer is None:
         raise HTTPException(
             status_code=500,

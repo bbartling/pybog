@@ -8,14 +8,14 @@
 ## Local Python Project Setup
 On WSL in the root directory afer after cloning project run:
 >
-> ```sh
+> ```bash
 > pip install -e .
 > pytest
 > ```
 >
 
 To uninstall bog_builer
-> ```sh
+> ```bash
 > pip uninstall bog_builder
 > ```
 >
@@ -135,7 +135,7 @@ directory, pass the desired output path to the ``save`` method (or to your own
 script via a command‑line ``-o`` flag) and ensure the directory exists.  For example on
 Windows:
 
-```sh
+```bash
 python build_thermostat.py -o "C:\Users\ben\Niagara4.11\JENEsys"
 ```
 
@@ -259,36 +259,36 @@ In the context directory you will find:
   marker.  These files can be consumed directly by LLMs to provide
   them with concrete examples of using the builder API.
 
-To generate the documentation, run the following from the root of
-the repository:
-
-```sh
+```bash
 python src\bog_builder\generate_llm_docs.py --examples examples --output context
 ```
 
-This command will create a ``context`` folder (if it does not
-already exist) and populate it with ``llms.txt`` and ``llms-full.txt``.
+---
 
-In addition to the documentation generator, the repository contains
-``mcp_server.py``, a lightweight HTTP service powered by
-[FastAPI](https://fastapi.tiangolo.com/).  While not a complete
-implementation of the Model Context Protocol, it demonstrates how to
-expose your example scripts as callable endpoints – much like the
-``@tool`` decorator in FastMCP.  You can run the service locally
-with:
-
-```sh
-uvicorn bog_pkg_mod.mcp_server:app --reload
+## Fast API MCP server
+In one terminal run:
+```bash
+uvicorn mcp_server:app --reload
 ```
 
-Once running, a ``GET`` request to ``/examples`` returns the list of
-available example scripts.  A ``POST`` request to
-``/examples/{example_name}`` with an optional JSON body containing an
-``output_dir`` will execute the named script and write its `.bog`
-output to the specified directory.  The response includes the
-standard output and error streams so you can inspect any issues.
+## LLM Agent
+In second terminal run after obtaining API key:
+* https://aistudio.google.com/apikey
+
+Set API key:
+```bash
+export GOOGLE_API_KEY='PASTE IT IN HERE!'
+```
+
+And run agent to interact locally with MCP server:
+
+```bash
+python agent.py
+```
 
 ## Traversing Baja Object Graphs
+
+TODO RESEARCH:
 
 Niagara represents the contents of a station as a directed graph of
 objects and properties.  When working with the raw XML stored inside
@@ -327,7 +327,7 @@ generate visualisations of this data.  For example, to analyse a
 ``.dist`` file and produce bar and pie charts summarising the
 kitControl blocks it contains:
 
-```sh
+```bash
 python -m bog_builder.analyzer path/to/station.dist --count --plots analysis/plots
 ```
 
