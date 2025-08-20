@@ -1,3 +1,11 @@
+"""
+A classic HVAC algorithm for a hot water reset schedule. This script uses a
+`kitControl:Reset` block to calculate a hot water supply temperature setpoint
+based on the outside air temperature (OAT). As the OAT gets colder, the hot
+water setpoint gets hotter, and vice-versa. This is a common energy-saving
+strategy for boiler systems.
+"""
+
 from __future__ import annotations
 
 import argparse

@@ -1,3 +1,12 @@
+"""
+Builds a comprehensive calculation engine that simultaneously finds the
+average, minimum, and maximum values from a set of eleven numeric inputs.
+The logic for each calculation (Avg, Min, Max) is organized into its own
+dedicated sub-folder, demonstrating a clean and scalable layout for
+complex, multi-part algorithms. This version uses tiered logic blocks
+instead of a single component for each calculation.
+"""
+
 import sys
 import os
 import argparse

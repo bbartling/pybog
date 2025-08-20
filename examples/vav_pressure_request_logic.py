@@ -1,3 +1,12 @@
+"""
+This script programmatically builds the VAV Box Static Pressure Request logic
+from ASHRAE Guideline 36, §5.6.8.2. It generates a numeric request value
+(1, 2, or 3) based on VAV damper command and airflow relative to setpoint.
+The logic identifies zones that are struggling to get enough airflow and
+generates a request to increase duct static pressure. The final output is
+the maximum of all requests.
+"""
+
 import sys
 import os
 import argparse

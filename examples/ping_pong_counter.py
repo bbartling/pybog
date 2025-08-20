@@ -1,3 +1,25 @@
+"""
+This script builds a robust "ping-pong" or oscillating counter.
+The core of the logic is a counter that automatically increments up to a top limit,
+then decrements down to a low limit, and repeats this cycle continuously.
+
+This example is fundamentally important for understanding Guideline 36 (G36)
+style trim-and-respond algorithms. The key mechanism is a `BooleanLatch` which
+acts as a state machine, remembering whether the system is currently in a
+"counting up" or "counting down" state. This stateful, incremental adjustment
+is the basis for complex G36 sequences like VAV damper pressure optimization
+or chilled water temperature resets.
+
+Key Components:
+- A central Counter that holds the current value.
+- A MultiVibrator that provides a steady pulse for incrementing/decrementing.
+- A BooleanLatch that stores the current counting direction (Up vs. Down).
+- Limit checkers (GreaterThanEqual, LessThanEqual) that trigger the change in direction.
+- Gating logic (And, Not) to ensure the pulse is routed to either the 'countUp'
+  or 'countDown' slot based on the latch's state.
+"""
+
+
 import sys, os, argparse
 
 from bog_builder import BogFolderBuilder

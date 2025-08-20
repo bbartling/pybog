@@ -1,3 +1,12 @@
+"""
+An advanced sorting and filtering algorithm that finds the top five highest
+values from a set of fifteen inputs. It uses a recursive, tournament-style
+method to rank the inputs from 1st to 5th. It also includes a `NumericSelect`
+block that allows a user to "ignore" one of the top 5 values, effectively
+selecting the 1st, 2nd, 3rd, 4th, or 5th highest value as the final output.
+This is a sophisticated example of G36-style trim-and-respond logic.
+"""
+
 import sys
 import os
 import argparse

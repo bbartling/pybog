@@ -1,3 +1,12 @@
+"""
+An advanced algorithm to find the first and second highest values from a
+set of six inputs (simulating VAV damper positions). This script uses a
+complex, multi-tiered "tournament" structure. In each stage, it not only
+finds the maximum of two numbers but also preserves the minimum, which is
+then compared against other values to determine the overall second-highest
+value. This is a robust method for N and N-1 logic.
+"""
+
 import sys
 import os
 import argparse

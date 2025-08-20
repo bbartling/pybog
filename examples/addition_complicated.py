@@ -1,3 +1,10 @@
+"""
+This script demonstrates a multi-stage addition algorithm. It takes eight
+separate numeric inputs and sums them together using a tiered approach
+with multiple 'Add' blocks. This structure is useful for organizing complex
+calculations and preventing components from having too many direct inputs.
+"""
+
 import sys
 import os
 import argparse

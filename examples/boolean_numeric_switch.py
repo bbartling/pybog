@@ -1,3 +1,11 @@
+"""
+Demonstrates how to use a boolean signal to switch between two different
+numeric calculations. The script takes two numeric inputs (A, B) and a
+single boolean switch. If the boolean is true, the output is A + B. If the
+boolean is false, the output is A - B. This is achieved using a
+`NumericSwitch` component, a fundamental pattern for mode-based logic.
+"""
+
 import sys
 import os
 import argparse

@@ -1,3 +1,10 @@
+"""
+This script tests the BogFolderBuilder with a multi-step algorithm
+that combines multiple math blocks to calculate the equation:
+Result = ((Input_A + Input_B) * Input_C) / Input_D. It demonstrates
+how to chain the output of one component to the input of another.
+"""
+
 import sys
 import os
 import argparse

@@ -1,3 +1,12 @@
+"""
+Creates a comprehensive demonstration of various boolean and comparison
+logic blocks available in the kitControl palette. It provides inputs for
+two booleans (A, B) and two numerics (A, B) and wires them to a wide array
+of components, including And, Or, Xor, Not, Equal, GreaterThan, LessThan, etc.
+This serves as an excellent reference for understanding how each logic
+block functions.
+"""
+
 import sys
 import os
 import argparse

@@ -1,3 +1,12 @@
+"""
+A fundamental HVAC logic block for switching between occupied and unoccupied
+temperature setpoints. It uses a `NumericSwitch` controlled by a boolean
+'Occ_Schedule' input. When the schedule is true (occupied), it passes the
+'Occ_Zone_Setpoint' to the output. When false (unoccupied), it passes the
+'Unocc_Zone_Setpoint'. This is a core component of energy-saving control
+sequences in zone-level control.
+"""
+
 import sys
 import os
 import argparse

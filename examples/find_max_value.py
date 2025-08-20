@@ -1,3 +1,12 @@
+"""
+Implements an efficient, tournament-style algorithm to find the single
+maximum value from ten numeric inputs (simulating VAV boxes). Instead of a
+single large 'Max' block, it uses pairs of 'GreaterThan' and 'NumericSwitch'
+components in tiers. The winner from each pair advances to the next tier
+until a single maximum value is found. This demonstrates a scalable method
+for finding the max value in a large set of inputs.
+"""
+
 import sys
 import os
 import argparse

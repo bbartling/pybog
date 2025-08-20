@@ -1,3 +1,11 @@
+"""
+This script demonstrates a pulse extender or "on-delay" timer. A boolean
+'Trigger' input is passed through a `OneShot` block to ensure a clean,
+single-scan pulse. This pulse then triggers a `BooleanDelay` block, which
+holds its output 'true' for a fixed duration (2 seconds) before turning off.
+This is useful for creating timed events from a momentary trigger.
+"""
+
 import sys
 import os
 import argparse

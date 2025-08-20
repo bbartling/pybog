@@ -194,7 +194,8 @@ class BogFolderBuilder:
         if comp_def.comp_type not in COMPONENT_SLOT_MAP and self.debug:
             print(
                 f"[BOG VALIDATION WARNING] Component type '{comp_def.comp_type}' is not in the known slot map. "
-                f"Slot name validation will be skipped for this component."
+                f"Slot name validation will be skipped for this component. ",
+                f"Please refence more example Python files for proper slot mapping and mimic exactly."
             )
         # Assign a unique handle and register the component
         handle = self._get_next_handle()

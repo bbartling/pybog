@@ -1,3 +1,10 @@
+"""
+This script generates a simple numeric schedule. It creates a single
+`sch:NumericSchedule` component and links its output to a NumericWritable
+point. The schedule is configured with a default output, making this a useful
+example for creating basic setpoints or values that are driven by a
+schedule object.
+"""
 
 from __future__ import annotations
 

@@ -1,3 +1,11 @@
+"""
+An isolated test case for the `kitControl:NumericSwitch` component. This
+script provides a single boolean writable to control the switch's 'inSwitch'
+slot. It's designed to verify the fundamental behavior of the switch, passing
+the 'inTrue' value when the control is true and the 'inFalse' value
+(or default) when the control is false.
+"""
+
 import sys
 import os
 import argparse

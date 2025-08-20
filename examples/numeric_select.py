@@ -1,3 +1,11 @@
+"""
+Demonstrates the `kitControl:NumericSelect` component, which acts as a
+multiplexer. It takes five different numeric inputs (inA through inE) and
+a separate numeric 'select' input. The value of the 'select' input
+determines which of the five inputs is passed through to the output. For
+example, a selector value of 1.0 outputs inA, 2.0 outputs inB, and so on.
+"""
+
 import sys
 import os
 import argparse

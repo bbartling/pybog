@@ -1,3 +1,9 @@
+"""
+This script uses the BogFolderBuilder to create a simple wiresheet that
+subtracts one number from another (Input_A - Input_B). It is a basic
+demonstration of the `kitControl:Subtract` block.
+"""
+
 import sys
 import os
 import argparse

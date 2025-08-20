@@ -1,4 +1,11 @@
-# === FILE: BoolLatchPlayGround.py ===
+"""
+A testing environment or "playground" for a BooleanLatch component. This
+script generates a fluctuating SineWave as a simulated process variable.
+The SineWave's value is compared against high and low thresholds (TOP and BOTTOM)
+to generate 'set' and 'reset' (or clock) signals for the latch. This is a common
+pattern for creating stateful alarms or mode changes based on an analog value.
+"""
+
 import sys
 import os
 import argparse

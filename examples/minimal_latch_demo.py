@@ -1,4 +1,10 @@
-# === FILE: minimal_latch_demo.py ===
+"""
+A minimal demonstration for testing the core functionality of a
+`kitControl:BooleanLatch`. This script provides direct, manual boolean
+writables for the 'in' and 'clock' signals of the latch, allowing a user
+to step through the latching process to understand its behavior in isolation.
+"""
+
 import sys
 import os
 import argparse

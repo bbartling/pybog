@@ -1,3 +1,10 @@
+"""
+A straightforward example of summing four numeric inputs. This script uses
+a single `kitControl:Add` block, which can accept up to four inputs directly
+(inA, inB, inC, inD). It demonstrates the most direct way to perform a simple
+multi-input addition.
+"""
+
 import sys
 import os
 import argparse

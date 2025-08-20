@@ -1,4 +1,5 @@
-"""Example script for generating a PID loop .bog file.
+"""
+Example script for generating a PID loop .bog file.
 
 This example uses a `kitControl:LoopPoint` block to implement a basic PID
 controller.  The loop point accepts a process variable (e.g. temperature), a
@@ -6,17 +7,6 @@ setpoint, a boolean enable, a loop action (an enum derived from a boolean
 status), and tuning constants for the proportional and integral terms.  The
 script demonstrates how to wire numeric and boolean writables to these slots
 and how to use explicit conversion links when a type conversion is required.
-
-Usage
------
-
-Run the script directly with Python.  Pass ``-o`` to specify the output
-directory for the resulting `.bog` file.  If no directory is given, the file
-will be created in an ``examples`` folder next to the script.
-
-```
-python pid_example.py -o "C:\\Users\\ben\\Niagara4.11\\JENEsys"
-```
 """
 
 from __future__ import annotations

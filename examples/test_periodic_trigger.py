@@ -1,3 +1,11 @@
+"""
+Creates a custom periodic trigger or interval timer. The logic adds a 'Step'
+value to a 'Counter' every 5 seconds, but only while the counter is less than
+a 'Target' value. This demonstrates a "do-while" loop constructed with
+feedback logic, delays, and comparison blocks, which is a powerful pattern
+for creating custom timed or sequential operations.
+"""
+
 import sys, os, argparse
 
 from bog_builder import BogFolderBuilder

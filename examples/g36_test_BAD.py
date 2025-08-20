@@ -1,3 +1,24 @@
+"""
+[WARNING - INTENTIONALLY INCORRECT FILE]
+This script is a deliberate example of an improperly constructed bog builder
+file. It is designed to fail during execution and produce validation warnings
+and errors.
+
+The purpose of this file is to serve as a negative example for an LLM agent,
+demonstrating common mistakes such as:
+1.  Using incorrect component types (e.g., 'kitControl:NumericLatch' which
+    may not exist or be typed correctly).
+2.  Attempting to link to invalid component slots (e.g., linking a numeric
+    value to the 'onDelay' property of a BooleanDelay instead of its 'in' slot).
+3.  General syntax that will be caught by the bog_builder's internal
+    validation and raise a ValueError.
+
+This script should be used to test an agent's ability to recognize, parse,
+and potentially learn from builder script failures. DO NOT use this script
+as a template for valid logic.
+"""
+
+
 import sys
 import os
 import argparse

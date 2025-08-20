@@ -1,3 +1,11 @@
+"""
+A minimal "smoke test" for the Counter component. This script sets up a
+basic, self-resetting counter. A MultiVibrator provides a regular pulse
+which increments the counter. After each pulse, a BooleanDelay is triggered,
+which then clears the counter after a 3-second delay. This is useful for
+verifying the basic functionality of the Counter and Delay blocks.
+"""
+
 import sys, os, argparse
 
 from bog_builder import BogFolderBuilder

@@ -1,3 +1,11 @@
+"""
+This script generates a simple boolean schedule. It creates a single
+`sch:BooleanSchedule` component and links its output to a BooleanWritable
+point. The schedule is configured to be permanently 'True' by default,
+making this a useful example for creating basic overrides or enabling flags
+that are controlled by a schedule object.
+"""
+
 
 from __future__ import annotations
 
@@ -12,10 +20,6 @@ from src.bog_builder import BogFolderBuilder
 def build_bool_schedule(output_directory: str) -> str:
     """Build a minimal boolean schedule and save it as a `.bog` file."""
     builder = BogFolderBuilder("Schedules_Bool", debug=False)
-    # Create a boolean schedule component (always True)
-    # Using the schedule palette component type.  We provide a default
-    # ``out`` property value via properties to ensure it starts in the
-    # ``True`` state when imported.
     builder.add_component(
         "sch:BooleanSchedule",
         "BooleanSchedule",
@@ -23,8 +27,6 @@ def build_bool_schedule(output_directory: str) -> str:
     )
     # Create a BooleanWritable to act on the schedule's output
     builder.add_boolean_writable("BooleanWritable")
-    # Link the schedule output to the writable's input.  ``in16`` is used for
-    # BooleanWritable targets by convention.
     builder.add_link("BooleanSchedule", "out", "BooleanWritable", "in16")
     # Save the archive
     os.makedirs(output_directory, exist_ok=True)

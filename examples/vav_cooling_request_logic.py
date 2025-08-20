@@ -1,3 +1,12 @@
+"""
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
+(1, 2, or 3) based on zone temperature deviation from setpoint and the
+cooling loop demand. A higher value indicates a more urgent request. The
+final output is the maximum of all generated requests, ensuring the highest
+priority request is always represented.
+"""
+
 import sys
 import os
 import argparse
