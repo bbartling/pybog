@@ -1,52 +1,18 @@
-"""A lightweight MCP‑style server exposing the example builders as API endpoints.
 
-This module uses FastAPI to provide a minimal HTTP interface for running
-the bundled example scripts.  Each Python script in the ``examples``
-directory is treated as a callable tool: the list of available
-examples can be fetched via a ``GET`` request and individual examples
-can be executed via ``POST``.  The executed script writes its
-``.bog`` output into a user‑specified directory.
-
-This server is a full implementation of the Model Context Protocol (MCP)
-principles: exposing functions (examples) with well‑defined and discoverable
-inputs and returning structured results.
-
-To run the server locally:
-
-.. code-block:: sh
-
-   uvicorn mcp_server:app --reload
-
-Once running, the available endpoints are:
-
-* ``GET /examples`` – returns a list of available example tools, including their
-  descriptions and input schemas.
-* ``POST /examples/{example_name}`` – executes the named example,
-  writing its output to a directory provided in the request body.
-* ``GET /source-code`` – returns a detailed introspection of the bog_builder.builder module.
-"""
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import ast
-import inspect
-import types
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel, Field
 
-# Assuming bog_builder is installed and accessible
-try:
-    from bog_builder import builder
-    from bog_builder.analyzer import Analyzer
-except ImportError:
-    print("Warning: bog_builder or its dependencies are not installed. Analyzer and source code introspection may fail.")
-    builder = None
-    Analyzer = None
+from bog_builder.analyzer import Analyzer
+
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -56,11 +22,8 @@ EXAMPLES_DIR = BASE_DIR / "examples"
 app = FastAPI(
     title="Bog Builder MCP Server",
     description="Expose example scripts as callable endpoints. This is a demonstration of the Model Context Protocol.",
-    version="0.3.0",  # Version bumped to reflect new endpoint
 )
 
-
-# --- MCP Metadata Models ---
 
 
 class ExampleParameter(BaseModel):
@@ -84,23 +47,12 @@ class ExampleDetails(BaseModel):
     )
 
 
-# --- Original Request/Response Models ---
-
-
-class RunExampleRequest(BaseModel):
-    """Schema for requests to run an example."""
-
-    output_dir: Optional[str] = None
-
 
 class AnalyzeRequest(BaseModel):
     """Schema for analysis requests."""
 
     file_path: str
     plots_dir: Optional[str] = None
-
-
-# --- Helper functions ---
 
 
 def get_example_details(script_path: Path) -> ExampleDetails:
@@ -120,72 +72,13 @@ def get_example_details(script_path: Path) -> ExampleDetails:
             name="output_dir",
             type="string",
             description="Path (absolute or relative) where the output .bog file will be written.",
-            required=False,
+            required=True,
         )
     ]
 
     return ExampleDetails(name=script_path.name, description=docstring, inputs=inputs)
 
-# NEW: This function encapsulates your provided introspection script.
-def inspect_source_code(mod) -> Dict[str, Any]:
-    """
-    Performs introspection on a given module and returns a structured dictionary.
-    """
-    if mod is None:
-        return {"error": "Module not loaded"}
-    
-    try:
-        mod_file = inspect.getsourcefile(mod) or inspect.getfile(mod)
-    except TypeError:
-        mod_file = None
 
-    def is_defined_here(obj):
-        try:
-            f = inspect.getsourcefile(obj) or inspect.getfile(obj)
-            return mod_file is not None and f == mod_file
-        except (TypeError, OSError):
-            return False
-
-    result = {
-        "module_name": mod.__name__,
-        "file_path": mod_file,
-        "classes": [],
-        "functions": [],
-        "constants": [],
-    }
-
-    # Introspect classes
-    classes = [(n, c) for n, c in inspect.getmembers(mod, inspect.isclass) if is_defined_here(c)]
-    for name, cls in classes:
-        bases = [b.__name__ for b in cls.__bases__ if b is not object]
-        class_details = {
-            "name": name,
-            "bases": bases,
-            "methods": [],
-            "properties": [],
-        }
-        for attr_name, attr_val in cls.__dict__.items():
-            if attr_name.startswith("__") and attr_name.endswith("__"):
-                continue
-            if isinstance(attr_val, (types.FunctionType, types.BuiltinFunctionType, staticmethod, classmethod)):
-                class_details["methods"].append(attr_name)
-            elif isinstance(attr_val, property):
-                class_details["properties"].append(attr_name)
-        result["classes"].append(class_details)
-
-    # Introspect functions
-    funcs = [(n, f) for n, f in inspect.getmembers(mod, inspect.isfunction) if is_defined_here(f)]
-    for name, fn in funcs:
-        result["functions"].append({"name": name, "signature": str(inspect.signature(fn))})
-        
-    # Introspect constants
-    for n, v in vars(mod).items():
-        if n.isupper() and (is_defined_here(v) or not callable(v)):
-            result["constants"].append(n)
-            
-    return result
-
-# --- API Endpoints ---
 
 
 @app.get("/examples", response_model=List[ExampleDetails])
@@ -203,56 +96,16 @@ async def list_examples() -> List[ExampleDetails]:
     return [get_example_details(script) for script in scripts]
 
 
-# NEW: Endpoint to expose the source code introspection.
-@app.get("/source-code")
-async def get_source_code() -> dict:
+@app.get("/examples/{example_name}/source")
+async def get_example_source(example_name: str) -> dict:
     """
-    Returns a detailed, structured introspection of the `bog_builder.builder` module,
-    revealing its classes, methods, and functions.
+    Returns the raw Python source of a specific example so LLMs can ingest code via JSON.
     """
-    if builder is None:
-        raise HTTPException(status_code=500, detail="bog_builder.builder module could not be imported.")
-    
-    try:
-        return inspect_source_code(builder)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to inspect source code: {e}")
-
-
-@app.post("/examples/{example_name}")
-async def run_example(example_name: str, req: RunExampleRequest) -> dict:
-    """Execute the specified example script."""
     example_path = EXAMPLES_DIR / example_name
     if not example_path.is_file():
-        raise HTTPException(
-            status_code=404, detail=f"Example not found: {example_name}"
-        )
+        raise HTTPException(status_code=404, detail=f"Example not found: {example_name}")
+    return {"name": example_name, "source": example_path.read_text(encoding="utf-8")}
 
-    if req.output_dir:
-        output_dir = Path(req.output_dir).expanduser()
-    else:
-        output_dir = BASE_DIR / "generated"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    command = [sys.executable, str(example_path), "-o", str(output_dir)]
-
-    try:
-        result = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise HTTPException(status_code=500, detail=f"Execution failed: {exc.stderr}")
-
-    return {
-        "status": "ok",
-        "output_dir": str(output_dir),
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-    }
 
 
 @app.post("/analyze")
@@ -279,3 +132,52 @@ async def analyze_station(req: AnalyzeRequest) -> dict:
         return response
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    
+
+
+@app.get("/builder-api.json")
+async def builder_api_json():
+    # Static summary tailored for agents; you can enrich from inspect() later.
+    return JSONResponse({
+        "name": "BogFolderBuilder",
+        "summary": "High-level builder for Niagara .bog graphs with validation and layout.",
+        "ctor": {
+            "signature": "BogFolderBuilder(folder_name: str, debug: bool = True)",
+            "params": [
+                {"name": "folder_name", "type": "str", "desc": "Top-level folder name in the .bog"},
+                {"name": "debug", "type": "bool", "default": True, "desc": "Print layout/validation hints"}
+            ]
+        },
+        "methods": [
+            {"name": "start_sub_folder", "params": [{"name": "name", "type": "str"}], "raises": ["ValueError"]},
+            {"name": "end_sub_folder", "params": [], "raises": ["ValueError"]},
+            {"name": "get_current_path_str", "returns": "str"},
+            {"name": "add_component", "params": [
+                {"name":"comp_type","type":"str"},
+                {"name":"name","type":"str"},
+                {"name":"properties","type":"dict|null"},
+                {"name":"actions","type":"dict|null"}
+            ], "raises": ["ValueError"]},
+            {"name": "add_numeric_writable"},
+            {"name": "add_boolean_writable"},
+            {"name": "add_enum_writable"},
+            {"name": "add_numeric_switch"},
+            {"name": "add_numeric_select"},
+            {"name": "add_multi_vibrator"},
+            {"name": "add_counter"},
+            {"name": "add_link", "params": [
+                {"name":"source_comp_name","type":"str"},
+                {"name":"source_slot","type":"str"},
+                {"name":"target_comp_name","type":"str"},
+                {"name":"target_slot","type":"str"},
+                {"name":"link_type","type":"str","default":"b:Link"},
+                {"name":"converter_type","type":"str|null"}
+            ], "raises": ["ValueError"], "notes":"Auto adds conversion links for common type mismatches"},
+            {"name": "add_reduction_block", "params": [
+                {"name":"block_type","type":"str"},
+                {"name":"final_output_name","type":"str"},
+                {"name":"input_names","type":"List[str]"}
+            ], "raises":["ValueError"]},
+            {"name": "save", "params":[{"name":"file_path","type":"str"}], "raises":["ValueError","OSError"]}
+        ]
+    })

@@ -4,13 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bog_builder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Niagara .bog file builder with robust Pydantic validation"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "pydantic>=2.0",
-    "fastapi[all]",  # Adds fastapi and an ASGI server like uvicorn
+    "pydantic",
+    "fastapi[all]",
+    "google-generativeai",
+    "fastmcp"
 ]
 
 [project.optional-dependencies]
