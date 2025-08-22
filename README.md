@@ -247,44 +247,79 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-## LLM‑friendly documentation and MCP server
+Awesome 🎉 — you’ve now got the full round-trip working:
 
-In the context directory you will find:
-* **llms.txt** – a simple sitemap listing each example file name
-  along with its relative directory.  This file can be used by
-  automation to locate individual examples.
-* **llms-full.txt** – the full source code of every example with
-  clear delimiters.  Each section begins with ``=== FILE: ... ===``
-  followed by the directory, the code contents, and an ``=== CODE END ===``
-  marker.  These files can be consumed directly by LLMs to provide
-  them with concrete examples of using the builder API.
-
-```bash
-python src\bog_builder\generate_llm_docs.py --examples examples --output context
-```
+* You typed a description.
+* You gave a clean file name (`central_plant_sequencing`).
+* The agent tried once, failed, captured the traceback, and then re-asked Gemini to **fix its own script**.
+* On the second attempt, it succeeded and dropped the `.bog` in the exact place with the exact name you wanted.
+* Stats show 2 Gemini calls (first generate, second fix). ✅
 
 ---
 
-## Fast API MCP server
-In one terminal run:
-```bash
-uvicorn mcp_server:app --reload
-```
+## LLM Agent (EXPERIMENTAL Iterative Builder)
 
-## LLM Agent
-In second terminal run after obtaining API key:
-* https://aistudio.google.com/apikey
+Tested on WSL with FREE API key: 
+* https://aistudio.google.com/apikey Set API key:
 
-Set API key:
 ```bash
 export GOOGLE_API_KEY='PASTE IT IN HERE!'
 ```
 
-And run agent to interact locally with MCP server:
+The `generic_agent.py` script lets you describe an HVAC control sequence in plain English and iteratively synthesizes a runnable Python builder script that creates a Niagara `.bog` file.  
+
+It works like this:
+
+1. **Prompt for description**  
+   You’ll be asked to describe the control system logic you want (e.g. *"Create a central plant with heating and cooling setpoints of 40°F/45°F and 75°F/70°F with a free cooling range between 50 and 60°F"*).
+
+2. **Prompt for bog file name**  
+   You’ll also be asked to give a short, human-friendly name for the output file (e.g. *"central_plant_sequencing"*).  
+   The agent forces the generated script to save exactly to that file, e.g.:  
+   `/mnt/c/Users/ben/Niagara4.11/JENEsys/central_plant_sequencing.bog`
+
+3. **Synthesize → Run → Fix loop**  
+   - Attempt 1: the LLM generates a Python script into `.agent_tmp/` and runs it.  
+   - If it fails, the agent captures the full traceback and sends both the failing code and the error back to the LLM.  
+   - The LLM then repairs the script and tries again.  
+   - This repeats up to `--max-iters` times (default 4).  
+
+4. **Result**  
+   Once successful, you’ll see debug logs from `BogFolderBuilder` and a success message where then you can open it right up in Workbench:  
+
+```
+
+✅ Generated .bog file at: /mnt/c/Users/ben/Niagara4.11/JENEsys/central\_plant\_sequencing.bog
+
+```
+
+5. **Stats**  
+At the end, the script prints how many Gemini API calls were used and how many attempts were needed.  
+
+Example:
+
+```
+
+—— Stats ——
+Gemini calls: 2
+Attempts: 2
+
+```
+
+---
+
+### Command-line arguments
 
 ```bash
-python agent.py
+python generic_agent.py [--output <path>] [--max-iters N] [--workdir <dir>]
 ```
+
+* `--output`: optional final destination for the `.bog`. If omitted, the file stays in the default Niagara output dir (`Niagara4.11/JENEsys`).
+* `--max-iters`: max number of generate→run→fix attempts (default 4).
+* `--workdir`: scratch directory for synthesized Python scripts (default `.agent_tmp/`).
+  You should add `.agent_tmp/` to `.gitignore` since it only contains temporary generated scripts.
+
+---
 
 ## Traversing Baja Object Graphs
 

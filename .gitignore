@@ -31,6 +31,10 @@ __pycache__/
 venv/
 *.pyc
 
+# Ignore temp LLM synthesis artifacts
+.agent_tmp/
+*.bog
+
 # Ignore IDE-specific folders
 .vscode/
 .idea/
