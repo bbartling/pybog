@@ -13,6 +13,8 @@ from typing import List, Tuple, Optional
 
 import google.generativeai as genai
 
+# Description: I need a central plant dual pump lead and lag staging logic where a bool point can represent true or false and a loss of pump status if command is true with automatically switch to lag pump if lead dies. Do a pump 1 and 2 where can switch between lead or lag based on the bool point.
+
 # ========= Config =========
 EXAMPLES_DIR = Path(os.getcwd()) / "examples"
 DEFAULT_OUTPUT_DIR = Path(r"/mnt/c/Users/ben/Niagara4.11/JENEsys")  # keep your default
@@ -20,6 +22,9 @@ MODEL_NAME = "gemini-2.5-flash"
 MAX_EXAMPLE_CHARS = 60_000           # budget for example context
 MAX_ITERS_DEFAULT = 4                # retry synthesize -> run -> fix loop
 LLM_CALLS = 0                        # prints at the end
+
+LLM_INPUT_TOKENS = 0
+LLM_OUTPUT_TOKENS = 0
 
 
 def init_gemini() -> Optional[genai.GenerativeModel]:
@@ -117,14 +122,33 @@ def _extract_python_code(text: str) -> str:
         return fence.group(1).strip()
     return t
 
-def llm_generate_script(model: genai.GenerativeModel, description: str, examples_blob: str, bog_file_name: str) -> str:
+def _record_and_print_usage(resp, label: str) -> None:
+    """Accumulate and print token usage for a single LLM call."""
+    global LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS
+    meta = resp.usage_metadata
+    in_tok = int(meta.prompt_token_count or 0)
+    out_tok = int(meta.candidates_token_count or 0)
+    tot_tok = int(meta.total_token_count or (in_tok + out_tok))
+    LLM_INPUT_TOKENS += in_tok
+    LLM_OUTPUT_TOKENS += out_tok
+    print(f"[TOKENS] {label}  prompt={in_tok}  output={out_tok}  total={tot_tok}")
+
+
+
+def llm_generate_script(
+    model: genai.GenerativeModel,
+    description: str,
+    examples_blob: str,
+    bog_file_name: str,
+    label: str = "generate",
+) -> str:
 
     """
     Ask the LLM to emit a COMPLETE python script that, when run, writes a .bog.
     """
     global LLM_CALLS
     LLM_CALLS += 1
-    REQUIRED_OUTPUT_FILE = "{bog_file_name}.bog"
+    REQUIRED_OUTPUT_FILE = f"{bog_file_name}.bog"
 
 
     prompt = f"""
@@ -164,10 +188,19 @@ DESCRIPTION:
 {examples_blob}
 """
     resp = model.generate_content(prompt)
+    _record_and_print_usage(resp, label=label)
     return _extract_python_code((resp.text or "").strip())
 
 
-def llm_fix_script(model: genai.GenerativeModel, description: str, prev_code: str, error_text: str, examples_blob: str, bog_file_name: str) -> str:
+def llm_fix_script(
+    model: genai.GenerativeModel,
+    description: str,
+    prev_code: str,
+    error_text: str,
+    examples_blob: str,
+    bog_file_name: str,
+    label: str = "fix",
+) -> str:
 
     """
     Ask the LLM to REVISE the previous script based on traceback.
@@ -196,6 +229,7 @@ Please return a FULLY CORRECTED script that fixes the error and still meets all 
 - No commentary outside code. Return code only.
 """
     resp = model.generate_content(prompt)
+    _record_and_print_usage(resp, label=label)
     return _extract_python_code((resp.text or "").strip())
 
 
@@ -287,10 +321,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     # Prepare context & dirs
     examples_blob = gather_examples(MAX_EXAMPLE_CHARS)
     workdir = Path(args.workdir); workdir.mkdir(parents=True, exist_ok=True)
-    synth_name = re.sub(r"[^a-zA-Z0-9_]+", "_", description.lower()).strip("_")
-    if not synth_name:
-        synth_name = "synth"
-    script_path = workdir / f"synth_{synth_name}.py"
+    script_path = workdir / f"python_for_{bog_file_name}.py"
     out_dir = DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -306,7 +337,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         print(f"\n--- Attempt {attempts}/{args.max_iters} ---")
 
         if attempts == 1:
-            code = llm_generate_script(model, description, examples_blob, bog_file_name)
+            code = llm_generate_script(model, description, examples_blob, bog_file_name, label=f"generate (attempt {attempts})")
+
         else:
             code = llm_fix_script(model, description, last_code, last_err, examples_blob, bog_file_name)
 
@@ -335,6 +367,10 @@ def main(argv: Optional[List[str]] = None) -> None:
     print("\n—— Stats ——")
     print(f"Gemini calls: {LLM_CALLS}")
     print(f"Attempts: {attempts}")
+    print(f"Total input tokens: {LLM_INPUT_TOKENS}")
+    print(f"Total output tokens: {LLM_OUTPUT_TOKENS}")
+    print(f"Total tokens: {LLM_INPUT_TOKENS + LLM_OUTPUT_TOKENS}")
+
 
     if created_bog is None:
         print("❌ Failed to generate a working .bog.")

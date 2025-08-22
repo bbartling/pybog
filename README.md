@@ -293,8 +293,11 @@ Example:
 ```
 
 —— Stats ——
-Gemini calls: 2
-Attempts: 2
+Gemini calls: 4
+Attempts: 4
+Total input tokens: 18636
+Total output tokens: 2249
+Total tokens: 20885
 
 ```
 
@@ -310,6 +313,25 @@ python generic_agent.py [--output <path>] [--max-iters N] [--workdir <dir>]
 * `--max-iters`: max number of generate→run→fix attempts (default 4).
 * `--workdir`: scratch directory for synthesized Python scripts (default `.agent_tmp/`).
   You should add `.agent_tmp/` to `.gitignore` since it only contains temporary generated scripts.
+
+---
+
+### Generate Context Text Files
+
+The **context directory** contains documentation specifically formatted for use by the LLM agent.
+Running the generator will take all Python files in the `examples` directory and combine them into a set of **LLM-friendly documentation files** (see [GoFast MCP docs](https://gofastmcp.com/getting-started/welcome#llm-friendly-docs) for the format specification).
+
+* **`llms.txt`** — a lightweight *sitemap* listing each example file and its relative path.
+* **`llms-full.txt`** — a single, concatenated file with the complete source of every example, wrapped with clear delimiters (`=== FILE: ... ===`, `=== CODE START ===`, `=== CODE END ===`).
+  ⚠️ *Note:* this file can be quite large and may exceed the context window of some LLMs. For this project the `llms-full.txt` can push upwords of 20,000 tokens.
+
+Generate the docs with:
+
+```bash
+python src/bog_builder/generate_llm_docs.py --examples examples --output context
+```
+
+This ensures the agent has direct access to all available example scripts, either as a quick index (`llms.txt`) or full training context (`llms-full.txt`).
 
 ---
 

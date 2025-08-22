@@ -18,8 +18,6 @@ Two files are emitted:
 
 Example usage:
 
-.. code-block:: sh
-
    python src\bog_builder\generate_llm_docs.py --examples examples --output context
 
 If the output directory does not exist it will be created.
