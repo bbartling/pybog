@@ -10,6 +10,9 @@ from datetime import datetime
 # Make sure your MCP server is running at this address.
 MCP_SERVER_URL = "http://127.0.0.1:8000"
 
+BOG_FILE_DESTINATION = "/mnt/c/Users/ben/Niagara4.11/JENEsys"
+INSTRUCTIONS_PATH = "context/old/BACKUP_llm_bog_instructions.txt"
+
 # Set up the Gemini API client.
 # Ensure you have your GOOGLE_API_KEY set as an environment variable.
 try:
@@ -23,7 +26,13 @@ except ValueError as e:
     gemini_model = None
 # --- End Configuration ---
 
-
+def _load_context_pack() -> str:
+    try:
+        with open(INSTRUCTIONS_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+    
 def discover_tools() -> List[Dict[str, Any]]:
     """Fetches the list of available example tools from the MCP server."""
     print("🤖 Agent: Discovering available tools...")
@@ -221,16 +230,14 @@ if __name__ == "__main__":
     
     try:
         # --- Main Logic Loop with Retry ---
-
-        # 1. Fetch initial required information from the server.
-        api_docs = get_api_documentation()
-        log_data["steps"].append({"timestamp": datetime.now().isoformat(), "step": "Fetch API Docs", "details": {"success": api_docs is not None}})
         
         available_tools = discover_tools()
         log_data["steps"].append({"timestamp": datetime.now().isoformat(), "step": "Discover Tools", "details": {"tool_count": len(available_tools), "tools": available_tools}})
 
+        api_docs =_load_context_pack()
 
-        if not available_tools or not api_docs:
+
+        if not available_tools:
             print("\nExiting: Could not fetch required information from the server.")
         else:
             # 2. Make the first attempt to select a tool using only the API docs and tool list.
@@ -252,7 +259,7 @@ if __name__ == "__main__":
             # 4. If a tool was successfully chosen (on either attempt), execute it.
             if chosen_tools:
                 # IMPORTANT: Make sure this path exists on your machine or change it.
-                output_destination = r"C:\Users\ben\Documents\llm-bog-gen\bogs"
+                output_destination = BOG_FILE_DESTINATION
                 
                 execution_result = None
                 for i, tool in enumerate(chosen_tools):
