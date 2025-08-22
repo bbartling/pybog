@@ -247,20 +247,12 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-Awesome 🎉 — you’ve now got the full round-trip working:
+## LLM Agent - `generic_agent.py`
 
-* You typed a description.
-* You gave a clean file name (`central_plant_sequencing`).
-* The agent tried once, failed, captured the traceback, and then re-asked Gemini to **fix its own script**.
-* On the second attempt, it succeeded and dropped the `.bog` in the exact place with the exact name you wanted.
-* Stats show 2 Gemini calls (first generate, second fix). ✅
-
----
-
-## LLM Agent (EXPERIMENTAL Iterative Builder)
-
-Tested on WSL with FREE API key: 
-* https://aistudio.google.com/apikey Set API key:
+🚀 Experimental Iterative **BOG File Builder**!
+Tested on **WSL** 🐧  
+Powered by a **FREE API Key** from [Google AI Studio](https://aistudio.google.com/apikey) 🔑  
+Running with **Gemini-2.5 Flash** ⚡
 
 ```bash
 export GOOGLE_API_KEY='PASTE IT IN HERE!'
