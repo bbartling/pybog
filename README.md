@@ -9,33 +9,27 @@
 On WSL in the root directory afer after cloning project run:
 >
 > ```bash
-> pip install -e .
-> pytest
+> wsl
+> pip install .
 > ```
 >
 
-To uninstall bog_builer
+To uninstall bog_builer if developing
 > ```bash
 > pip uninstall bog_builder
 > ```
 >
+
+Optinal run unit tests
+> pytest
 
 
 ## Running Example Scripts with WSL
 
 Each example script can be executed directly in **WSL (Windows Subsystem for Linux)** to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
 
-### Steps
 
-1. **Open WSL**
-   From PowerShell or Windows Terminal:
-
-   ```bash
-   wsl
-   cd /mnt/c/Users/ben/Documents/llm-bog-gen
-   ```
-
-2. **Run a specific example**
+1. **Run a specific example from project root directory**
    Pass the Niagara Workbench path as the output directory (`-o` argument):
 
    ```bash
@@ -48,7 +42,7 @@ Each example script can be executed directly in **WSL (Windows Subsystem for Lin
    /mnt/c/Users/ben/Niagara4.11/JENEsys/bool_latch_play_ground.bog
    ```
 
-3. **Open Workbench**
+2. **Open Workbench**
    Now you can import or open the generated `.bog` file inside your Niagara Workbench environment under the JENEsys station.
 
 ---
@@ -75,126 +69,46 @@ and it will always drop files directly into your Workbench directory for easy fa
 
 ---
 
-## Building a simple thermostat
+## Bog Builder Python API Example
 
-After successful pip install here’s a complete example using the builder API to create this thermostat and write it to a ``.bog`` file which can then be imported to JACE via the Workbench tool:
+This is a code snip from the `examples\subtract_simple.py` file with optional `start_sub_folder` folder structures.
 
 ```python
-from bog_builder import BogFolderBuilder
+builder = BogFolderBuilder("SubtractionLogic")
 
-builder = BogFolderBuilder("Thermostat")
+# --- Inputs ---
+builder.add_numeric_writable(name="Input_A", default_value=100.0)
+builder.add_numeric_writable(name="Input_B", default_value=40.0)
 
-# Define inputs
-builder.add_numeric_writable("SpaceTemp", default_value=72.0)
-builder.add_numeric_writable("HeatSP", default_value=68.0)
-builder.add_numeric_writable("CoolSP", default_value=74.0)
-builder.add_numeric_writable("Hysteresis", default_value=1.0)
-builder.add_numeric_writable("Mode", default_value=0.0)  # 0=Off, 1=Heat, 2=Cool
-builder.add_boolean_writable("FanAuto", default_value=True)
+# --- Output ---
+builder.add_numeric_writable(name="Difference")
 
-# Define outputs
-builder.add_boolean_writable("Output_HeatCmd")
-builder.add_boolean_writable("Output_CoolCmd")
-builder.add_boolean_writable("Output_FanCmd")
+builder.start_sub_folder("CalculationLogic")
+builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
 
-# Constants for comparing the mode value
-builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
-builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
+builder.end_sub_folder()
 
-# Blocks to detect heating/cooling modes
-builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
-builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
-builder.add_component("kitControl:And", "IsHeatMode")
+builder.add_link("Input_A", "out", "Subtract", "inA")
+builder.add_link("Input_B", "out", "Subtract", "inB")
+builder.add_link("Subtract", "out", "Difference", "in16")
 
-builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
-builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
-builder.add_component("kitControl:And", "IsCoolMode")
+bog_filename = f"{script_filename}.bog"
+output_path = os.path.join(args.output_dir, bog_filename)
+os.makedirs(args.output_dir, exist_ok=True)
+builder.save(output_path)
+print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
-# Compute ``SpaceTemp + Hysteresis`` and ``CoolSP + Hysteresis``
-builder.add_component("kitControl:Add", "SpacePlusHyst")
-builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
-
-# Comparisons against setpoints
-builder.add_component("kitControl:LessThanEqual", "IsBelowHeat")
-builder.add_component("kitControl:GreaterThanEqual", "IsAboveCool")
-
-# Gates and logic combining blocks
-builder.add_component("kitControl:And", "HeatCmdGate")
-builder.add_component("kitControl:And", "CoolCmdGate")
-builder.add_component("kitControl:Or", "HeatOrCool")
-builder.add_component("kitControl:Not", "FanAutoNot")
-builder.add_component("kitControl:Or", "FanCmdGate")
-
-# Wiring for mode comparisons (Mode == 1)
-builder.add_link("Mode", "out", "Mode_GE_1", "inA")
-builder.add_link("Const1", "out", "Mode_GE_1", "inB")
-builder.add_link("Mode", "out", "Mode_LE_1", "inA")
-builder.add_link("Const1", "out", "Mode_LE_1", "inB")
-builder.add_link("Mode_GE_1", "out", "IsHeatMode", "inA")
-builder.add_link("Mode_LE_1", "out", "IsHeatMode", "inB")
-
-# Wiring for mode comparisons (Mode == 2)
-builder.add_link("Mode", "out", "Mode_GE_2", "inA")
-builder.add_link("Const2", "out", "Mode_GE_2", "inB")
-builder.add_link("Mode", "out", "Mode_LE_2", "inA")
-builder.add_link("Const2", "out", "Mode_LE_2", "inB")
-builder.add_link("Mode_GE_2", "out", "IsCoolMode", "inA")
-builder.add_link("Mode_LE_2", "out", "IsCoolMode", "inB")
-
-# Sum the hysteresis with the space and cooling setpoints
-builder.add_link("SpaceTemp", "out", "SpacePlusHyst", "inA")
-builder.add_link("Hysteresis", "out", "SpacePlusHyst", "inB")
-builder.add_link("CoolSP", "out", "CoolSP_plus_Hyst", "inA")
-builder.add_link("Hysteresis", "out", "CoolSP_plus_Hyst", "inB")
-
-# Compare ``SpaceTemp + Hyst <= HeatSP``  (heat threshold)
-builder.add_link("SpacePlusHyst", "out", "IsBelowHeat", "inA")
-builder.add_link("HeatSP", "out", "IsBelowHeat", "inB")
-
-# Compare ``SpaceTemp >= CoolSP + Hyst`` (cool threshold)
-builder.add_link("SpaceTemp", "out", "IsAboveCool", "inA")
-builder.add_link("CoolSP_plus_Hyst", "out", "IsAboveCool", "inB")
-
-# Combine heat mode and threshold
-builder.add_link("IsHeatMode", "out", "HeatCmdGate", "inA")
-builder.add_link("IsBelowHeat", "out", "HeatCmdGate", "inB")
-
-# Combine cool mode and threshold
-builder.add_link("IsCoolMode", "out", "CoolCmdGate", "inA")
-builder.add_link("IsAboveCool", "out", "CoolCmdGate", "inB")
-
-# OR heat and cool commands for fan logic
-builder.add_link("HeatCmdGate", "out", "HeatOrCool", "inA")
-builder.add_link("CoolCmdGate", "out", "HeatOrCool", "inB")
-
-# Invert FanAuto to produce a manual fan override
-builder.add_link("FanAuto", "out", "FanAutoNot", "in")
-
-# Combine heat/cool or manual override for the fan command
-builder.add_link("HeatOrCool", "out", "FanCmdGate", "inA")
-builder.add_link("FanAutoNot", "out", "FanCmdGate", "inB")
-
-# Wire the gates to the final outputs
-builder.add_link("HeatCmdGate", "out", "Output_HeatCmd", "in16")
-builder.add_link("CoolCmdGate", "out", "Output_CoolCmd", "in16")
-builder.add_link("FanCmdGate", "out", "Output_FanCmd", "in16")
-
-# Save the `.bog` archive.  On Windows you can direct this to your Workbench
-# user directory by passing an absolute path, e.g. ``"C:\\Users\\ben\\Niagara4.11\\JENEsys\\Thermostat.bog"``.
-builder.save("Thermostat.bog")
 ```
 
-To place the resulting ``.bog`` file directly into your Niagara workbench user
-directory, pass the desired output path to the ``save`` method (or to your own
-script via a command‑line ``-o`` flag) and ensure the directory exists.  For example on
-Windows:
+
+When run, it will create a `.bog` file that can be directly imported into Workbench. Behind the scenes, `pybog` automatically arranges the grid layout to keep it neat and human-readable. Placing logic inside subfolders is optional, but it’s a great way to keep your bog files organized and clean. And yes—AI can handle all of this for you, too 😉.
+
 
 ```bash
-python build_thermostat.py -o "C:\Users\ben\Niagara4.11\JENEsys"
+python examples/subtract_simple.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
 ```
 
-This will create ``Thermostat.bog`` in the specified folder.  You can then import
-and test it within Niagara Workbench.
+![subtract image](snips/simpleSubtract.png)
 
 
 ## 👷 Write Your Own `.bog` File in XML from scratch
@@ -365,6 +279,10 @@ python generic_agent.py [--output <path>] [--max-iters N] [--workdir <dir>]
 * `--max-iters`: max number of generate→run→fix attempts (default 4).
 * `--workdir`: scratch directory for synthesized Python scripts (default `.agent_tmp/`).
   You should add `.agent_tmp/` to `.gitignore` since it only contains temporary generated scripts.
+
+
+### Prompt Chaining Activity Diagram
+* Note - It is very experimental but working and subject to change once better methods can be created. TODO research MCP server to burn less tokens currently it uses LOTS of tokens in the context files sent to LLM service.
 
 ```mermaid
 flowchart TD
