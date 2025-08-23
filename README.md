@@ -20,10 +20,64 @@ To uninstall bog_builer
 > ```
 >
 
+
+## Running Example Scripts with WSL
+
+Each example script can be executed directly in **WSL (Windows Subsystem for Linux)** to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
+
+### Steps
+
+1. **Open WSL**
+   From PowerShell or Windows Terminal:
+
+   ```bash
+   wsl
+   cd /mnt/c/Users/ben/Documents/llm-bog-gen
+   ```
+
+2. **Run a specific example**
+   Pass the Niagara Workbench path as the output directory (`-o` argument):
+
+   ```bash
+   python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
+   ```
+
+   This will create:
+
+   ```
+   /mnt/c/Users/ben/Niagara4.11/JENEsys/bool_latch_play_ground.bog
+   ```
+
+3. **Open Workbench**
+   Now you can import or open the generated `.bog` file inside your Niagara Workbench environment under the JENEsys station.
+
+---
+
+⚡ **Tip:**
+If you don’t want to type `-o` every time, you can edit each example script and change the default in its argparse:
+
+```python
+parser.add_argument(
+    "-o",
+    "--output_dir",
+    default="/mnt/c/Users/ben/Niagara4.11/JENEsys",
+    help="Output directory for the .bog file."
+)
+```
+
+Then you can just run:
+
+```bash
+python examples/bool_latch_play_ground.py
+```
+
+and it will always drop files directly into your Workbench directory for easy fast testing.
+
+---
+
 ## Building a simple thermostat
 
-
-Here’s a complete example using the builder API to create this thermostat and write it to a ``.bog`` file which can then be imported to JACE via the Workbench tool:
+After successful pip install here’s a complete example using the builder API to create this thermostat and write it to a ``.bog`` file which can then be imported to JACE via the Workbench tool:
 
 ```python
 from bog_builder import BogFolderBuilder
@@ -230,15 +284,10 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 ### 📌 How it Works
 
 * Each `<p>` tag represents a Niagara component or a **slot within a component** (like `out` or `fallback`). Each `<a>` tag represents an **action** on that component, like `set` or `override`.
-
 * The `f` attribute (flags) is critical for controlling behavior. `f="s"` makes a slot **settable**, while `f="h"` or `f="ho"` **hides** a slot or action, which is how we create read-only points.
-
 * To set a **default value**, the `out` and `fallback` slots must be fully defined as complex properties containing nested `<p n="value".../>` and `<p n="status".../>` tags.
-
 * `h="1"`, `h="2"`, etc., are unique **handles** that links use to reference their source and target components.
-
 * `wsAnnotation` controls the block's position on the wiresheet. The coordinates are calculated using our **Hierarchical Data Flow** strategy to ensure a clean, grid-based layout.
-
 * The `Add` block's links use these handles to reference the `out` slots from `Input1` and `Input2` and connect them to its `inA` and `inB` inputs.
 
 
@@ -246,6 +295,9 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 
 ---
+
+python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
+
 
 ## LLM Agent - `generic_agent.py`
 
@@ -313,6 +365,32 @@ python generic_agent.py [--output <path>] [--max-iters N] [--workdir <dir>]
 * `--max-iters`: max number of generate→run→fix attempts (default 4).
 * `--workdir`: scratch directory for synthesized Python scripts (default `.agent_tmp/`).
   You should add `.agent_tmp/` to `.gitignore` since it only contains temporary generated scripts.
+
+```mermaid
+flowchart TD
+  start([Start CLI]) --> askDesc[Prompt description]
+  askDesc --> askName[Prompt bog file name]
+  askName --> loadCtx[Load context files]
+  loadCtx --> attempt{{Attempt == 1?}}
+
+  attempt -- Yes --> gen[LLM generate script]
+  attempt -- No  --> fix[LLM fix script - prev code + traceback]
+
+  gen --> write[Write script to temp folder]
+  fix --> write
+
+  write --> run[Run script with -o output dir]
+  run --> success{Run ok AND file created?}
+
+  success -- Yes --> done[Print success\nPrint stats\nExit]
+  success -- No  --> cap[Capture stderr tail as traceback]
+  cap --> retry{Attempt < max iters?}
+
+  retry -- Yes --> incr[Increment attempt\nStore code and error]
+  incr --> attempt
+
+  retry -- No --> fail[Print failure\nPrint stats\nExit]
+```
 
 ---
 

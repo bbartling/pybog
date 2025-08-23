@@ -10,9 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "pydantic",
-    "fastapi[all]",
     "google-generativeai",
-    "fastmcp"
 ]
 
 [project.optional-dependencies]

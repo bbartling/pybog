@@ -32,11 +32,11 @@ def main():
     builder.add_numeric_writable("TOP", default_value=90.0, precision=2)
     builder.add_numeric_writable("BOTTOM", default_value=10.0, precision=2)
     builder.add_boolean_writable("CountDown", default_value=False)  # display latch OUT
+    builder.add_component("kitControl:SineWave", "SineWave")
 
     # -------- Logic folder --------
     builder.start_sub_folder("LatchSandbox")
 
-    builder.add_component("kitControl:SineWave", "SineWave")
     builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
     builder.add_component("kitControl:LessThanEqual", "LessThanEq")
     builder.add_component("kitControl:Or", "Or_Block")

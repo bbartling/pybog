@@ -26,33 +26,29 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build a robust Ping-Pong Counter .bog file.")
-    p.add_argument("-o","--output_dir", default="examples", help="Output directory for the .bog file.")
-    p.add_argument("-n","--name", default="PingPongCounter")
-    p.add_argument("-s","--subfolder", default="Logic")
-    args = p.parse_args()
+    parser = argparse.ArgumentParser(
+        description="Build a .bog: SineWave → thresholds → OR → BooleanLatch playground."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
 
     script_filename = os.path.basename(__file__).replace(".py", "")
-    builder = BogFolderBuilder(args.name)
+    builder = BogFolderBuilder("PingPongAlgorithm", debug=True)
 
-    # --- Top-Level Components ---
-    # These are the user-facing controls and displays.
     builder.add_numeric_writable("CounterViewer", 0.0) 
     builder.add_numeric_writable("Step", 1.0) 
     builder.add_numeric_writable("TopLimit", 20.0) 
     builder.add_numeric_writable("LowLimit", -20.0) 
     builder.add_boolean_writable("ManualResetCounter", default_value=False) 
 
-    # --- Logic Sub-Folder ---
-    # All calculation logic is placed in a sub-folder for organization.
-    builder.start_sub_folder(args.subfolder) 
-
-    # Core components for timing and counting
-    # CORRECTED: Changed period from "2s" to "2000" to adhere to millisecond format [cite: 3, 4]
     builder.add_component("kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"}) 
     builder.add_component("kitControl:Counter", "Counter") 
     
-    # One-shots to ensure single increments/decrements per pulse
     builder.add_component("kitControl:OneShot", "IncrementUpOneShot") 
     builder.add_component("kitControl:OneShot", "IncrementDownOneShot") 
     builder.add_component("kitControl:OneShot", "ResetOneShot") 
@@ -67,8 +63,7 @@ def main():
     builder.add_component("kitControl:Not", "IsNotCountingDown_Not") # Inverter for up-counting logic 
     builder.add_component("kitControl:And", "UpPulse_Gate") # Gate for enabling up-counts 
     builder.add_component("kitControl:And", "DownPulse_Gate") # Gate for enabling down-counts 
-    
-    builder.end_sub_folder()
+
 
     # --- Wiring ---
     print("Wiring components...")
@@ -94,14 +89,14 @@ def main():
     # --- Pulse Gating Wiring ---
     # Logic to enable the up-counting pulse:
     builder.add_link("IsCountingDown_Latch", "out", "IsNotCountingDown_Not", "in") 
-    builder.add_link("IsNotCountingDown_Not", "out", "UpPulse_Gate", "inA") # Must NOT be counting down 
-    builder.add_link("MultiViber", "out", "UpPulse_Gate", "inB")             # AND a pulse is active 
+    builder.add_link("IsNotCountingDown_Not", "out", "UpPulse_Gate", "inA") 
+    builder.add_link("MultiViber", "out", "UpPulse_Gate", "inB")
     builder.add_link("UpPulse_Gate", "out", "IncrementUpOneShot", "in") 
     builder.add_link("IncrementUpOneShot", "out", "Counter", "countUp") 
 
     # Logic to enable the down-counting pulse:
-    builder.add_link("IsCountingDown_Latch", "out", "DownPulse_Gate", "inA") # Must BE counting down 
-    builder.add_link("MultiViber", "out", "DownPulse_Gate", "inB")            # AND a pulse is active 
+    builder.add_link("IsCountingDown_Latch", "out", "DownPulse_Gate", "inA") 
+    builder.add_link("MultiViber", "out", "DownPulse_Gate", "inB")
     builder.add_link("DownPulse_Gate", "out", "IncrementDownOneShot", "in") 
     builder.add_link("IncrementDownOneShot", "out", "Counter", "countDown") 
     

@@ -14,7 +14,7 @@ from bog_builder import BogFolderBuilder
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog file with automatic layout."
+        description="Build a 4-input adder .bog"
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
@@ -33,11 +33,8 @@ def main():
 
     # --- Output ---
     builder.add_numeric_writable(name="Sum")
-    builder.start_sub_folder("CalculationLogic")
 
     builder.add_component(comp_type="kitControl:Add", name="Add")
-
-    builder.end_sub_folder()
 
     builder.add_link("Input1", "out", "Add", "inA")
     builder.add_link("Input2", "out", "Add", "inB")

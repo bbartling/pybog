@@ -1,3 +1,596 @@
+=== FILE: UNVERIFIED_for_pump_lead_lag1.py ===
+DIR: .
+=== CODE START ===
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for pump lead/lag logic with failure detection."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("PumpLeadLag")
+
+    # --- Top-level Inputs ---
+    # These represent the command issued to the pump and its actual running status.
+    builder.add_boolean_writable(name="PumpA_Command", default_value=False)
+    builder.add_boolean_writable(name="PumpA_Status", default_value=False)
+    builder.add_boolean_writable(name="PumpB_Command", default_value=False)
+    builder.add_boolean_writable(name="PumpB_Status", default_value=False)
+
+    # User preference for which pump should be lead under normal conditions.
+    # True = Pump A is preferred lead, False = Pump B is preferred lead.
+    builder.add_boolean_writable(name="LeadPumpPreference_A", default_value=True)
+
+    # Master enable for the entire lead/lag sequencing logic.
+    builder.add_boolean_writable(name="LeadLag_Enable", default_value=True)
+
+    # Delay in milliseconds for how long a command/status mismatch must persist
+    # before a "failure" is confirmed. Note: For standard kitControl:BooleanDelay,
+    # 'onDelay' is a static property set at creation, not a dynamically linkable slot.
+    # This input will set the initial property value.
+    builder.add_numeric_writable(name="FailureDetectionDelay_ms", default_value=5000.0, precision=0)
+
+    # --- Top-level Outputs ---
+    # Boolean point indicating if Pump A is currently designated as the lead pump.
+    builder.add_boolean_writable(name="PumpA_IsLead", default_value=False)
+    # Boolean point indicating if Pump B is currently designated as the lead pump.
+    builder.add_boolean_writable(name="PumpB_IsLead", default_value=False)
+    # The actual command sent to Pump A, controlled by the lead/lag logic.
+    builder.add_boolean_writable(name="PumpA_OutputCmd", default_value=False)
+    # The actual command sent to Pump B, controlled by the lead/lag logic.
+    builder.add_boolean_writable(name="PumpB_OutputCmd", default_value=False)
+    # Boolean point indicating if the currently active lead pump has a confirmed failure.
+    builder.add_boolean_writable(name="LeadPumpFailureDetected", default_value=False)
+
+    builder.start_sub_folder("PumpLeadLagLogic")
+
+    # --- Mismatch Detection for each pump (Command XOR Status) ---
+    builder.add_component(comp_type="kitControl:Xor", name="PumpA_Mismatch")
+    builder.add_component(comp_type="kitControl:Xor", name="PumpB_Mismatch")
+
+    # --- Delay for Confirmed Mismatch (BooleanDelay components) ---
+    # The 'onDelay' property is set from the default value of 'FailureDetectionDelay_ms'.
+    # This addresses the original error: 'onDelay' is a property, not a linkable slot.
+    default_delay_ms_str = str(int(builder.get_component("FailureDetectionDelay_ms").properties["value"]))
+    builder.add_component(
+        comp_type="kitControl:BooleanDelay",
+        name="PumpA_FailureDelay",
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+    )
+    builder.add_component(
+        comp_type="kitControl:BooleanDelay",
+        name="PumpB_FailureDelay",
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+    )
+
+    # --- Inverter Blocks for various logic conditions ---
+    builder.add_component(comp_type="kitControl:Not", name="Not_LeadPumpPreference_A") # Gives true if B is preferred
+    builder.add_component(comp_type="kitControl:Not", name="Not_PumpA_FailureDelay")   # Gives true if Pump A is healthy
+    builder.add_component(comp_type="kitControl:Not", name="Not_PumpB_FailureDelay")   # Gives true if Pump B is healthy
+
+    # --- Logic for determining if Pump A should be the lead ---
+    # Condition 1: Pump A is preferred AND Pump A is healthy
+    builder.add_component(comp_type="kitControl:And", name="And_A_Pref_And_A_Healthy")
+    # Condition 2: Pump B is preferred AND Pump B has failed (so A takes over)
+    builder.add_component(comp_type="kitControl:And", name="And_B_Pref_And_B_Failed")
+    # Pump A is lead if (Condition 1 OR Condition 2)
+    builder.add_component(comp_type="kitControl:Or", name="Or_PumpA_IsLead_Internal")
+
+    # --- Logic for detecting if the CURRENTLY ACTIVE lead pump has a failure ---
+    # Check if Pump A is lead AND Pump A has a confirmed failure
+    builder.add_component(comp_type="kitControl:And", name="And_A_IsLead_And_A_Failed")
+    # Check if Pump B is lead AND Pump B has a confirmed failure
+    builder.add_component(comp_type="kitControl:And", name="And_B_IsLead_And_B_Failed")
+    # Overall: Lead Pump Failure is detected if (And_A_IsLead_And_A_Failed OR And_B_IsLead_And_B_Failed)
+    builder.add_component(comp_type="kitControl:Or", name="Or_OverallLeadFailure")
+
+    # --- Logic for outputting actual pump commands ---
+    builder.add_component(comp_type="kitControl:And", name="And_PumpA_OutCmd_Logic")
+    builder.add_component(comp_type="kitControl:And", name="And_PumpB_OutCmd_Logic")
+
+    builder.end_sub_folder()
+
+    # --- Wiring Components ---
+
+    # Mismatch Detection Wiring
+    builder.add_link("PumpA_Command", "out", "PumpA_Mismatch", "inA")
+    builder.add_link("PumpA_Status", "out", "PumpA_Mismatch", "inB")
+    builder.add_link("PumpB_Command", "out", "PumpB_Mismatch", "inA")
+    builder.add_link("PumpB_Status", "out", "PumpB_Mismatch", "inB")
+
+    # Mismatch Delay Wiring
+    builder.add_link("PumpA_Mismatch", "out", "PumpA_FailureDelay", "in")
+    builder.add_link("PumpB_Mismatch", "out", "PumpB_FailureDelay", "in")
+
+    # Inverter Wiring
+    builder.add_link("LeadPumpPreference_A", "out", "Not_LeadPumpPreference_A", "in")
+    builder.add_link("PumpA_FailureDelay", "out", "Not_PumpA_FailureDelay", "in")
+    builder.add_link("PumpB_FailureDelay", "out", "Not_PumpB_FailureDelay", "in")
+
+    # Lead Assignment Logic for Pump A
+    builder.add_link("LeadPumpPreference_A", "out", "And_A_Pref_And_A_Healthy", "inA")
+    builder.add_link("Not_PumpA_FailureDelay", "out", "And_A_Pref_And_A_Healthy", "inB")
+
+    builder.add_link("Not_LeadPumpPreference_A", "out", "And_B_Pref_And_B_Failed", "inA") # B is preferred
+    builder.add_link("PumpB_FailureDelay", "out", "And_B_Pref_And_B_Failed", "inB")       # B has failed
+
+    builder.add_link("And_A_Pref_And_A_Healthy", "out", "Or_PumpA_IsLead_Internal", "inA")
+    builder.add_link("And_B_Pref_And_B_Failed", "out", "Or_PumpA_IsLead_Internal", "inB")
+    builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpA_IsLead", "in16")
+
+    # Lead Assignment Logic for Pump B (assuming a two-pump system, B is lead if A is not)
+    builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpB_IsLead", "in16",
+                     link_type="b:ConversionLink", converter_type="conv:BooleanToNotBoolean")
+
+    # Active Lead Pump Failure Detection Wiring
+    builder.add_link("PumpA_IsLead", "out", "And_A_IsLead_And_A_Failed", "inA")
+    builder.add_link("PumpA_FailureDelay", "out", "And_A_IsLead_And_A_Failed", "inB")
+
+    builder.add_link("PumpB_IsLead", "out", "And_B_IsLead_And_B_Failed", "inA")
+    builder.add_link("PumpB_FailureDelay", "out", "And_B_IsLead_And_B_Failed", "inB")
+
+    builder.add_link("And_A_IsLead_And_A_Failed", "out", "Or_OverallLeadFailure", "inA")
+    builder.add_link("And_B_IsLead_And_B_Failed", "out", "Or_OverallLeadFailure", "inB")
+    builder.add_link("Or_OverallLeadFailure", "out", "LeadPumpFailureDetected", "in16")
+
+    # Output Command Logic Wiring
+    builder.add_link("PumpA_IsLead", "out", "And_PumpA_OutCmd_Logic", "inA")
+    builder.add_link("LeadLag_Enable", "out", "And_PumpA_OutCmd_Logic", "inB")
+    builder.add_link("And_PumpA_OutCmd_Logic", "out", "PumpA_OutputCmd", "in16")
+
+    builder.add_link("PumpB_IsLead", "out", "And_PumpB_OutCmd_Logic", "inA")
+    builder.add_link("LeadLag_Enable", "out", "And_PumpB_OutCmd_Logic", "inB")
+    builder.add_link("And_PumpB_OutCmd_Logic", "out", "PumpB_OutputCmd", "in16")
+
+    # --- Save the File ---
+    bog_filename = f"pump_squencing.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: UNVERIFIED_for_pump_lead_lag2.py ===
+DIR: .
+=== CODE START ===
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for central plant dual pump lead and lag staging logic."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    # Use a descriptive name for the overall logic container
+    builder = BogFolderBuilder("PumpLeadLagStaging")
+
+    # --- Top-level Inputs ---
+    # Boolean point to select lead pump: True = Pump 1 Lead, False = Pump 2 Lead
+    builder.add_boolean_writable(name="LeadPump1_Select", default_value=True)
+    # Pump status feedbacks (actual running state)
+    builder.add_boolean_writable(name="Pump1_Status", default_value=True)
+    builder.add_boolean_writable(name="Pump2_Status", default_value=True)
+
+    # --- Top-level Outputs ---
+    # Pump commands (True = ON, False = OFF)
+    builder.add_boolean_writable(name="Pump1_Command")
+    builder.add_boolean_writable(name="Pump2_Command")
+    # Indication if the currently active lead pump has failed
+    builder.add_boolean_writable(name="LeadPumpFailure")
+
+    # --- Logic Sub-Folder ---
+    builder.start_sub_folder("StagingLogic")
+
+    # --- Constants ---
+    builder.add_component("kitControl:NumericConst", name="Num_0", properties={"out": 0.0})
+    builder.add_component("kitControl:NumericConst", name="Num_1", properties={"out": 1.0})
+
+    # --- Determine if P1 is the designated lead pump (outputs b:Boolean) ---
+    # An Equal block is used here to take the 'BooleanWritableExt' type from 'LeadPump1_Select'
+    # and output a pure 'b:Boolean' type. This pure boolean is required for the 'inSwitch'
+    # slot of 'NumericSwitch' components, preventing the previous type mismatch error.
+    # The builder will automatically insert necessary conversion links for inputs to 'Equal'.
+    builder.add_component("kitControl:Equal", name="P1_IsLeadBool")
+    builder.add_link("LeadPump1_Select", "out", "P1_IsLeadBool", "inA")
+    builder.add_link("Num_1", "out", "P1_IsLeadBool", "inB")
+
+    # Determine if P2 is the designated lead pump (outputs b:Boolean)
+    builder.add_component("kitControl:Not", name="P2_IsLeadBool")
+    builder.add_link("P1_IsLeadBool", "out", "P2_IsLeadBool", "in")
+
+    # --- Determine if pumps are 'Not Running' (outputs b:Boolean) ---
+    # Converts PumpX_Status (BooleanWritableExt) to b:Boolean, then inverts it.
+    builder.add_component("kitControl:Not", name="Not_P1_Status")
+    builder.add_link("Pump1_Status", "out", "Not_P1_Status", "in")
+
+    builder.add_component("kitControl:Not", name="Not_P2_Status")
+    builder.add_link("Pump2_Status", "out", "Not_P2_Status", "in")
+
+    # --- Detect Lead Pump Failure Condition for each potential lead pump ---
+    # A pump is considered "failed" in its lead role if it's currently designated as lead
+    # AND its physical status indicates it is not running (i.e., commanded ON but OFF).
+    builder.add_component("kitControl:And", name="P1_LeadFailureCondition") # Output is b:Boolean
+    builder.add_link("P1_IsLeadBool", "out", "P1_LeadFailureCondition", "inA")
+    builder.add_link("Not_P1_Status", "out", "P1_LeadFailureCondition", "inB")
+
+    builder.add_component("kitControl:And", name="P2_LeadFailureCondition") # Output is b:Boolean
+    builder.add_link("P2_IsLeadBool", "out", "P2_LeadFailureCondition", "inA")
+    builder.add_link("Not_P2_Status", "out", "P2_LeadFailureCondition", "inB")
+
+    # --- Logic Path: Pump 1 is Designated Lead ---
+    # This set of NumericSwitches determines the commands and failure status
+    # IF Pump 1 is the lead pump, based on whether Pump 1 has failed.
+    builder.add_numeric_switch(name="P1_Cmd_Path_P1Lead") # Controls P1 command if P1 is designated lead
+    builder.add_link("P1_LeadFailureCondition", "out", "P1_Cmd_Path_P1Lead", "inSwitch")
+    builder.add_link("Num_0", "out", "P1_Cmd_Path_P1Lead", "inTrue")  # P1 OFF if P1 lead and failed
+    builder.add_link("Num_1", "out", "P1_Cmd_Path_P1Lead", "inFalse") # P1 ON if P1 lead and OK
+
+    builder.add_numeric_switch(name="P2_Cmd_Path_P1Lead") # Controls P2 command if P1 is designated lead
+    builder.add_link("P1_LeadFailureCondition", "out", "P2_Cmd_Path_P1Lead", "inSwitch")
+    builder.add_link("Num_1", "out", "P2_Cmd_Path_P1Lead", "inTrue")  # P2 ON (lag takeover) if P1 lead and failed
+    builder.add_link("Num_0", "out", "P2_Cmd_Path_P1Lead", "inFalse") # P2 OFF if P1 lead and OK
+
+    builder.add_numeric_switch(name="LeadFail_Path_P1Lead") # Controls LeadPumpFailure if P1 is designated lead
+    builder.add_link("P1_LeadFailureCondition", "out", "LeadFail_Path_P1Lead", "inSwitch")
+    builder.add_link("Num_1", "out", "LeadFail_Path_P1Lead", "inTrue")  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P1Lead", "inFalse") # Lead pump OK
+
+    # --- Logic Path: Pump 2 is Designated Lead ---
+    # This set of NumericSwitches determines the commands and failure status
+    # IF Pump 2 is the lead pump, based on whether Pump 2 has failed.
+    builder.add_numeric_switch(name="P1_Cmd_Path_P2Lead") # Controls P1 command if P2 is designated lead
+    builder.add_link("P2_LeadFailureCondition", "out", "P1_Cmd_Path_P2Lead", "inSwitch")
+    builder.add_link("Num_1", "out", "P1_Cmd_Path_P2Lead", "inTrue")  # P1 ON (lag takeover) if P2 lead and failed
+    builder.add_link("Num_0", "out", "P1_Cmd_Path_P2Lead", "inFalse") # P1 OFF if P2 lead and OK
+
+    builder.add_numeric_switch(name="P2_Cmd_Path_P2Lead") # Controls P2 command if P2 is designated lead
+    builder.add_link("P2_LeadFailureCondition", "out", "P2_Cmd_Path_P2Lead", "inSwitch")
+    builder.add_link("Num_0", "out", "P2_Cmd_Path_P2Lead", "inTrue")  # P2 OFF if P2 lead and failed
+    builder.add_link("Num_1", "out", "P2_Cmd_Path_P2Lead", "inFalse") # P2 ON if P2 lead and OK
+
+    builder.add_numeric_switch(name="LeadFail_Path_P2Lead") # Controls LeadPumpFailure if P2 is designated lead
+    builder.add_link("P2_LeadFailureCondition", "out", "LeadFail_Path_P2Lead", "inSwitch")
+    builder.add_link("Num_1", "out", "LeadFail_Path_P2Lead", "inTrue")  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P2Lead", "inFalse") # Lead pump OK
+
+    # --- Final Output Selection ---
+    # These switches select between the "P1 Lead path" results and "P2 Lead path" results
+    # based on which pump is currently designated as lead by 'P1_IsLeadBool'.
+    builder.add_numeric_switch(name="Final_P1_Cmd")
+    builder.add_link("P1_IsLeadBool", "out", "Final_P1_Cmd", "inSwitch")
+    builder.add_link("P1_Cmd_Path_P1Lead", "out", "Final_P1_Cmd", "inTrue")  # Use P1 cmd from P1 lead path
+    builder.add_link("P1_Cmd_Path_P2Lead", "out", "Final_P1_Cmd", "inFalse") # Use P1 cmd from P2 lead path
+
+    builder.add_numeric_switch(name="Final_P2_Cmd")
+    builder.add_link("P1_IsLeadBool", "out", "Final_P2_Cmd", "inSwitch")
+    builder.add_link("P2_Cmd_Path_P1Lead", "out", "Final_P2_Cmd", "inTrue")  # Use P2 cmd from P1 lead path
+    builder.add_link("P2_Cmd_Path_P2Lead", "out", "Final_P2_Cmd", "inFalse") # Use P2 cmd from P2 lead path
+
+    builder.add_numeric_switch(name="Final_Lead_Failure")
+    builder.add_link("P1_IsLeadBool", "out", "Final_Lead_Failure", "inSwitch")
+    builder.add_link("LeadFail_Path_P1Lead", "out", "Final_Lead_Failure", "inTrue")  # Use failure status from P1 lead path
+    builder.add_link("LeadFail_Path_P2Lead", "out", "Final_Lead_Failure", "inFalse") # Use failure status from P2 lead path
+
+    builder.end_sub_folder()
+
+    # --- Link Final Numeric Outputs (0/1) to Top-Level BooleanWritable Points ---
+    # The BogFolderBuilder should automatically add StatusNumericToStatusBoolean conversion links here.
+    builder.add_link("Final_P1_Cmd", "out", "Pump1_Command", "in16")
+    builder.add_link("Final_P2_Cmd", "out", "Pump2_Command", "in16")
+    builder.add_link("Final_Lead_Failure", "out", "LeadPumpFailure", "in16")
+
+    # --- Save the .bog file ---
+    bog_filename = "pump_lead_lag.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: UNVERIFIED_ping_pong_algorithm.py ===
+DIR: .
+=== CODE START ===
+"""
+This script builds a robust "ping-pong" or oscillating counter.
+The core of the logic is a counter that automatically increments up to a top limit,
+then decrements down to a low limit, and repeats this cycle continuously.
+
+This example is fundamentally important for understanding Guideline 36 (G36)
+style trim-and-respond algorithms. The key mechanism is a `BooleanLatch` which
+acts as a state machine, remembering whether the system is currently in a
+"counting up" or "counting down" state. This stateful, incremental adjustment
+is the basis for complex G36 sequences like VAV damper pressure optimization
+or chilled water temperature resets.
+
+Key Components:
+- A central Counter that holds the current value.
+- A MultiVibrator that provides a steady pulse for incrementing/decrementing.
+- A BooleanLatch that stores the current counting direction (Up vs. Down).
+- Limit checkers (GreaterThanEqual, LessThanEqual) that trigger the change in direction.
+- Gating logic (And, Not) to ensure the pulse is routed to either the 'countUp'
+  or 'countDown' slot based on the latch's state.
+"""
+
+
+import sys, os, argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a .bog: SineWave → thresholds → OR → BooleanLatch playground."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("PingPongAlgorithm", debug=True)
+
+    builder.add_numeric_writable("CounterViewer", 0.0) 
+    builder.add_numeric_writable("Step", 1.0) 
+    builder.add_numeric_writable("TopLimit", 20.0) 
+    builder.add_numeric_writable("LowLimit", -20.0) 
+    builder.add_boolean_writable("ManualResetCounter", default_value=False) 
+
+    builder.add_component("kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"}) 
+    builder.add_component("kitControl:Counter", "Counter") 
+    
+    builder.add_component("kitControl:OneShot", "IncrementUpOneShot") 
+    builder.add_component("kitControl:OneShot", "IncrementDownOneShot") 
+    builder.add_component("kitControl:OneShot", "ResetOneShot") 
+    
+    # Limit-checking logic
+    builder.add_component("kitControl:GreaterThanEqual", "AtOrAbove_TopLimit") 
+    builder.add_component("kitControl:LessThanEqual", "AtOrBelow_LowLimit") 
+
+    # --- State-Holding and Gating Logic (The Fix) ---
+    # A BooleanLatch holds the direction state: False=Up, True=Down.
+    builder.add_component("kitControl:BooleanLatch", "IsCountingDown_Latch") 
+    builder.add_component("kitControl:Not", "IsNotCountingDown_Not") # Inverter for up-counting logic 
+    builder.add_component("kitControl:And", "UpPulse_Gate") # Gate for enabling up-counts 
+    builder.add_component("kitControl:And", "DownPulse_Gate") # Gate for enabling down-counts 
+
+
+    # --- Wiring ---
+    print("Wiring components...")
+
+    # Wire the main counter properties and reset
+    builder.add_link("Step", "out", "Counter", "countIncrement") 
+    builder.add_link("Counter", "out", "CounterViewer", "in16") 
+    builder.add_link("ManualResetCounter", "out", "ResetOneShot", "in") 
+    builder.add_link("ResetOneShot", "out", "Counter", "clear") 
+
+    # Wire the counter's current value to the limit checkers
+    builder.add_link("Counter", "out", "AtOrAbove_TopLimit", "inA") 
+    builder.add_link("TopLimit", "out", "AtOrAbove_TopLimit", "inB") 
+    builder.add_link("Counter", "out", "AtOrBelow_LowLimit", "inA") 
+    builder.add_link("LowLimit", "out", "AtOrBelow_LowLimit", "inB") 
+
+    # --- State-Management Wiring ---
+    # Set the latch to 'True' (is counting down) when the top limit is reached.
+    builder.add_link("AtOrAbove_TopLimit", "out", "IsCountingDown_Latch", "set") 
+    # Reset the latch to 'False' (is counting up) when the low limit is reached.
+    builder.add_link("AtOrBelow_LowLimit", "out", "IsCountingDown_Latch", "reset") 
+
+    # --- Pulse Gating Wiring ---
+    # Logic to enable the up-counting pulse:
+    builder.add_link("IsCountingDown_Latch", "out", "IsNotCountingDown_Not", "in") 
+    builder.add_link("IsNotCountingDown_Not", "out", "UpPulse_Gate", "inA") 
+    builder.add_link("MultiViber", "out", "UpPulse_Gate", "inB")
+    builder.add_link("UpPulse_Gate", "out", "IncrementUpOneShot", "in") 
+    builder.add_link("IncrementUpOneShot", "out", "Counter", "countUp") 
+
+    # Logic to enable the down-counting pulse:
+    builder.add_link("IsCountingDown_Latch", "out", "DownPulse_Gate", "inA") 
+    builder.add_link("MultiViber", "out", "DownPulse_Gate", "inB")
+    builder.add_link("DownPulse_Gate", "out", "IncrementDownOneShot", "in") 
+    builder.add_link("IncrementDownOneShot", "out", "Counter", "countDown") 
+    
+    # --- Save the File ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: UNVERIFIED_simple_central_plant.py ===
+DIR: .
+=== CODE START ===
+"""
+simple_central_plant.py
+
+Builds a Niagara .bog that implements a central plant mode selector with:
+- heating/cooling start/stop based on OAT with hysteresis
+- a free-cooling (economizer) deadband
+- boolean outputs for boiler/chiller and pumps
+
+This script conforms to the project conventions:
+- appends ../src to sys.path (no try/except)
+- accepts an output directory via -o/--output_dir
+- saves to a hard-coded .bog filename inside that directory
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+# Project import convention: append ../src then import the builder
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+from bog_builder import BogFolderBuilder  # noqa: E402
+
+
+SCRIPT_FOLDER_NAME = "CentralPlantControl"
+SCRIPT_BOG_NAME = "simple_central_plant.bog"
+
+
+def build_central_plant(builder: BogFolderBuilder) -> None:
+    """
+    Populate a BogFolderBuilder with central plant logic:
+      - Hysteretic heat/cool start/stop vs OAT
+      - Free-cooling zone blocks heating/cooling
+    """
+    # --- Inputs / Setpoints (top-level “variables”) ---
+    builder.add_numeric_writable("OAT", default_value=55.0)
+
+    # Heating (start below stop to create hysteresis)
+    builder.add_numeric_writable("HeatStartSP", default_value=45.0)
+    builder.add_numeric_writable("HeatStopSP", default_value=50.0)
+
+    # Cooling (start above stop to create hysteresis)
+    builder.add_numeric_writable("CoolStartSP", default_value=75.0)
+    builder.add_numeric_writable("CoolStopSP", default_value=70.0)
+
+    # Free cooling deadband (inclusive range)
+    builder.add_numeric_writable("FreeCoolLow", default_value=50.0)
+    builder.add_numeric_writable("FreeCoolHigh", default_value=60.0)
+
+    # --- Outputs to equipment ---
+    builder.add_boolean_writable("Boiler_Cmd")
+    builder.add_boolean_writable("HeatingPump_Cmd")
+    builder.add_boolean_writable("Chiller_Cmd")
+    builder.add_boolean_writable("CoolingPump_Cmd")
+
+    # --- Logic subfolder (keeps top level clean) ---
+    builder.start_sub_folder("PlantLogic")
+
+    # Free-cooling band: OAT >= Low AND OAT <= High
+    builder.add_component("kitControl:GreaterThanEqual", "FreeCool_GE")
+    builder.add_component("kitControl:LessThanEqual", "FreeCool_LE")
+    builder.add_component("kitControl:And", "FreeCoolingMode")
+    builder.add_component("kitControl:Not", "Not_FreeCooling")
+
+    # Start/Stop comparators
+    builder.add_component("kitControl:LessThanEqual", "HeatStart_Compare")       # OAT <= HeatStartSP
+    builder.add_component("kitControl:GreaterThanEqual", "HeatStop_Compare")     # OAT >= HeatStopSP
+    builder.add_component("kitControl:GreaterThanEqual", "CoolStart_Compare")    # OAT >= CoolStartSP
+    builder.add_component("kitControl:LessThanEqual", "CoolStop_Compare")        # OAT <= CoolStopSP
+
+    # Start/Stop gates
+    builder.add_component("kitControl:And", "HeatStart_Gate")    # start & not free-cooling
+    builder.add_component("kitControl:And", "CoolStart_Gate")
+    builder.add_component("kitControl:Or", "HeatStop_Or")        # stop OR free-cooling
+    builder.add_component("kitControl:Or", "CoolStop_Or")
+
+    # Latches (hysteresis behavior)
+    builder.add_component("kitControl:BooleanLatch", "Heat_Latch")
+    builder.add_component("kitControl:BooleanLatch", "Cool_Latch")
+
+    # --- Wiring: Free cooling detection ---
+    builder.add_link("OAT", "out", "FreeCool_GE", "inA")
+    builder.add_link("FreeCoolLow", "out", "FreeCool_GE", "inB")
+
+    builder.add_link("OAT", "out", "FreeCool_LE", "inA")
+    builder.add_link("FreeCoolHigh", "out", "FreeCool_LE", "inB")
+
+    builder.add_link("FreeCool_GE", "out", "FreeCoolingMode", "inA")
+    builder.add_link("FreeCool_LE", "out", "FreeCoolingMode", "inB")
+
+    builder.add_link("FreeCoolingMode", "out", "Not_FreeCooling", "in")
+
+    # --- Wiring: Heating start/stop with gating ---
+    builder.add_link("OAT", "out", "HeatStart_Compare", "inA")
+    builder.add_link("HeatStartSP", "out", "HeatStart_Compare", "inB")
+    builder.add_link("HeatStart_Compare", "out", "HeatStart_Gate", "inA")
+    builder.add_link("Not_FreeCooling", "out", "HeatStart_Gate", "inB")
+
+    builder.add_link("OAT", "out", "HeatStop_Compare", "inA")
+    builder.add_link("HeatStopSP", "out", "HeatStop_Compare", "inB")
+    builder.add_link("HeatStop_Compare", "out", "HeatStop_Or", "inA")
+    builder.add_link("FreeCoolingMode", "out", "HeatStop_Or", "inB")
+
+    # --- Wiring: Cooling start/stop with gating ---
+    builder.add_link("OAT", "out", "CoolStart_Compare", "inA")
+    builder.add_link("CoolStartSP", "out", "CoolStart_Compare", "inB")
+    builder.add_link("CoolStart_Compare", "out", "CoolStart_Gate", "inA")
+    builder.add_link("Not_FreeCooling", "out", "CoolStart_Gate", "inB")
+
+    builder.add_link("OAT", "out", "CoolStop_Compare", "inA")
+    builder.add_link("CoolStopSP", "out", "CoolStop_Compare", "inB")
+    builder.add_link("CoolStop_Compare", "out", "CoolStop_Or", "inA")
+    builder.add_link("FreeCoolingMode", "out", "CoolStop_Or", "inB")
+
+    # --- Wiring: Latches (Set/Reset) ---
+    builder.add_link("HeatStart_Gate", "out", "Heat_Latch", "set")
+    builder.add_link("HeatStop_Or", "out", "Heat_Latch", "reset")
+
+    builder.add_link("CoolStart_Gate", "out", "Cool_Latch", "set")
+    builder.add_link("CoolStop_Or", "out", "Cool_Latch", "reset")
+
+    builder.end_sub_folder()
+
+    # --- Final outputs (latch → writable) ---
+    builder.add_link("Heat_Latch", "out", "Boiler_Cmd", "in16")
+    builder.add_link("Heat_Latch", "out", "HeatingPump_Cmd", "in16")
+    builder.add_link("Cool_Latch", "out", "Chiller_Cmd", "in16")
+    builder.add_link("Cool_Latch", "out", "CoolingPump_Cmd", "in16")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        description="Generate a central plant .bog with hysteresis and free-cooling."
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Directory to write the .bog file.",
+    )
+    args = p.parse_args()
+
+    # Build graph
+    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=False)
+    build_central_plant(builder)
+
+    # Save to hard-coded name inside the chosen output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, SCRIPT_BOG_NAME)
+    builder.save(out_path)
+    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out_path)}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
 === FILE: addition_complicated.py ===
 DIR: .
 === CODE START ===
@@ -246,11 +839,11 @@ def main():
     builder.add_numeric_writable("TOP", default_value=90.0, precision=2)
     builder.add_numeric_writable("BOTTOM", default_value=10.0, precision=2)
     builder.add_boolean_writable("CountDown", default_value=False)  # display latch OUT
+    builder.add_component("kitControl:SineWave", "SineWave")
 
     # -------- Logic folder --------
     builder.start_sub_folder("LatchSandbox")
 
-    builder.add_component("kitControl:SineWave", "SineWave")
     builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
     builder.add_component("kitControl:LessThanEqual", "LessThanEq")
     builder.add_component("kitControl:Or", "Or_Block")
@@ -544,237 +1137,6 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: central_plant.py ===
-DIR: .
-=== CODE START ===
-"""
-central_plant_bog_builder.py
---------------------------------
-
-This module exposes a convenience function for constructing a Niagara
-Baja Object Graph (``.bog``) that implements a simple boiler and
-chiller plant sequence.  The control logic generated by this script
-illustrates how to combine comparison blocks, logical gates and
-latching behaviour to implement outdoor‐air temperature based heating
-and cooling with hysteresis and a free cooling deadband.
-
-The resulting graph contains numeric setpoints for the following:
-
-* ``OAT`` – the current outside air temperature.
-* ``HeatStartSP`` – the outdoor air temperature at or below which the
-  heating plant will be enabled.
-* ``HeatStopSP`` – the outdoor air temperature at or above which the
-  heating plant will be disabled.  Choosing a value higher than
-  ``HeatStartSP`` creates hysteresis.
-* ``CoolStartSP`` – the outdoor air temperature at or above which the
-  cooling plant will be enabled.
-* ``CoolStopSP`` – the outdoor air temperature at or below which the
-  cooling plant will be disabled.  Choosing a value lower than
-  ``CoolStartSP`` creates hysteresis.
-* ``FreeCoolLow`` and ``FreeCoolHigh`` – the inclusive bounds of a
-  “economizer” or free cooling range.  When the outdoor air
-  temperature lies within this band, neither the boiler nor the
-  chiller are commanded.
-
-Two latches implement the hysteretic enable/disable behaviour.  Each
-latch is set when its corresponding start condition becomes true and
-reset when its stop condition becomes true.  This means the heating
-plant remains on until the outdoor air has warmed past the stop
-setpoint or moves into the free cooling band, even if the start
-setpoint is crossed in the opposite direction.  Likewise, the cooling
-plant remains on until the outdoor air has cooled past its stop
-setpoint or enters the free cooling band.
-
-Four boolean outputs are provided to drive downstream equipment:
-
-* ``Boiler_Cmd`` – enable signal for the boiler.
-* ``HeatingPump_Cmd`` – enable signal for the heating pump feeding AHU
-  hot water coils.
-* ``Chiller_Cmd`` – enable signal for the chiller.
-* ``CoolingPump_Cmd`` – enable signal for the cooling pump feeding AHU
-  chilled water coils.
-
-To generate a ``.bog`` file using this module, call
-``create_central_plant_bog`` specifying the desired output path.  See
-the module’s ``__main__`` block for a CLI example.
-"""
-
-from __future__ import annotations
-
-import argparse
-import os
-from typing import Optional
-
-from bog_builder import BogFolderBuilder
-
-
-def build_central_plant(builder: BogFolderBuilder) -> None:
-    """Populate a :class:`BogFolderBuilder` with central plant logic.
-
-    Parameters
-    ----------
-    builder : BogFolderBuilder
-        The builder into which all components, inputs, outputs and links
-        will be added.  The caller should instantiate the builder with a
-        suitable top–level folder name before invoking this function.
-
-    Notes
-    -----
-    This function does not call :meth:`BogFolderBuilder.save`; the
-    caller is responsible for saving the completed graph to disk once
-    populated.
-    """
-    # ------------------------------------------------------------------
-    # Inputs and adjustable setpoints
-    # ------------------------------------------------------------------
-    # Outside air temperature sensed value
-    builder.add_numeric_writable("OAT", default_value=55.0)
-    # Heating start and stop setpoints; choose defaults to illustrate
-    # hysteresis (start below stop).  Users can adjust these at run time.
-    builder.add_numeric_writable("HeatStartSP", default_value=45.0)
-    builder.add_numeric_writable("HeatStopSP", default_value=50.0)
-    # Cooling start and stop setpoints (start above stop)
-    builder.add_numeric_writable("CoolStartSP", default_value=75.0)
-    builder.add_numeric_writable("CoolStopSP", default_value=70.0)
-    # Free cooling deadband bounds
-    builder.add_numeric_writable("FreeCoolLow", default_value=50.0)
-    builder.add_numeric_writable("FreeCoolHigh", default_value=60.0)
-
-    # ------------------------------------------------------------------
-    # Outputs to drive the plant equipment
-    # ------------------------------------------------------------------
-    builder.add_boolean_writable("Boiler_Cmd")
-    builder.add_boolean_writable("HeatingPump_Cmd")
-    builder.add_boolean_writable("Chiller_Cmd")
-    builder.add_boolean_writable("CoolingPump_Cmd")
-
-    # ------------------------------------------------------------------
-    # Comparison blocks for start and stop conditions
-    # ------------------------------------------------------------------
-    # Heating start: OAT ≤ HeatStartSP
-    builder.add_component("kitControl:LessThanEqual", "Cold_Start_Compare")
-    # Cooling start: OAT ≥ CoolStartSP
-    builder.add_component("kitControl:GreaterThanEqual", "Hot_Start_Compare")
-    # Heating stop: OAT ≥ HeatStopSP
-    builder.add_component("kitControl:GreaterThanEqual", "Warm_StopHeat_Compare")
-    # Cooling stop: OAT ≤ CoolStopSP
-    builder.add_component("kitControl:LessThanEqual", "Cool_Stop_Compare")
-    # Free cooling boundaries: OAT ≥ FreeCoolLow and OAT ≤ FreeCoolHigh
-    builder.add_component("kitControl:GreaterThanEqual", "FreeCool_GE")
-    builder.add_component("kitControl:LessThanEqual", "FreeCool_LE")
-
-    # ------------------------------------------------------------------
-    # Logical operators
-    # ------------------------------------------------------------------
-    builder.add_component("kitControl:And", "FreeCoolingMode")  # detects OAT in deadband
-    builder.add_component("kitControl:Not", "Not_FreeCooling")  # invert deadband signal
-    # Start gates combine start condition with Not_FreeCooling
-    builder.add_component("kitControl:And", "Start_Heat_Gate")
-    builder.add_component("kitControl:And", "Start_Cool_Gate")
-    # Stop gates combine stop condition with FreeCoolingMode (OR)
-    builder.add_component("kitControl:Or", "Stop_Heat_Or")
-    builder.add_component("kitControl:Or", "Stop_Cool_Or")
-
-    # Latches to implement hysteresis
-    builder.add_component("kitControl:BooleanLatch", "Heat_Latch")
-    builder.add_component("kitControl:BooleanLatch", "Cool_Latch")
-
-    # ------------------------------------------------------------------
-    # Linking: establish data flow between points and logic blocks
-    # ------------------------------------------------------------------
-    # Free cooling detection (OAT within [FreeCoolLow, FreeCoolHigh])
-    builder.add_link("OAT", "out", "FreeCool_GE", "inA")
-    builder.add_link("FreeCoolLow", "out", "FreeCool_GE", "inB")
-    builder.add_link("OAT", "out", "FreeCool_LE", "inA")
-    builder.add_link("FreeCoolHigh", "out", "FreeCool_LE", "inB")
-    builder.add_link("FreeCool_GE", "out", "FreeCoolingMode", "inA")
-    builder.add_link("FreeCool_LE", "out", "FreeCoolingMode", "inB")
-
-    # Invert the free cooling mode; used to gate start conditions
-    builder.add_link("FreeCoolingMode", "out", "Not_FreeCooling", "in")
-
-    # Heating start: OAT ≤ HeatStartSP AND not in free cooling
-    builder.add_link("OAT", "out", "Cold_Start_Compare", "inA")
-    builder.add_link("HeatStartSP", "out", "Cold_Start_Compare", "inB")
-    builder.add_link("Cold_Start_Compare", "out", "Start_Heat_Gate", "inA")
-    builder.add_link("Not_FreeCooling", "out", "Start_Heat_Gate", "inB")
-
-    # Cooling start: OAT ≥ CoolStartSP AND not in free cooling
-    builder.add_link("OAT", "out", "Hot_Start_Compare", "inA")
-    builder.add_link("CoolStartSP", "out", "Hot_Start_Compare", "inB")
-    builder.add_link("Hot_Start_Compare", "out", "Start_Cool_Gate", "inA")
-    builder.add_link("Not_FreeCooling", "out", "Start_Cool_Gate", "inB")
-
-    # Heating stop: OAT ≥ HeatStopSP OR in free cooling
-    builder.add_link("OAT", "out", "Warm_StopHeat_Compare", "inA")
-    builder.add_link("HeatStopSP", "out", "Warm_StopHeat_Compare", "inB")
-    builder.add_link("Warm_StopHeat_Compare", "out", "Stop_Heat_Or", "inA")
-    builder.add_link("FreeCoolingMode", "out", "Stop_Heat_Or", "inB")
-
-    # Cooling stop: OAT ≤ CoolStopSP OR in free cooling
-    builder.add_link("OAT", "out", "Cool_Stop_Compare", "inA")
-    builder.add_link("CoolStopSP", "out", "Cool_Stop_Compare", "inB")
-    builder.add_link("Cool_Stop_Compare", "out", "Stop_Cool_Or", "inA")
-    builder.add_link("FreeCoolingMode", "out", "Stop_Cool_Or", "inB")
-
-    # Latch wiring: set on start and reset on stop
-    builder.add_link("Start_Heat_Gate", "out", "Heat_Latch", "set")
-    builder.add_link("Stop_Heat_Or", "out", "Heat_Latch", "reset")
-    builder.add_link("Start_Cool_Gate", "out", "Cool_Latch", "set")
-    builder.add_link("Stop_Cool_Or", "out", "Cool_Latch", "reset")
-
-    # Connect latch outputs to final commands
-    builder.add_link("Heat_Latch", "out", "Boiler_Cmd", "in16")
-    builder.add_link("Heat_Latch", "out", "HeatingPump_Cmd", "in16")
-    builder.add_link("Cool_Latch", "out", "Chiller_Cmd", "in16")
-    builder.add_link("Cool_Latch", "out", "CoolingPump_Cmd", "in16")
-
-
-def create_central_plant_bog(output_path: str) -> str:
-    """Create and save the central plant .bog file.
-
-    Parameters
-    ----------
-    output_path : str
-        Full file system path (including filename) where the resulting
-        ``.bog`` archive should be written.  The parent directory will
-        be created if it does not already exist.
-
-    Returns
-    -------
-    str
-        The absolute path to the saved ``.bog`` file.
-    """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    builder = BogFolderBuilder("CentralPlantControl", debug=False)
-    build_central_plant(builder)
-    builder.save(output_path)
-    return os.path.abspath(output_path)
-
-
-def main(args: Optional[list[str]] = None) -> None:
-    """Command–line entry point for generating a central plant bog file.
-
-    Usage examples::
-
-        python central_plant_bog_builder.py -o output/central.bog
-
-    The ``-o``/``--output`` argument specifies where the ``.bog`` file
-    should be written.  If omitted, the file will be created in the
-    current directory as ``central_plant.bog``.
-    """
-    parser = argparse.ArgumentParser(description="Generate a central plant .bog file with heating, cooling and free cooling logic.")
-    parser.add_argument("-o", "--output", default="central_plant.bog", help="Destination .bog file path")
-    parsed_args = parser.parse_args(args)
-    out_path = parsed_args.output
-    result_path = create_central_plant_bog(out_path)
-    print(f"Successfully created central plant .bog at: {result_path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: counter_smoke_test.py ===
 DIR: .
 === CODE START ===
@@ -858,6 +1220,8 @@ def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     Creates and links a GreaterThan and NumericSwitch block to find the maximum of two inputs.
     This function doesn't need to know about sub-folders; it will automatically
     place components in whatever the builder's current "context" is.
+
+    sub folders commented out for testing purposes of grid layout.
     """
     gt_name = f"GT_{pair_id}"
     switch_name = f"Switch_{pair_id}"
@@ -906,7 +1270,7 @@ def main():
 
     builder.add_numeric_writable("MaxValue")
 
-    builder.start_sub_folder("CalculationLogic")
+    #builder.start_sub_folder("CalculationLogic")
 
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
@@ -935,7 +1299,7 @@ def main():
 
     final_winner = current_tier_outputs[0]
 
-    builder.end_sub_folder()
+    #builder.end_sub_folder()
 
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")
@@ -1110,7 +1474,7 @@ from bog_builder import BogFolderBuilder
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog file with automatic layout."
+        description="Build a 4-input adder .bog"
     )
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
@@ -1129,11 +1493,8 @@ def main():
 
     # --- Output ---
     builder.add_numeric_writable(name="Sum")
-    builder.start_sub_folder("CalculationLogic")
 
     builder.add_component(comp_type="kitControl:Add", name="Add")
-
-    builder.end_sub_folder()
 
     builder.add_link("Input1", "out", "Add", "inA")
     builder.add_link("Input2", "out", "Add", "inB")
@@ -1147,174 +1508,6 @@ def main():
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
-=== FILE: g36_test_BAD.py ===
-DIR: .
-=== CODE START ===
-"""
-[WARNING - INTENTIONALLY INCORRECT FILE]
-This script is a deliberate example of an improperly constructed bog builder
-file. It is designed to fail during execution and produce validation warnings
-and errors.
-
-The purpose of this file is to serve as a negative example for an LLM agent,
-demonstrating common mistakes such as:
-1.  Using incorrect component types (e.g., 'kitControl:NumericLatch' which
-    may not exist or be typed correctly).
-2.  Attempting to link to invalid component slots (e.g., linking a numeric
-    value to the 'onDelay' property of a BooleanDelay instead of its 'in' slot).
-3.  General syntax that will be caught by the bog_builder's internal
-    validation and raise a ValueError.
-
-This script should be used to test an agent's ability to recognize, parse,
-and potentially learn from builder script failures. DO NOT use this script
-as a template for valid logic.
-"""
-
-
-import sys
-import os
-import argparse
-
-from bog_builder import BogFolderBuilder
-
-def main():
-    """
-    This script builds the wiresheet logic for the AHU Supply Air Temperature (SAT)
-    Trim & Respond program, based on the provided Java example.
-    """
-    parser = argparse.ArgumentParser(
-        description="Build a .bog file for the SAT Trim and Respond logic."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
-    )
-    args = parser.parse_args()
-
-    script_filename = os.path.basename(__file__).replace(".py", "")
-    builder = BogFolderBuilder("SatTrimAndRespond")
-
-    # --- Inputs ---
-    print("Creating top-level inputs...")
-    builder.add_numeric_writable("TotalRequests", default_value=0.0)
-    builder.add_boolean_writable("FanRunCmd", default_value=False)
-    builder.add_numeric_writable("OutsideAirTemp", default_value=65.0)
-    builder.add_numeric_writable("SatMin", default_value=55.0)
-    builder.add_numeric_writable("SatMax", default_value=70.0)
-    builder.add_numeric_writable("OatMin", default_value=60.0)
-    builder.add_numeric_writable("OatMax", default_value=70.0)
-    builder.add_numeric_writable("StartUpDelayMinutes", default_value=10.0)
-    builder.add_numeric_writable("UpdateMinutes", default_value=2.0)
-    builder.add_numeric_writable("Ignore", default_value=2.0)
-    builder.add_numeric_writable("SPtrim", default_value=0.2)
-    builder.add_numeric_writable("SPres", default_value=-0.3)
-    builder.add_numeric_writable("SPResMax", default_value=-1.0)
-
-    # --- Outputs ---
-    print("Creating top-level outputs...")
-    builder.add_numeric_writable("DischargeAirTempSp")
-
-    # --- Logic Sub-Folders ---
-    print("Creating logic components in sub-folders...")
-
-    # --- State and Timing Logic ---
-    builder.start_sub_folder("StateLogic")
-    builder.add_component("kitControl:BooleanDelay", "StartupDelay")
-    builder.add_component("kitControl:MultiVibrator", "UpdateTimer")
-    builder.add_component("kitControl:OneShot", "UpdatePulse")
-    builder.add_component("kitControl:And", "MainLogicEnable")
-    builder.add_component("kitControl:Or", "ResetTmaxCondition")
-    builder.add_component("kitControl:Not", "FanNotRunning")
-    builder.end_sub_folder()
-
-    # --- Trim & Respond Core Logic ---
-    builder.start_sub_folder("TrimRespondLogic")
-    builder.add_component("kitControl:GreaterThan", "RequestsExceedIgnore")
-    builder.add_numeric_switch("TrimOrRespondSwitch")
-    builder.add_component("kitControl:Subtract", "RespondCalc1")
-    builder.add_component("kitControl:Multiply", "RespondCalc2")
-    builder.add_component("kitControl:Maximum", "RespondAmount")
-    builder.add_component("kitControl:Add", "TrimTmax")
-    builder.add_component("kitControl:Add", "RespondTmax")
-    builder.add_numeric_switch("TmaxMux")
-    builder.add_component("kitControl:NumericLatch", "TmaxState")
-    builder.end_sub_folder()
-
-    # --- Interpolation Logic ---
-    builder.start_sub_folder("InterpolationLogic")
-    builder.add_component("kitControl:Reset", "SatSetpointInterpolator")
-    builder.end_sub_folder()
-
-    # --- Wiring ---
-    print("Wiring components...")
-
-    # --- StateLogic Wiring ---
-    builder.add_link("FanRunCmd", "out", "StartupDelay", "in")
-    builder.add_link("StartUpDelayMinutes", "out", "StartupDelay", "onDelay",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
-
-    builder.add_link("UpdateMinutes", "out", "UpdateTimer", "period",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
-    builder.add_link("UpdateTimer", "out", "UpdatePulse", "in")
-
-    builder.add_link("StartupDelay", "out", "MainLogicEnable", "inA")
-    builder.add_link("UpdatePulse", "out", "MainLogicEnable", "inB")
-
-    builder.add_link("FanRunCmd", "out", "FanNotRunning", "in")
-    builder.add_link("FanNotRunning", "out", "ResetTmaxCondition", "inA")
-    # This is a simplification: we reset tMax when the fan is off OR on the first pulse
-    builder.add_link("UpdatePulse", "out", "ResetTmaxCondition", "inB")
-
-
-    # --- TrimRespondLogic Wiring ---
-    builder.add_link("TotalRequests", "out", "RequestsExceedIgnore", "inA")
-    builder.add_link("Ignore", "out", "RequestsExceedIgnore", "inB")
-
-    builder.add_link("RequestsExceedIgnore", "out", "TrimOrRespondSwitch", "inSwitch")
-    builder.add_link("TrimTmax", "out", "TrimOrRespondSwitch", "inFalse")
-    builder.add_link("RespondTmax", "out", "TrimOrRespondSwitch", "inTrue")
-
-    builder.add_link("TotalRequests", "out", "RespondCalc1", "inA")
-    builder.add_link("Ignore", "out", "RespondCalc1", "inB")
-    builder.add_link("RespondCalc1", "out", "RespondCalc2", "inA")
-    builder.add_link("SPres", "out", "RespondCalc2", "inB")
-    builder.add_link("RespondCalc2", "out", "RespondAmount", "inA")
-    builder.add_link("SPResMax", "out", "RespondAmount", "inB")
-
-    builder.add_link("DischargeAirTempSp", "out", "TrimTmax", "inA")
-    builder.add_link("SPtrim", "out", "TrimTmax", "inB")
-
-    builder.add_link("DischargeAirTempSp", "out", "RespondTmax", "inA")
-    builder.add_link("RespondAmount", "out", "RespondTmax", "inB")
-
-    builder.add_link("ResetTmaxCondition", "out", "TmaxMux", "inSwitch")
-    builder.add_link("SatMax", "out", "TmaxMux", "inTrue")
-    builder.add_link("TrimOrRespondSwitch", "out", "TmaxMux", "inFalse")
-
-    builder.add_link("TmaxMux", "out", "TmaxState", "in")
-    builder.add_link("MainLogicEnable", "out", "TmaxState", "clock")
-
-
-    # --- InterpolationLogic Wiring ---
-    builder.add_link("OutsideAirTemp", "out", "SatSetpointInterpolator", "inA")
-    builder.add_link("OatMin", "out", "SatSetpointInterpolator", "inputLowLimit")
-    builder.add_link("OatMax", "out", "SatSetpointInterpolator", "inputHighLimit")
-    builder.add_link("TmaxState", "out", "SatSetpointInterpolator", "outputHighLimit")
-    builder.add_link("SatMin", "out", "SatSetpointInterpolator", "outputLowLimit")
-
-    builder.add_link("SatSetpointInterpolator", "out", "DischargeAirTempSp", "in16")
-
-
-    # --- Save the File ---
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 if __name__ == "__main__":
     main()
@@ -2007,127 +2200,6 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: ping_pong_algorithm.py ===
-DIR: .
-=== CODE START ===
-"""
-This script builds a robust "ping-pong" or oscillating counter.
-The core of the logic is a counter that automatically increments up to a top limit,
-then decrements down to a low limit, and repeats this cycle continuously.
-
-This example is fundamentally important for understanding Guideline 36 (G36)
-style trim-and-respond algorithms. The key mechanism is a `BooleanLatch` which
-acts as a state machine, remembering whether the system is currently in a
-"counting up" or "counting down" state. This stateful, incremental adjustment
-is the basis for complex G36 sequences like VAV damper pressure optimization
-or chilled water temperature resets.
-
-Key Components:
-- A central Counter that holds the current value.
-- A MultiVibrator that provides a steady pulse for incrementing/decrementing.
-- A BooleanLatch that stores the current counting direction (Up vs. Down).
-- Limit checkers (GreaterThanEqual, LessThanEqual) that trigger the change in direction.
-- Gating logic (And, Not) to ensure the pulse is routed to either the 'countUp'
-  or 'countDown' slot based on the latch's state.
-"""
-
-
-import sys, os, argparse
-
-from bog_builder import BogFolderBuilder
-
-
-def main():
-    p = argparse.ArgumentParser(description="Build a robust Ping-Pong Counter .bog file.")
-    p.add_argument("-o","--output_dir", default="examples", help="Output directory for the .bog file.")
-    p.add_argument("-n","--name", default="PingPongCounter")
-    p.add_argument("-s","--subfolder", default="Logic")
-    args = p.parse_args()
-
-    script_filename = os.path.basename(__file__).replace(".py", "")
-    builder = BogFolderBuilder(args.name)
-
-    # --- Top-Level Components ---
-    # These are the user-facing controls and displays.
-    builder.add_numeric_writable("CounterViewer", 0.0) 
-    builder.add_numeric_writable("Step", 1.0) 
-    builder.add_numeric_writable("TopLimit", 20.0) 
-    builder.add_numeric_writable("LowLimit", -20.0) 
-    builder.add_boolean_writable("ManualResetCounter", default_value=False) 
-
-    # --- Logic Sub-Folder ---
-    # All calculation logic is placed in a sub-folder for organization.
-    builder.start_sub_folder(args.subfolder) 
-
-    # Core components for timing and counting
-    # CORRECTED: Changed period from "2s" to "2000" to adhere to millisecond format [cite: 3, 4]
-    builder.add_component("kitControl:MultiVibrator", "MultiViber", properties={"period": "2000"}) 
-    builder.add_component("kitControl:Counter", "Counter") 
-    
-    # One-shots to ensure single increments/decrements per pulse
-    builder.add_component("kitControl:OneShot", "IncrementUpOneShot") 
-    builder.add_component("kitControl:OneShot", "IncrementDownOneShot") 
-    builder.add_component("kitControl:OneShot", "ResetOneShot") 
-    
-    # Limit-checking logic
-    builder.add_component("kitControl:GreaterThanEqual", "AtOrAbove_TopLimit") 
-    builder.add_component("kitControl:LessThanEqual", "AtOrBelow_LowLimit") 
-
-    # --- State-Holding and Gating Logic (The Fix) ---
-    # A BooleanLatch holds the direction state: False=Up, True=Down.
-    builder.add_component("kitControl:BooleanLatch", "IsCountingDown_Latch") 
-    builder.add_component("kitControl:Not", "IsNotCountingDown_Not") # Inverter for up-counting logic 
-    builder.add_component("kitControl:And", "UpPulse_Gate") # Gate for enabling up-counts 
-    builder.add_component("kitControl:And", "DownPulse_Gate") # Gate for enabling down-counts 
-    
-    builder.end_sub_folder()
-
-    # --- Wiring ---
-    print("Wiring components...")
-
-    # Wire the main counter properties and reset
-    builder.add_link("Step", "out", "Counter", "countIncrement") 
-    builder.add_link("Counter", "out", "CounterViewer", "in16") 
-    builder.add_link("ManualResetCounter", "out", "ResetOneShot", "in") 
-    builder.add_link("ResetOneShot", "out", "Counter", "clear") 
-
-    # Wire the counter's current value to the limit checkers
-    builder.add_link("Counter", "out", "AtOrAbove_TopLimit", "inA") 
-    builder.add_link("TopLimit", "out", "AtOrAbove_TopLimit", "inB") 
-    builder.add_link("Counter", "out", "AtOrBelow_LowLimit", "inA") 
-    builder.add_link("LowLimit", "out", "AtOrBelow_LowLimit", "inB") 
-
-    # --- State-Management Wiring ---
-    # Set the latch to 'True' (is counting down) when the top limit is reached.
-    builder.add_link("AtOrAbove_TopLimit", "out", "IsCountingDown_Latch", "set") 
-    # Reset the latch to 'False' (is counting up) when the low limit is reached.
-    builder.add_link("AtOrBelow_LowLimit", "out", "IsCountingDown_Latch", "reset") 
-
-    # --- Pulse Gating Wiring ---
-    # Logic to enable the up-counting pulse:
-    builder.add_link("IsCountingDown_Latch", "out", "IsNotCountingDown_Not", "in") 
-    builder.add_link("IsNotCountingDown_Not", "out", "UpPulse_Gate", "inA") # Must NOT be counting down 
-    builder.add_link("MultiViber", "out", "UpPulse_Gate", "inB")             # AND a pulse is active 
-    builder.add_link("UpPulse_Gate", "out", "IncrementUpOneShot", "in") 
-    builder.add_link("IncrementUpOneShot", "out", "Counter", "countUp") 
-
-    # Logic to enable the down-counting pulse:
-    builder.add_link("IsCountingDown_Latch", "out", "DownPulse_Gate", "inA") # Must BE counting down 
-    builder.add_link("MultiViber", "out", "DownPulse_Gate", "inB")            # AND a pulse is active 
-    builder.add_link("DownPulse_Gate", "out", "IncrementDownOneShot", "in") 
-    builder.add_link("IncrementDownOneShot", "out", "Counter", "countDown") 
-    
-    # --- Save the File ---
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: simple_math_logic.py ===
 DIR: .
 === CODE START ===
@@ -2360,6 +2432,164 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     b.save(output_path)
     print(f"\nCreated: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: thermostat.py ===
+DIR: .
+=== CODE START ===
+"""
+thermostat.py
+
+Simple thermostat logic:
+- Modes: 0=Off, 1=Heat, 2=Cool  (numeric select)
+- Hysteresis applied on both heat/cool thresholds
+- Fan runs when heating or cooling, or when FanAuto is false (manual/override)
+
+Conventions:
+- Appends ../src to sys.path (no try/except)
+- Accepts -o/--output_dir
+- Saves to a hard-coded 'thermostat.bog' in that directory
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+# Project import convention: append ../src then import the builder
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+from bog_builder import BogFolderBuilder  # noqa: E402
+
+SCRIPT_FOLDER_NAME = "Thermostat"
+SCRIPT_BOG_NAME = "thermostat.bog"
+
+
+def build_thermostat(builder: BogFolderBuilder) -> None:
+    """
+    Build thermostat logic using kitControl blocks.
+    """
+    # -------- Top-level “variables” --------
+    builder.add_numeric_writable("SpaceTemp", default_value=72.0)
+    builder.add_numeric_writable("HeatSP", default_value=68.0)
+    builder.add_numeric_writable("CoolSP", default_value=74.0)
+    builder.add_numeric_writable("Hysteresis", default_value=1.0)
+    # Mode: 0=Off, 1=Heat, 2=Cool
+    builder.add_numeric_writable("Mode", default_value=0.0)
+    # FanAuto = True means fan follows calls; False forces continuous fan
+    builder.add_boolean_writable("FanAuto", default_value=True)
+
+    # Outputs
+    builder.add_boolean_writable("Output_HeatCmd")
+    builder.add_boolean_writable("Output_CoolCmd")
+    builder.add_boolean_writable("Output_FanCmd")
+
+    # -------- Logic (sub-folder) --------
+    builder.start_sub_folder("ThermostatLogic")
+
+    # Constants (1 and 2) for Mode comparisons
+    builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
+    builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
+
+    # Mode == 1 (Heat): Mode ≥ 1 AND Mode ≤ 1
+    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
+    builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
+    builder.add_component("kitControl:And", "IsHeatMode")
+
+    # Mode == 2 (Cool): Mode ≥ 2 AND Mode ≤ 2
+    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
+    builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
+    builder.add_component("kitControl:And", "IsCoolMode")
+
+    # Sum blocks for hysteresis
+    builder.add_component("kitControl:Add", "SpacePlusHyst")
+    builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
+
+    # Threshold compares
+    builder.add_component("kitControl:LessThanEqual", "IsBelowHeat")      # Space+Hyst <= HeatSP
+    builder.add_component("kitControl:GreaterThanEqual", "IsAboveCool")   # Space >= CoolSP+Hyst
+
+    # Command gates
+    builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
+    builder.add_component("kitControl:And", "CoolCmdGate")  # IsCoolMode AND IsAboveCool
+
+    # Fan logic: (HeatCmd OR CoolCmd) OR (NOT FanAuto)
+    builder.add_component("kitControl:Or", "HeatOrCool")
+    builder.add_component("kitControl:Not", "FanAutoNot")
+    builder.add_component("kitControl:Or", "FanCmdGate")
+
+    # ---- Wiring: Mode == 1 (Heat) ----
+    builder.add_link("Mode", "out", "Mode_GE_1", "inA")
+    builder.add_link("Const1", "out", "Mode_GE_1", "inB")
+    builder.add_link("Mode", "out", "Mode_LE_1", "inA")
+    builder.add_link("Const1", "out", "Mode_LE_1", "inB")
+    builder.add_link("Mode_GE_1", "out", "IsHeatMode", "inA")
+    builder.add_link("Mode_LE_1", "out", "IsHeatMode", "inB")
+
+    # ---- Wiring: Mode == 2 (Cool) ----
+    builder.add_link("Mode", "out", "Mode_GE_2", "inA")
+    builder.add_link("Const2", "out", "Mode_GE_2", "inB")
+    builder.add_link("Mode", "out", "Mode_LE_2", "inA")
+    builder.add_link("Const2", "out", "Mode_LE_2", "inB")
+    builder.add_link("Mode_GE_2", "out", "IsCoolMode", "inA")
+    builder.add_link("Mode_LE_2", "out", "IsCoolMode", "inB")
+
+    # ---- Wiring: Hysteresis adds ----
+    builder.add_link("SpaceTemp", "out", "SpacePlusHyst", "inA")
+    builder.add_link("Hysteresis", "out", "SpacePlusHyst", "inB")
+    builder.add_link("CoolSP", "out", "CoolSP_plus_Hyst", "inA")
+    builder.add_link("Hysteresis", "out", "CoolSP_plus_Hyst", "inB")
+
+    # ---- Thresholds ----
+    builder.add_link("SpacePlusHyst", "out", "IsBelowHeat", "inA")
+    builder.add_link("HeatSP", "out", "IsBelowHeat", "inB")
+
+    builder.add_link("SpaceTemp", "out", "IsAboveCool", "inA")
+    builder.add_link("CoolSP_plus_Hyst", "out", "IsAboveCool", "inB")
+
+    # ---- Command gates ----
+    builder.add_link("IsHeatMode", "out", "HeatCmdGate", "inA")
+    builder.add_link("IsBelowHeat", "out", "HeatCmdGate", "inB")
+
+    builder.add_link("IsCoolMode", "out", "CoolCmdGate", "inA")
+    builder.add_link("IsAboveCool", "out", "CoolCmdGate", "inB")
+
+    # ---- Fan logic ----
+    builder.add_link("HeatCmdGate", "out", "HeatOrCool", "inA")
+    builder.add_link("CoolCmdGate", "out", "HeatOrCool", "inB")
+
+    builder.add_link("FanAuto", "out", "FanAutoNot", "in")
+    builder.add_link("HeatOrCool", "out", "FanCmdGate", "inA")
+    builder.add_link("FanAutoNot", "out", "FanCmdGate", "inB")
+
+    builder.end_sub_folder()
+
+    # Final outputs
+    builder.add_link("HeatCmdGate", "out", "Output_HeatCmd", "in16")
+    builder.add_link("CoolCmdGate", "out", "Output_CoolCmd", "in16")
+    builder.add_link("FanCmdGate", "out", "Output_FanCmd", "in16")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description="Generate a thermostat .bog file.")
+    p.add_argument(
+        "-o", "--output_dir",
+        default="examples",
+        help="Directory to write the .bog file.",
+    )
+    args = p.parse_args()
+
+    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=True)
+    build_thermostat(builder)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, SCRIPT_BOG_NAME)
+    builder.save(out_path)
+    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out_path)}")
 
 
 if __name__ == "__main__":
@@ -2901,6 +3131,174 @@ def main():
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: zzzz_g36_test_BAD.py ===
+DIR: .
+=== CODE START ===
+"""
+[WARNING - INTENTIONALLY INCORRECT FILE]
+This script is a deliberate example of an improperly constructed bog builder
+file. It is designed to fail during execution and produce validation warnings
+and errors.
+
+The purpose of this file is to serve as a negative example for an LLM agent,
+demonstrating common mistakes such as:
+1.  Using incorrect component types (e.g., 'kitControl:NumericLatch' which
+    may not exist or be typed correctly).
+2.  Attempting to link to invalid component slots (e.g., linking a numeric
+    value to the 'onDelay' property of a BooleanDelay instead of its 'in' slot).
+3.  General syntax that will be caught by the bog_builder's internal
+    validation and raise a ValueError.
+
+This script should be used to test an agent's ability to recognize, parse,
+and potentially learn from builder script failures. DO NOT use this script
+as a template for valid logic.
+"""
+
+
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+def main():
+    """
+    This script builds the wiresheet logic for the AHU Supply Air Temperature (SAT)
+    Trim & Respond program, based on the provided Java example.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for the SAT Trim and Respond logic."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("SatTrimAndRespond")
+
+    # --- Inputs ---
+    print("Creating top-level inputs...")
+    builder.add_numeric_writable("TotalRequests", default_value=0.0)
+    builder.add_boolean_writable("FanRunCmd", default_value=False)
+    builder.add_numeric_writable("OutsideAirTemp", default_value=65.0)
+    builder.add_numeric_writable("SatMin", default_value=55.0)
+    builder.add_numeric_writable("SatMax", default_value=70.0)
+    builder.add_numeric_writable("OatMin", default_value=60.0)
+    builder.add_numeric_writable("OatMax", default_value=70.0)
+    builder.add_numeric_writable("StartUpDelayMinutes", default_value=10.0)
+    builder.add_numeric_writable("UpdateMinutes", default_value=2.0)
+    builder.add_numeric_writable("Ignore", default_value=2.0)
+    builder.add_numeric_writable("SPtrim", default_value=0.2)
+    builder.add_numeric_writable("SPres", default_value=-0.3)
+    builder.add_numeric_writable("SPResMax", default_value=-1.0)
+
+    # --- Outputs ---
+    print("Creating top-level outputs...")
+    builder.add_numeric_writable("DischargeAirTempSp")
+
+    # --- Logic Sub-Folders ---
+    print("Creating logic components in sub-folders...")
+
+    # --- State and Timing Logic ---
+    builder.start_sub_folder("StateLogic")
+    builder.add_component("kitControl:BooleanDelay", "StartupDelay")
+    builder.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    builder.add_component("kitControl:OneShot", "UpdatePulse")
+    builder.add_component("kitControl:And", "MainLogicEnable")
+    builder.add_component("kitControl:Or", "ResetTmaxCondition")
+    builder.add_component("kitControl:Not", "FanNotRunning")
+    builder.end_sub_folder()
+
+    # --- Trim & Respond Core Logic ---
+    builder.start_sub_folder("TrimRespondLogic")
+    builder.add_component("kitControl:GreaterThan", "RequestsExceedIgnore")
+    builder.add_numeric_switch("TrimOrRespondSwitch")
+    builder.add_component("kitControl:Subtract", "RespondCalc1")
+    builder.add_component("kitControl:Multiply", "RespondCalc2")
+    builder.add_component("kitControl:Maximum", "RespondAmount")
+    builder.add_component("kitControl:Add", "TrimTmax")
+    builder.add_component("kitControl:Add", "RespondTmax")
+    builder.add_numeric_switch("TmaxMux")
+    builder.add_component("kitControl:NumericLatch", "TmaxState")
+    builder.end_sub_folder()
+
+    # --- Interpolation Logic ---
+    builder.start_sub_folder("InterpolationLogic")
+    builder.add_component("kitControl:Reset", "SatSetpointInterpolator")
+    builder.end_sub_folder()
+
+    # --- Wiring ---
+    print("Wiring components...")
+
+    # --- StateLogic Wiring ---
+    builder.add_link("FanRunCmd", "out", "StartupDelay", "in")
+    builder.add_link("StartUpDelayMinutes", "out", "StartupDelay", "onDelay",
+                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+
+    builder.add_link("UpdateMinutes", "out", "UpdateTimer", "period",
+                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+    builder.add_link("UpdateTimer", "out", "UpdatePulse", "in")
+
+    builder.add_link("StartupDelay", "out", "MainLogicEnable", "inA")
+    builder.add_link("UpdatePulse", "out", "MainLogicEnable", "inB")
+
+    builder.add_link("FanRunCmd", "out", "FanNotRunning", "in")
+    builder.add_link("FanNotRunning", "out", "ResetTmaxCondition", "inA")
+    # This is a simplification: we reset tMax when the fan is off OR on the first pulse
+    builder.add_link("UpdatePulse", "out", "ResetTmaxCondition", "inB")
+
+
+    # --- TrimRespondLogic Wiring ---
+    builder.add_link("TotalRequests", "out", "RequestsExceedIgnore", "inA")
+    builder.add_link("Ignore", "out", "RequestsExceedIgnore", "inB")
+
+    builder.add_link("RequestsExceedIgnore", "out", "TrimOrRespondSwitch", "inSwitch")
+    builder.add_link("TrimTmax", "out", "TrimOrRespondSwitch", "inFalse")
+    builder.add_link("RespondTmax", "out", "TrimOrRespondSwitch", "inTrue")
+
+    builder.add_link("TotalRequests", "out", "RespondCalc1", "inA")
+    builder.add_link("Ignore", "out", "RespondCalc1", "inB")
+    builder.add_link("RespondCalc1", "out", "RespondCalc2", "inA")
+    builder.add_link("SPres", "out", "RespondCalc2", "inB")
+    builder.add_link("RespondCalc2", "out", "RespondAmount", "inA")
+    builder.add_link("SPResMax", "out", "RespondAmount", "inB")
+
+    builder.add_link("DischargeAirTempSp", "out", "TrimTmax", "inA")
+    builder.add_link("SPtrim", "out", "TrimTmax", "inB")
+
+    builder.add_link("DischargeAirTempSp", "out", "RespondTmax", "inA")
+    builder.add_link("RespondAmount", "out", "RespondTmax", "inB")
+
+    builder.add_link("ResetTmaxCondition", "out", "TmaxMux", "inSwitch")
+    builder.add_link("SatMax", "out", "TmaxMux", "inTrue")
+    builder.add_link("TrimOrRespondSwitch", "out", "TmaxMux", "inFalse")
+
+    builder.add_link("TmaxMux", "out", "TmaxState", "in")
+    builder.add_link("MainLogicEnable", "out", "TmaxState", "clock")
+
+
+    # --- InterpolationLogic Wiring ---
+    builder.add_link("OutsideAirTemp", "out", "SatSetpointInterpolator", "inA")
+    builder.add_link("OatMin", "out", "SatSetpointInterpolator", "inputLowLimit")
+    builder.add_link("OatMax", "out", "SatSetpointInterpolator", "inputHighLimit")
+    builder.add_link("TmaxState", "out", "SatSetpointInterpolator", "outputHighLimit")
+    builder.add_link("SatMin", "out", "SatSetpointInterpolator", "outputLowLimit")
+
+    builder.add_link("SatSetpointInterpolator", "out", "DischargeAirTempSp", "in16")
+
+
+    # --- Save the File ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
 
 if __name__ == "__main__":
     main()

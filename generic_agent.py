@@ -13,16 +13,28 @@ from typing import List, Tuple, Optional
 
 import google.generativeai as genai
 
-# Description: I need a central plant dual pump lead and lag staging logic where a bool point can represent true or false and a loss of pump status if command is true with automatically switch to lag pump if lead dies. Do a pump 1 and 2 where can switch between lead or lag based on the bool point.
+
+# TODO test one:
+# I need a central plant dual pump lead and lag staging logic where a bool point 
+# can represent true or false and a loss of pump status if command is true with automatically 
+# switch to lag pump if lead dies. Do a pump 1 and 2 where can switch between 
+# lead or lag based on the bool point.
+
+# TODO test two:
+# Description: i need a bog file to make an AHU VAV leaving air temperature and 
+# pressure operate setpoint control. Pressure variable fan would maintain an 
+# inch WC and temperature control would be 55F constant setpoint.
 
 # ========= Config =========
 EXAMPLES_DIR = Path(os.getcwd()) / "examples"
-DEFAULT_OUTPUT_DIR = Path(r"/mnt/c/Users/ben/Niagara4.11/JENEsys")  # keep your default
-MODEL_NAME = "gemini-2.5-flash"
-MAX_EXAMPLE_CHARS = 60_000           # budget for example context
-MAX_ITERS_DEFAULT = 4                # retry synthesize -> run -> fix loop
-LLM_CALLS = 0                        # prints at the end
+DEFAULT_OUTPUT_DIR = Path(r"/mnt/c/Users/ben/Niagara4.11/JENEsys")
+CONTEXT_DIR = Path(os.getcwd()) / "context"
 
+MODEL_NAME = "gemini-2.5-flash"
+MAX_ITERS_DEFAULT = 4
+
+# nice to see metrics print at end
+LLM_CALLS = 0
 LLM_INPUT_TOKENS = 0
 LLM_OUTPUT_TOKENS = 0
 
@@ -42,69 +54,32 @@ def init_gemini() -> Optional[genai.GenerativeModel]:
 
 # ========= Example harvesting =========
 
-def read_file_head(path: Path, nlines: int = 60) -> str:
+def _safe_read(path: Path) -> str:
     try:
-        with path.open("r", encoding="utf-8", errors="ignore") as f:
-            return "".join(f.readlines()[:nlines])
+        return path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return ""
 
-def gather_examples(max_chars: int) -> str:
+def gather_examples() -> str:
     """
-    Concatenate short, helpful slices of example scripts as LLM context.
-    Order: small -> big, prefer files with clear docstrings/headers first.
+    Return all context text for the LLM.
+    Prefer llms-full.txt if available, else concatenate all .txt files.
+    No length clipping.
     """
-    if not EXAMPLES_DIR.is_dir():
+    if not CONTEXT_DIR.is_dir():
         return ""
 
-    # Heuristic: prefer files that look like our builder scripts
-    py_files = [p for p in EXAMPLES_DIR.glob("*.py")]
-    scored: List[Tuple[int, Path]] = []
-    for p in py_files:
-        head = read_file_head(p, 80)
-        score = 0
-        if "BogFolderBuilder" in head: score += 5
-        if "def main(" in head: score += 3
-        if "argparse" in head: score += 2
-        if "add_component" in head or "add_link" in head: score += 2
-        scored.append((score, p))
-    scored.sort(key=lambda x: (-x[0], x[1].name))
+    full_path = CONTEXT_DIR / "llms-full.txt"
+    if full_path.exists():
+        return _safe_read(full_path)
 
-    chunks, total = [], 0
-    for _, path in scored:
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        snippet = textwrap.dedent(
-            f"""
-            # ==== BEGIN EXAMPLE: {path.name} ====
-            {text}
-            # ==== END EXAMPLE: {path.name} ====
-            """
-        )
-        if total + len(snippet) > max_chars:
-            # last-chance: include only the head of long files
-            head = read_file_head(path, 200)
-            if head:
-                short = textwrap.dedent(
-                    f"""
-                    # ==== BEGIN EXAMPLE (head only): {path.name} ====
-                    {head}
-                    # ==== END EXAMPLE: {path.name} ====
-                    """
-                )
-                if total + len(short) <= max_chars:
-                    chunks.append(short)
-                    total += len(short)
-        else:
-            chunks.append(snippet)
-            total += len(snippet)
-
-        if total >= max_chars:
-            break
-
-    return "\n".join(chunks)
+    txt_files = sorted(CONTEXT_DIR.glob("*.txt"))
+    chunks = []
+    for p in txt_files:
+        text = _safe_read(p)
+        if text:
+            chunks.append(f"\n=== FILE: {p.name} ===\n{text}\n=== CODE END ===\n")
+    return "".join(chunks)
 
 
 # ========= LLM prompts & helpers =========
@@ -319,7 +294,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         return
 
     # Prepare context & dirs
-    examples_blob = gather_examples(MAX_EXAMPLE_CHARS)
+    examples_blob = gather_examples()
     workdir = Path(args.workdir); workdir.mkdir(parents=True, exist_ok=True)
     script_path = workdir / f"python_for_{bog_file_name}.py"
     out_dir = DEFAULT_OUTPUT_DIR

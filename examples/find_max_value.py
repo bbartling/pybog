@@ -19,6 +19,8 @@ def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     Creates and links a GreaterThan and NumericSwitch block to find the maximum of two inputs.
     This function doesn't need to know about sub-folders; it will automatically
     place components in whatever the builder's current "context" is.
+
+    sub folders commented out for testing purposes of grid layout.
     """
     gt_name = f"GT_{pair_id}"
     switch_name = f"Switch_{pair_id}"
@@ -67,7 +69,7 @@ def main():
 
     builder.add_numeric_writable("MaxValue")
 
-    builder.start_sub_folder("CalculationLogic")
+    #builder.start_sub_folder("CalculationLogic")
 
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
@@ -96,7 +98,7 @@ def main():
 
     final_winner = current_tier_outputs[0]
 
-    builder.end_sub_folder()
+    #builder.end_sub_folder()
 
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")

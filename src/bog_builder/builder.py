@@ -47,24 +47,17 @@ class BogFolderBuilder:
     def __init__(self, folder_name: str, debug: bool = True):
         self.debug = debug
         self.folder_name = folder_name
-        # Global registry of components: name -> data dict
         self._components: Dict[str, Dict] = {}
-        # Global link list. Each element is a dict describing a link
         self._links: List[Dict] = []
-        # Generate unique handles for each component
         self._next_handle = 1
         self._handle_map: Dict[str, str] = {}
-        # Hierarchy of sub‑folders: parent_path -> [child_folder_names]
         self._sub_folders: Dict[Tuple[str, ...], List[str]] = defaultdict(list)
-        # Map component_name -> folder_path tuple
         self._component_to_folder: Dict[str, Tuple[str, ...]] = {}
-        # Current folder context
         self._current_folder_path: Tuple[str, ...] = (folder_name,)
-        # Layout constants for positioning components in the workspace
         self.START_X = 10
         self.START_Y = 10
-        self.X_COLUMN_WIDTH = 20  # Increased for better visual separation
-        self.Y_INCREMENT = 15  # Increased for better visual separation
+        self.X_COLUMN_WIDTH = 20  # DONT MODIFY HUMAN VERIFY VISUALLY GOOD
+        self.Y_INCREMENT = 10  # DONT MODIFY HUMAN VERIFY VISUALLY GOOD
 
     # ------------------------------------------------------------------
     # Logging
@@ -96,7 +89,6 @@ class BogFolderBuilder:
         ValueError
             If the folder name is invalid or already exists at the current level.
         """
-        # Validate the folder name format
         if not isinstance(name, str) or not name:
             raise ValueError("Sub‑folder name must be a non‑empty string.")
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
@@ -107,13 +99,11 @@ class BogFolderBuilder:
                 f"renaming it to '{suggestion}'."
             )
         parent_path = self._current_folder_path
-        # Ensure the sub‑folder does not already exist at this level
         if name in self._sub_folders.get(parent_path, []):
             raise ValueError(
                 f"A sub‑folder named '{name}' already exists under '{self.get_current_path_str()}'. "
                 f"Choose a unique sub‑folder name."
             )
-        # Append the folder and update the context
         self._sub_folders[parent_path].append(name)
         self._current_folder_path = parent_path + (name,)
 
@@ -130,7 +120,6 @@ class BogFolderBuilder:
                 "Cannot end sub‑folder: already at the root folder. Ensure that "
                 "start_sub_folder() was called before end_sub_folder()."
             )
-        # Move back up one level
         self._current_folder_path = self._current_folder_path[:-1]
 
     def get_current_path_str(self) -> str:
@@ -163,10 +152,8 @@ class BogFolderBuilder:
             If the component definition is invalid or if the name already exists in
             the current builder state.
         """
-        # Default values for optional dicts
         properties = properties or {}
         actions = actions or {}
-        # Validate and normalise the component using Pydantic
         try:
             comp_def = ComponentDefinition(
                 comp_type=comp_type,
@@ -175,29 +162,23 @@ class BogFolderBuilder:
                 actions=actions,
             )
         except ValidationError as ve:
-            # Propagate a human‑readable error message so an LLM can act upon it
             raise ValueError(str(ve)) from ve
-        # Check for duplicate component names
         if comp_def.name in self._components:
             raise ValueError(
                 f"Component with name '{comp_def.name}' already exists. Each component must have a unique name."
             )
-        # Convert human‑friendly time values in properties to milliseconds
         normalized_props: dict = {}
         for prop_name, prop_value in comp_def.properties.items():
-            # Only convert delay/period related properties; leave others untouched
             if any(keyword in prop_name.lower() for keyword in ("delay", "period")):
                 normalized_props[prop_name] = _parse_time_to_ms(prop_value)
             else:
                 normalized_props[prop_name] = prop_value
-        # Warn if this component type is unknown (no slot map defined)
         if comp_def.comp_type not in COMPONENT_SLOT_MAP and self.debug:
             print(
                 f"[BOG VALIDATION WARNING] Component type '{comp_def.comp_type}' is not in the known slot map. "
                 f"Slot name validation will be skipped for this component. ",
                 f"Please refence more example Python files for proper slot mapping and mimic exactly."
             )
-        # Assign a unique handle and register the component
         handle = self._get_next_handle()
         self._handle_map[comp_def.name] = handle
         self._components[comp_def.name] = {
@@ -208,7 +189,6 @@ class BogFolderBuilder:
         }
         self._component_to_folder[comp_def.name] = self._current_folder_path
 
-    # Helper methods for common component types
     def add_numeric_writable(
         self,
         name: str,
@@ -255,10 +235,6 @@ class BogFolderBuilder:
             The initial fallback value as an ``"x@{...}"`` string or
             plain integer.  Defaults to ``"0"``.
         """
-        # Normalise the default value: allow either "3@{...}" strings or plain
-        # integers (converted to string).  Do not wrap in a dict so the
-        # ``control:EnumWritable`` property writer will interpret it as a
-        # literal value string.
         dv = default_value if isinstance(default_value, str) else str(default_value)
         self.add_component(
             "control:EnumWritable",
@@ -354,7 +330,6 @@ class BogFolderBuilder:
             If the link definition or slot names are invalid, or if either
             component cannot be found.
         """
-        # Validate the structure of the link
         try:
             link_def = LinkDefinition(
                 source_name=source_comp_name,
@@ -364,7 +339,6 @@ class BogFolderBuilder:
             )
         except ValidationError as ve:
             raise ValueError(str(ve)) from ve
-        # Ensure both components exist in the registry
         if link_def.source_name not in self._components:
             raise ValueError(
                 f"Source component '{link_def.source_name}' not found. Make sure it is created before linking."
@@ -377,20 +351,12 @@ class BogFolderBuilder:
         t_type = self._components[link_def.target_name]["type"]
         s_slots = COMPONENT_SLOT_MAP.get(s_type)
         t_slots = COMPONENT_SLOT_MAP.get(t_type)
-        # Validate the source slot against known outputs, if mapping exists
         if s_slots and link_def.source_slot not in s_slots.get("outputs", []):
             raise ValueError(
                 f"Invalid source slot '{link_def.source_slot}' for component '{link_def.source_name}' of type '{s_type}'. "
                 f"Valid output slots: {s_slots['outputs']}"
             )
-        # Validate the target slot against known inputs, if mapping exists
         if t_slots:
-            # Only validate target slots if the component definition includes
-            # an "inputs" list.  For components like NumericWritable and
-            # BooleanWritable we omit the "inputs" key entirely, meaning any
-            # input (in1, in10, etc.) is acceptable.  If an inputs list is
-            # present but empty, skip validation as well since it signals
-            # unbounded input names.
             if "inputs" in t_slots:
                 valid_inputs = t_slots.get("inputs", [])
                 # If no valid inputs are specified, don't perform validation
@@ -399,27 +365,19 @@ class BogFolderBuilder:
                         f"Invalid target slot '{link_def.target_slot}' for component '{link_def.target_name}' of type '{t_type}'. "
                         f"Valid input slots: {valid_inputs}"
                     )
-        # Determine whether the link crosses folder boundaries
         same_folder = (
             self._component_to_folder[link_def.source_name]
             == self._component_to_folder[link_def.target_name]
         )
-        # Create the link using heuristics to determine conversion if no explicit converter
         self._add_direct_link(
             link_def.source_name,
             link_def.source_slot,
             link_def.target_name,
             link_def.target_slot,
         )
-        # Override the link type or converter type if explicitly provided.  The
-        # `_add_direct_link` helper always appends the new link to
-        # ``self._links``, so we modify the last entry accordingly.  If the
-        # caller specifies a conversion link explicitly, the heuristics are
-        # superseded.
         if link_type != "b:Link" or converter_type is not None:
             self._links[-1]["link_type"] = link_type
             self._links[-1]["converter_type"] = converter_type
-        # Attach a cross‑folder flag if necessary
         if not same_folder:
             self._links[-1]["cross_folder"] = True
 
@@ -446,7 +404,6 @@ class BogFolderBuilder:
             If the block type or names are invalid, if inputs are missing, or
             if the output name already exists.
         """
-        # Validate the reduction definition
         try:
             red_def = ReductionBlockDefinition(
                 block_type=block_type,
@@ -455,22 +412,18 @@ class BogFolderBuilder:
             )
         except ValidationError as ve:
             raise ValueError(str(ve)) from ve
-        # Check that all input names exist
         for inp in red_def.input_names:
             if inp not in self._components:
                 raise ValueError(
                     f"Reduction block input '{inp}' does not exist. All inputs must refer to existing components."
                 )
-        # Ensure the final output name is unique
         if red_def.final_output_name in self._components:
             raise ValueError(
                 f"A component with the name '{red_def.final_output_name}' already exists. The final output name must be unique."
             )
-        # Build the reduction tree
         MAX_INPUTS = 4
         tier = 1
         current_inputs = list(red_def.input_names)
-        # Create a dedicated subfolder for the reduction logic to avoid clutter
         self.start_sub_folder(f"{red_def.block_type}Calc")
         while len(current_inputs) > MAX_INPUTS:
             tier_outputs: List[str] = []
@@ -483,14 +436,11 @@ class BogFolderBuilder:
                 tier_outputs.append(node_name)
             current_inputs = tier_outputs
             tier += 1
-        # Build the final block in the last tier
         final_block = f"{red_def.block_type}_T{tier}_final"
         self.add_component(f"kitControl:{red_def.block_type}", final_block)
         for j, input_name in enumerate(current_inputs):
             self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
-        # Close the subfolder to return to the original context
         self.end_sub_folder()
-        # Create the final output writable and wire the final reduction result to it
         self.add_numeric_writable(name=red_def.final_output_name)
         self.add_link(final_block, "out", red_def.final_output_name, "in16")
 
@@ -515,14 +465,12 @@ class BogFolderBuilder:
         """
         if not isinstance(file_path, str) or not file_path.lower().endswith(".bog"):
             raise ValueError(
-                f"Output file '{file_path}' must have a '.bog' extension to be recognised by Niagara."
+                f"Output file '{file_path}' must have a '.bog' extension to be recognised by Niagara. Try again with a .bog in the extension name."
             )
-        # Build the XML structure
         final_xml_root = self._build_xml_recursive()
         rough_string = ET.tostring(final_xml_root, "utf-8")
         reparsed = minidom.parseString(rough_string)
         pretty_string = reparsed.toprettyxml(indent="  ", encoding="utf-8")
-        # Write the XML into a zip archive
         try:
             with zipfile.ZipFile(file_path, "w") as bog_zip:
                 bog_zip.writestr("file.xml", pretty_string)
@@ -552,55 +500,51 @@ class BogFolderBuilder:
     def _build_folder_contents(
         self, parent_xml_element: ET.Element, folder_path_tuple: Tuple[str, ...]
     ) -> None:
-        """Builds the XML for a single folder, flattening only sub‑folder icons at the top level."""
+        """Build XML for a single folder. Top-level:
+        - no subfolders  -> tiered layout (place all logic)
+        - has subfolders -> Inputs | Folders | Outputs layout
+        Subfolders: always tiered.
+        """
         folder_name = folder_path_tuple[-1]
-        self.log(
-            f"--- Building folder: {'/'.join(folder_path_tuple)} ---",
-            is_layout_log=True,
-        )
-        # Create XML <p> element for this folder
-        folder_element = ET.SubElement(
-            parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"}
-        )
-        # Get all components assigned to this folder
+        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
+        folder_element = ET.SubElement(parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"})
+
         components_in_folder = {
             name: data
             for name, data in self._components.items()
             if self._component_to_folder.get(name) == folder_path_tuple
         }
+
         if len(folder_path_tuple) == 1:
-            # TOP LEVEL: position inputs, outputs, and subfolder icons
             sub_folders_in_this_view = self._sub_folders.get(folder_path_tuple, [])
-            comp_coords = self._position_top_level_interface(
-                components_in_folder, sub_folders_in_this_view
-            )
-            # Flatten Y only for sub‑folder icons at top level
-            for sf in sub_folders_in_this_view:
-                if sf in comp_coords:
-                    old_x, old_y = comp_coords[sf]
-                    comp_coords[sf] = (old_x, self.START_Y)
+            if not sub_folders_in_this_view:
+                levels = self._calculate_levels(components_in_folder)
+                comp_coords = self._position_components_normally(levels)
+            else:
+                comp_coords = self._position_top_level_interface(
+                    components_in_folder, sub_folders_in_this_view
+                )
+                for sf in sub_folders_in_this_view:
+                    if sf in comp_coords:
+                        x, _y = comp_coords[sf]
+                        comp_coords[sf] = (x, self.START_Y)
         else:
-            # LOGIC SUBFOLDER: normal tiered layout
             levels = self._calculate_levels(components_in_folder)
             comp_coords = self._position_components_normally(levels)
-        # Add components with wsAnnotation tags
+
         self._add_component_xml_tags(folder_element, components_in_folder, comp_coords)
-        # Add links targeting this folder
+
         links_targeting_this_folder = [
-            l
-            for l in self._links
+            l for l in self._links
             if self._component_to_folder.get(l["target_name"]) == folder_path_tuple
         ]
         self._add_link_xml_tags(folder_element, links_targeting_this_folder)
+
         # Recurse into subfolders
         for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
-            self.log(
-                f"About to recurse into sub‑folder: {sub_folder_name}",
-                is_layout_log=True,
-            )
-            self._build_folder_contents(
-                folder_element, folder_path_tuple + (sub_folder_name,)
-            )
+            self.log(f"About to recurse into sub-folder: {sub_folder_name}", is_layout_log=True)
+            self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
+
 
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
@@ -612,46 +556,38 @@ class BogFolderBuilder:
         outputs: List[str] = []
         all_links_sources = {l["source_name"] for l in self._links}
         all_links_targets = {l["target_name"] for l in self._links}
-        # Categorise components
         for name, data in components.items():
-            if (
-                data["type"].endswith("Writable")
-                and name in all_links_targets
-                and name not in all_links_sources
-            ):
-                outputs.append(name)
-            elif data["type"].endswith("Writable"):
+            if data.get("type") == "folder":
+                continue
+
+            is_target = name in all_links_targets       
+            is_source = name in all_links_sources     
+
+            if is_target and not is_source:
                 inputs.append(name)
+            elif is_source and not is_target:
+                outputs.append(name)
         self.log(f"Categorised as INPUTS: {sorted(inputs)}", is_layout_log=True)
         self.log(f"Categorised as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
         self.log(f"Found SUB‑FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
-        # Place INPUTS (left column)
         y = self.START_Y
-        for name in sorted(inputs):
+        for name in sorted(outputs):
             coords[name] = (self.START_X, y)
-            self.log(
-                f"Positioned INPUT '{name}' at ({coords[name][0]}, {coords[name][1]})",
-                is_layout_log=True,
-            )
+            self.log(f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True)
             y += self.Y_INCREMENT
-        # Place SUB‑FOLDERS (middle column, flat at START_Y)
-        folder_x = self.START_X + self.X_COLUMN_WIDTH * 3
+
+        folder_x = self.START_X + self.X_COLUMN_WIDTH
         for folder_name in sorted(sub_folders):
             coords[folder_name] = (folder_x, self.START_Y)
-            self.log(
-                f"Positioned FOLDER '{folder_name}' flat at ({coords[folder_name][0]}, {coords[folder_name][1]})",
-                is_layout_log=True,
-            )
-        # Place OUTPUTS (right column)
+            self.log(f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}", is_layout_log=True)
+
         y = self.START_Y
-        output_x = self.START_X + self.X_COLUMN_WIDTH * 3
-        for name in sorted(outputs):
-            coords[name] = (output_x, y)
-            self.log(
-                f"Positioned OUTPUT '{name}' at ({coords[name][0]}, {coords[name][1]})",
-                is_layout_log=True,
-            )
+        right_x = self.START_X + 2 * self.X_COLUMN_WIDTH
+        for name in sorted(inputs):
+            coords[name] = (right_x, y)
+            self.log(f"Positioned INPUT '{name}' at {coords[name]}", is_layout_log=True)
             y += self.Y_INCREMENT
+
         return coords
 
     def _position_components_normally(
@@ -718,9 +654,7 @@ class BogFolderBuilder:
         link_type = "b:Link"
         converter_type = None
 
-        # Helpers to determine whether a slot expects boolean or numeric values
         def target_is_boolean_like(t: str, slot: str) -> bool:
-            # Boolean blocks / slots that expect boolean input
             if t in (
                 "kitControl:And",
                 "kitControl:Or",
@@ -729,13 +663,11 @@ class BogFolderBuilder:
                 "kitControl:OneShot",
             ):
                 return True
-            # NumericSwitch inSwitch is boolean
             if t == "kitControl:NumericSwitch" and slot == "inSwitch":
                 return True
             return False
 
         def target_is_numeric_like(t: str, slot: str) -> bool:
-            # Numeric math / clamp blocks or numeric inputs
             if t.startswith("kitControl:") and t.split(":")[1] in (
                 "Add",
                 "Subtract",
@@ -746,14 +678,11 @@ class BogFolderBuilder:
                 "Maximum",
             ):
                 return True
-            # Generic heuristic: many kitControl numeric blocks use StatusNumeric on 'in*'
             return "Numeric" in t
 
-        # 1) Enum case: NumericSelect.select expects enum (from numeric)
         if t_type == "kitControl:NumericSelect" and target_slot == "select":
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusNumericToStatusEnum"
-        # 2) Boolean → Numeric ONLY when target is numeric‑like (and not inSwitch)
         elif (
             "Boolean" in s_type
             and target_slot.startswith("in")
@@ -762,7 +691,6 @@ class BogFolderBuilder:
         ):
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusBooleanToStatusNumeric"
-        # 3) Numeric (StatusNumeric) -> Counter.countIncrement needs Number
         elif t_type == "kitControl:Counter" and target_slot == "countIncrement":
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusNumericToNumber"
@@ -788,18 +716,7 @@ class BogFolderBuilder:
             attrs = {"n": name, "t": data["type"], "h": data["handle"]}
             if ":" in data["type"]:
                 prefix = data["type"].split(":")[0]
-                # Override the module mapping for schedule components.  The Niagara
-                # schedule palette uses the ``schedule`` module rather than a
-                # module named ``sch``.  If we leave the default of
-                # ``sch=sch`` then Workbench cannot resolve the schedule module
-                # and fails to load the .bog.  Map the BooleanSchedule type
-                # specifically to the ``schedule`` module; otherwise fall back
-                # to the lowercase prefix mapping used for other palettes.
                 if prefix == "sch":
-                    # All schedule components live in the ``schedule`` module.  Use
-                    # ``sch=schedule`` rather than ``sch=sch`` to ensure
-                    # Workbench resolves the schedule module for Boolean,
-                    # Numeric and other schedule variants.
                     attrs["m"] = "sch=schedule"
                 else:
                     attrs["m"] = f"{prefix}={prefix}"
@@ -814,7 +731,6 @@ class BogFolderBuilder:
                     "v": f"{int(x)},{int(y)},8",
                 },
             )
-            # Special handling for certain component types
             if data["type"] == "control:NumericWritable":
                 default_val = data["properties"].get("defaultValue", 0.0)
                 out_slot = ET.SubElement(
@@ -830,7 +746,6 @@ class BogFolderBuilder:
                     element, "p", {"n": "fallback", "t": "b:StatusNumeric"}
                 )
                 ET.SubElement(fallback_slot, "p", {"n": "value", "v": str(default_val)})
-                # emit facets if provided
                 facets_prop = data["properties"].get("facets")
                 if (
                     isinstance(facets_prop, dict)
@@ -867,9 +782,7 @@ class BogFolderBuilder:
                     element, "p", {"n": "out", "t": "b:StatusNumeric"}
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(const_val)})
-            # Revised logic for NumericSwitch
             elif data["type"] == "kitControl:NumericSwitch":
-                # inSwitch slot
                 in_switch_slot = ET.SubElement(
                     element, "p", {"n": "inSwitch", "f": "sL", "t": "b:StatusBoolean"}
                 )
@@ -879,21 +792,17 @@ class BogFolderBuilder:
                     "p",
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
-                # inTrue slot
                 in_true_slot = ET.SubElement(
                     element, "p", {"n": "inTrue", "f": "sL", "t": "b:StatusNumeric"}
                 )
                 ET.SubElement(in_true_slot, "p", {"n": "value", "v": "0.0"})
-                # inFalse slot
                 in_false_slot = ET.SubElement(
                     element, "p", {"n": "inFalse", "f": "sL", "t": "b:StatusNumeric"}
                 )
                 ET.SubElement(in_false_slot, "p", {"n": "value", "v": "0.0"})
-                # handle other simple properties passed in
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
             elif data["type"] == "kitControl:BooleanDelay":
-                # Input slot stub (so a link target exists even before wiring)
                 ET.SubElement(element, "p", {"n": "in", "f": "sL"})
                 on_d = data["properties"].get("onDelay", "0")
                 off_d = data["properties"].get("offDelay", "0")
@@ -1010,10 +919,6 @@ class BogFolderBuilder:
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
             elif data["type"] == "kitControl:Reset":
-                # For Reset blocks, create StatusNumeric stubs for all reset slots so
-                # links can attach.  The caller may provide default values in the
-                # properties dict (e.g., {"inA": {"value": 11.0}}); otherwise
-                # values default to 0.0.
                 for slot_name in [
                     "inA",
                     "inputLowLimit",
@@ -1021,7 +926,6 @@ class BogFolderBuilder:
                     "outputLowLimit",
                     "outputHighLimit",
                 ]:
-                    # Determine fallback value if specified in properties
                     prop_val = data["properties"].get(slot_name)
                     if isinstance(prop_val, dict):
                         val = prop_val.get("value", 0.0)
@@ -1044,13 +948,8 @@ class BogFolderBuilder:
                         },
                     )
             elif data["type"] == "kitControl:LoopPoint":
-                # LoopPoint implements a PID control loop.  It exposes a
-                # number of configuration slots that must exist to attach
-                # links.  Use the provided properties dict to supply
-                # initial values for these slots where available; otherwise
-                # fall back to sensible defaults.
+
                 props = data.get("properties", {})
-                # loopEnable: StatusBoolean, default True unless overridden
                 loop_enable_val: bool = True
                 loop_prop = props.get("loopEnable")
                 if isinstance(loop_prop, dict):
@@ -1070,7 +969,6 @@ class BogFolderBuilder:
                     "p",
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
-                # controlledVariable: StatusNumeric
                 cv_val: float = 0.0
                 cv_prop = props.get("controlledVariable")
                 if isinstance(cv_prop, dict):
@@ -1088,7 +986,6 @@ class BogFolderBuilder:
                     "p",
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
-                # setpoint: StatusNumeric
                 sp_val: float = 0.0
                 sp_prop = props.get("setpoint")
                 if isinstance(sp_prop, dict):
@@ -1106,9 +1003,7 @@ class BogFolderBuilder:
                     "p",
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
-                # loopAction: expect an enum; stub out a locked slot with no initial value
                 ET.SubElement(element, "p", {"n": "loopAction", "f": "L"})
-                # proportionalConstant: Double
                 pc_val: float = 0.0
                 pc_prop = props.get("proportionalConstant")
                 if isinstance(pc_prop, dict):
@@ -1125,7 +1020,6 @@ class BogFolderBuilder:
                         "v": str(pc_val),
                     },
                 )
-                # integralConstant: Double
                 ic_val: float = 0.0
                 ic_prop = props.get("integralConstant")
                 if isinstance(ic_prop, dict):
@@ -1142,7 +1036,6 @@ class BogFolderBuilder:
                         "v": str(ic_val),
                     },
                 )
-                # derivativeConstant: Double (optional)
                 dc_prop = props.get("derivativeConstant")
                 if dc_prop is not None:
                     dc_val: float = 0.0
@@ -1161,12 +1054,7 @@ class BogFolderBuilder:
                         },
                     )
             elif data["type"] == "sch:NumericSchedule":
-                # NumericSchedule outputs a numeric status and typically has a
-                # ``defaultOutput`` property to establish a baseline when no
-                # schedule events are active.  Read the provided properties if
-                # present, otherwise fall back to sensible defaults.
                 props = data.get("properties", {})
-                # Default output value
                 default_val: float = 0.0
                 default_prop = props.get("defaultOutput")
                 if isinstance(default_prop, dict):
@@ -1179,7 +1067,6 @@ class BogFolderBuilder:
                     {"n": "defaultOutput", "t": "b:StatusNumeric"},
                 )
                 ET.SubElement(def_slot, "p", {"n": "value", "v": str(default_val)})
-                # Current out value
                 out_val: float = default_val
                 out_prop = props.get("out")
                 if isinstance(out_prop, dict):
@@ -1193,17 +1080,7 @@ class BogFolderBuilder:
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(out_val)})
             elif data["type"] == "sch:EnumSchedule":
-                # EnumSchedule outputs an enumerated value.  It may define a
-                # ``facets`` property describing the enumeration mapping and
-                # an ``out`` property providing the initial value.  Without
-                # explicit properties, fall back to no facets and a zero
-                # enumeration value ("0@{ }").
                 props = data.get("properties", {})
-                # Write facets mapping if provided.  When specifying facets
-                # through the builder, the value should be the raw facets
-                # string (e.g. "range=E:{duty1=1,duty2=2}").  If not provided,
-                # facets are omitted and Niagara will default to an empty
-                # enumeration.
                 facets_val = props.get("facets")
                 if facets_val is not None:
                     ET.SubElement(
@@ -1211,8 +1088,7 @@ class BogFolderBuilder:
                         "p",
                         {"n": "facets", "t": "b:Facets", "v": str(facets_val)},
                     )
-                # Determine the out value.  Accept either a dict with a
-                # ``value`` key or a bare string.  Default to ``0``.
+
                 out_val = "0"
                 out_prop = props.get("out")
                 if isinstance(out_prop, dict):
@@ -1226,8 +1102,6 @@ class BogFolderBuilder:
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": out_val})
             elif data["type"] == "sch:BooleanSchedule":
-                # BooleanSchedule outputs a boolean status.  Use the provided
-                # ``out`` property to initialise the default value if supplied.
                 out_prop = (
                     data["properties"].get("out") if data.get("properties") else None
                 )
@@ -1243,7 +1117,6 @@ class BogFolderBuilder:
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(val).lower()})
             else:
-                # Generic logic for all other component types: simply emit properties
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
 
@@ -1271,32 +1144,22 @@ class BogFolderBuilder:
         """
         from collections import defaultdict
 
-        # Track how many links have been added per target so we can number them
         link_counters: Dict[str, int] = defaultdict(int)
         for link in links:
             target_name = link["target_name"]
-            # Determine the handle for the target component.  If absent, skip.
             target_handle = self._handle_map.get(target_name)
             if not target_handle:
                 continue
-            # Find the XML element corresponding to this component in the current folder.
-            # We look for a direct child of this folder with the matching handle.
             target_element = folder_element.find(f"./p[@h='{target_handle}']")
             if target_element is None:
-                # If the target isn't in this folder, skip.  Cross‑folder links are
-                # handled when processing the target's folder.
                 continue
-            # Determine the link name: first link is "Link", subsequent ones get a suffix
             count = link_counters[target_name]
             link_name = "Link" if count == 0 else f"Link{count}"
             link_counters[target_name] += 1
-            # Create the link element.  Use the specified link_type if provided.
             link_type = link.get("link_type", "b:Link")
             link_element = ET.SubElement(
                 target_element, "p", {"n": link_name, "t": link_type}
             )
-            # Add required child properties.  relationTags is always empty and relationId
-            # is "n:dataLink" for standard data links.
             ET.SubElement(
                 link_element,
                 "p",
@@ -1310,8 +1173,6 @@ class BogFolderBuilder:
             ET.SubElement(
                 link_element, "p", {"n": "targetSlotName", "v": link["target_slot"]}
             )
-            # If a converter type is specified, include a converter definition with
-            # the appropriate module prefix.  Niagara expects ``m="conv=converters"``.
             conv_type = link.get("converter_type")
             if conv_type:
                 ET.SubElement(
