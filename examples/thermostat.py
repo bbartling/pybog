@@ -67,8 +67,12 @@ def build_thermostat(builder: BogFolderBuilder) -> None:
     builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
 
     # Threshold compares
-    builder.add_component("kitControl:LessThanEqual", "IsBelowHeat")      # Space+Hyst <= HeatSP
-    builder.add_component("kitControl:GreaterThanEqual", "IsAboveCool")   # Space >= CoolSP+Hyst
+    builder.add_component(
+        "kitControl:LessThanEqual", "IsBelowHeat"
+    )  # Space+Hyst <= HeatSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "IsAboveCool"
+    )  # Space >= CoolSP+Hyst
 
     # Command gates
     builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
@@ -134,7 +138,8 @@ def build_thermostat(builder: BogFolderBuilder) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Generate a thermostat .bog file.")
     p.add_argument(
-        "-o", "--output_dir",
+        "-o",
+        "--output_dir",
         default="examples",
         help="Directory to write the .bog file.",
     )

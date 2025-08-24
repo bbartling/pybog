@@ -69,7 +69,7 @@ def main():
 
     builder.add_numeric_writable("MaxValue")
 
-    #builder.start_sub_folder("CalculationLogic")
+    # builder.start_sub_folder("CalculationLogic")
 
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
@@ -98,7 +98,7 @@ def main():
 
     final_winner = current_tier_outputs[0]
 
-    #builder.end_sub_folder()
+    # builder.end_sub_folder()
 
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")

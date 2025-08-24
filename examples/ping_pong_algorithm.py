@@ -2,42 +2,29 @@
 Ping-Pong Counter Algorithm (MultiVibrator 2s)
 
 G36 trim-and-respond scaffold.
-
-What it does
-- Pulse: MultiVibrator → OneShot → And(Enabled) ticks Counter.
-- Counter oscillates: up to TopLimit, down to LowLimit, repeat.
-- Direction via BooleanLatch:
-  • Or(>=Top, <=Low) → Latch.clock
-  • (>=Top) → Latch.in  → True=DOWN, False=UP
+Pay close attention how Bool Switches CountDown And CountUp
+is wired to inSwitch slots and wires to respected InFalse on
+CountUp and inTrue on CountDown as well as the Bool Latch
+Clock and In slots to make the Counter oscillates up to
+TopLimit, down to LowLimit, repeat on the 2000 multi vibe
+interval.
 
 Why it matters (G36)
 - Models stepwise setpoint trim and respond HVAC algorithms for guideline 36.
 - Replace limit checks with aggregated “requests”
   (e.g., many zones high → UP; many low → DOWN).
 
-Tuning
-- Step: size per pulse
-- period: 2000 ms
-- TopLimit/LowLimit: bounds
-
-Wiring cheat-sheet
-- Pulse: MultiVibrator → OneShot → And
-- Limits: Counter.out → (>=Top, <=Low) → Or → Latch.clock
-- Direction: (>=Top) → Latch.in
-- Routing:
-  • Latch.out → CountDown.inSwitch / CountUp.inSwitch
-  • And.out → CountDown.inTrue → Counter.countDown
-             → CountUp.inFalse → Counter.countUp
-
 """
-
 
 import os, argparse
 from bog_builder import BogFolderBuilder
 
+
 def main():
     ap = argparse.ArgumentParser(description="Ping-pong with MultiVibrator (2s)")
-    ap.add_argument("-o", "--output_dir", default="examples", help="Output directory for .bog")
+    ap.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for .bog"
+    )
     args = ap.parse_args()
 
     b = BogFolderBuilder("PingPongAlgorithm", debug=True)
@@ -52,7 +39,9 @@ def main():
 
     # ---- Logic subfolder ----
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"})
+    b.add_component(
+        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"}
+    )
     b.add_component("kitControl:OneShot", "FireOneShot")
     b.add_component("kitControl:And", "And")
     b.add_component("kitControl:Counter", "Counter")
@@ -94,6 +83,7 @@ def main():
     out = os.path.join(args.output_dir, "ping_pong_multivib.bog")
     b.save(out)
     print(f"Created Niagara .bog at: {os.path.abspath(out)}")
+
 
 if __name__ == "__main__":
     main()

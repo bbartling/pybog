@@ -14,6 +14,7 @@ import sys
 
 from bog_builder import BogFolderBuilder
 
+
 def build_hot_water_reset(output_directory: str) -> str:
     """Build the hot water reset .bog file.
 

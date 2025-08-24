@@ -18,12 +18,12 @@ and potentially learn from builder script failures. DO NOT use this script
 as a template for valid logic.
 """
 
-
 import sys
 import os
 import argparse
 
 from bog_builder import BogFolderBuilder
+
 
 def main():
     """
@@ -34,7 +34,10 @@ def main():
         description="Build a .bog file for the SAT Trim and Respond logic."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -97,11 +100,23 @@ def main():
 
     # --- StateLogic Wiring ---
     builder.add_link("FanRunCmd", "out", "StartupDelay", "in")
-    builder.add_link("StartUpDelayMinutes", "out", "StartupDelay", "onDelay",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+    builder.add_link(
+        "StartUpDelayMinutes",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
 
-    builder.add_link("UpdateMinutes", "out", "UpdateTimer", "period",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+    builder.add_link(
+        "UpdateMinutes",
+        "out",
+        "UpdateTimer",
+        "period",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
     builder.add_link("UpdateTimer", "out", "UpdatePulse", "in")
 
     builder.add_link("StartupDelay", "out", "MainLogicEnable", "inA")
@@ -111,7 +126,6 @@ def main():
     builder.add_link("FanNotRunning", "out", "ResetTmaxCondition", "inA")
     # This is a simplification: we reset tMax when the fan is off OR on the first pulse
     builder.add_link("UpdatePulse", "out", "ResetTmaxCondition", "inB")
-
 
     # --- TrimRespondLogic Wiring ---
     builder.add_link("TotalRequests", "out", "RequestsExceedIgnore", "inA")
@@ -141,7 +155,6 @@ def main():
     builder.add_link("TmaxMux", "out", "TmaxState", "in")
     builder.add_link("MainLogicEnable", "out", "TmaxState", "clock")
 
-
     # --- InterpolationLogic Wiring ---
     builder.add_link("OutsideAirTemp", "out", "SatSetpointInterpolator", "inA")
     builder.add_link("OatMin", "out", "SatSetpointInterpolator", "inputLowLimit")
@@ -151,13 +164,13 @@ def main():
 
     builder.add_link("SatSetpointInterpolator", "out", "DischargeAirTempSp", "in16")
 
-
     # --- Save the File ---
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
 
 if __name__ == "__main__":
     main()

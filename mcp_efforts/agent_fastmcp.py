@@ -25,6 +25,7 @@ BOG_FILENAME = "synthesized_hvac.bog"
 gemini_model = None
 try:
     import google.generativeai as genai
+
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     if not GOOGLE_API_KEY:
         print("❌ GOOGLE_API_KEY not set — this agent requires an LLM.")
@@ -42,7 +43,10 @@ MCP_CALLS = 0
 LLM_CALLS = 0
 MCP_TOOL_COUNTS = defaultdict(int)
 
-async def call_tool_counted(client: Client, tool_name: str, args: dict, timeout: int = 40):
+
+async def call_tool_counted(
+    client: Client, tool_name: str, args: dict, timeout: int = 40
+):
     global MCP_CALLS, MCP_TOOL_COUNTS
     MCP_CALLS += 1
     MCP_TOOL_COUNTS[tool_name] += 1
@@ -59,16 +63,21 @@ def _load_context_pack() -> str:
     except Exception:
         return ""
 
-def build_system_prompt(last_error: str | None = None, api_info: dict | None = None) -> str:
+
+def build_system_prompt(
+    last_error: str | None = None, api_info: dict | None = None
+) -> str:
     context_pack = _load_context_pack()  # 👈 pull in your updated file
     # ... then prepend it to your system message
     sysmsg = (
-        context_pack + "\n\n" +  # 👈 add this line
-        "You are a senior Niagara/BAS code generator. Generate a single, complete Python module.\n"
+        context_pack
+        + "\n\n"  # 👈 add this line
+        + "You are a senior Niagara/BAS code generator. Generate a single, complete Python module.\n"
         # (rest of your system prompt)
     )
     # (rest unchanged)
     return sysmsg
+
 
 # =========================
 # Normalization helpers (Pydantic / RootModel safe)
@@ -81,15 +90,16 @@ def _to_plain(obj):
         return {k: _to_plain(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):
         return [_to_plain(x) for x in obj]
-    if hasattr(obj, "model_dump"):   # Pydantic v2 BaseModel
+    if hasattr(obj, "model_dump"):  # Pydantic v2 BaseModel
         return _to_plain(obj.model_dump())
-    if hasattr(obj, "root"):         # RootModel-like
+    if hasattr(obj, "root"):  # RootModel-like
         try:
             return _to_plain(getattr(obj, "root"))
         except Exception:
             pass
     try:
         import dataclasses
+
         if dataclasses.is_dataclass(obj):
             return _to_plain(dataclasses.asdict(obj))
     except Exception:
@@ -98,6 +108,7 @@ def _to_plain(obj):
         return _to_plain(vars(obj))
     except Exception:
         return obj
+
 
 def _to_dict_list(items):
     """Ensure we always end up with list[dict]."""
@@ -117,6 +128,7 @@ def _to_dict_list(items):
         return out
     return [{"value": plain}]
 
+
 # =========================
 # API inference & prompting
 # =========================
@@ -125,41 +137,51 @@ def _api_from_examples(example_sources: list[dict]) -> dict:
     Infer allowed methods and constructor usage from the example source bundle.
     """
     import re
+
     srcs = []
     for it in _to_dict_list(example_sources):
-        s = (it.get("source") or it.get("code") or it.get("content") or "")
+        s = it.get("source") or it.get("code") or it.get("content") or ""
         if s:
             srcs.append(s)
     joined = "\n".join(srcs)
 
     # Methods like builder.add_numeric_writable(...), builder.start_sub_folder(...), etc.
-    meths = sorted(set(re.findall(r'\bbuilder\.([A-Za-z_][A-Za-z0-9_]*)\s*\(', joined)))
+    meths = sorted(set(re.findall(r"\bbuilder\.([A-Za-z_][A-Za-z0-9_]*)\s*\(", joined)))
     # Constructor usage: BogFolderBuilder("Name"...) patterns
     ctor_requires_folder = bool(re.search(r'BogFolderBuilder\s*\(\s*["\']', joined))
     return {"methods": meths, "ctor_requires_folder_name": ctor_requires_folder}
 
+
 def _retry_hint(last_error: str) -> str:
     e = (last_error or "").lower()
     if "missing 1 required positional argument: 'folder_name'" in e:
-        return "Use BogFolderBuilder(folder_name='SomeName'). 'folder_name' is required."
+        return (
+            "Use BogFolderBuilder(folder_name='SomeName'). 'folder_name' is required."
+        )
     if "object has no attribute 'add_device'" in e:
         return "Do not call 'add_device'. Use 'add_component' or typed helpers like 'add_numeric_writable'."
     if "no attribute 'add_link'" in e or "add_link(" in e and "not found" in e:
         return "Check method name and signature; use builder.add_link(source_name, 'out', target_name, 'in', link_type='baja:Slot')."
     return ""
 
-def build_system_prompt(last_error: str | None = None, api_info: dict | None = None) -> str:
+
+def build_system_prompt(
+    last_error: str | None = None, api_info: dict | None = None
+) -> str:
     context_pack = _load_context_pack()  # 👈 pull in your updated file
     # ... then prepend it to your system message
     sysmsg = (
-        context_pack + "\n\n" +  # 👈 add this line
-        "You are a senior Niagara/BAS code generator. Generate a single, complete Python module.\n"
+        context_pack
+        + "\n\n"  # 👈 add this line
+        + "You are a senior Niagara/BAS code generator. Generate a single, complete Python module.\n"
     )
 
     api_part = ""
     if api_info:
         methods = ", ".join(api_info.get("methods", [])) or "(no methods inferred)"
-        ctor_note = "REQUIRED" if api_info.get("ctor_requires_folder_name") else "UNKNOWN"
+        ctor_note = (
+            "REQUIRED" if api_info.get("ctor_requires_folder_name") else "UNKNOWN"
+        )
         api_part = (
             "\n\nKNOWN API INFERRED FROM EXAMPLES\n"
             f"- BogFolderBuilder(folder_name: str) is {ctor_note}.\n"
@@ -180,7 +202,6 @@ def build_system_prompt(last_error: str | None = None, api_info: dict | None = N
         builder.save(out_path)
         print(f"Created Niagara .bog at: {out_path}")
         """
-
     )
     if last_error:
         sysmsg += (
@@ -192,6 +213,7 @@ def build_system_prompt(last_error: str | None = None, api_info: dict | None = N
         if hint:
             sysmsg += f"\nSPECIFIC FIX HINT: {hint}"
     return sysmsg
+
 
 # =========================
 # LLM flows
@@ -229,11 +251,12 @@ EXAMPLES (name + short description):
         raise RuntimeError(f"LLM selected insufficient examples: {len(chosen)}")
     return chosen[:MAX_EXAMPLES_FOR_SYNTH]
 
+
 def llm_synthesize_script(
     example_sources: List[Dict[str, Any]],
     user_goal: str,
     last_error: str | None,
-    api_info: dict | None = None
+    api_info: dict | None = None,
 ) -> str:
     global LLM_CALLS
     LLM_CALLS += 1
@@ -244,7 +267,9 @@ def llm_synthesize_script(
     bundle_lines = []
     for item in srcs:
         name = (item.get("name") or item.get("filename") or "example.py").strip()
-        source = (item.get("source") or item.get("code") or item.get("content") or "").rstrip()
+        source = (
+            item.get("source") or item.get("code") or item.get("content") or ""
+        ).rstrip()
         if source:
             bundle_lines.append(f"# ========== {name} ==========\n{source}\n")
     bundle = "\n".join(bundle_lines)
@@ -261,14 +286,17 @@ VETTED EXAMPLES (study these; synthesize new code, DO NOT paste verbatim):
 {bundle}
 """
     resp = gemini_model.generate_content([system_prompt, user_prompt])
-    code = (resp.text or "").strip().replace("```python","").replace("```","").strip()
+    code = (resp.text or "").strip().replace("```python", "").replace("```", "").strip()
     if "def build()" not in code:
         raise RuntimeError("LLM did not produce a `build()` function.")
     # Guard against known bad invents
     DISALLOWED = {"add_device", "create_device", "wire(", "connect_device"}
     if any(x in code for x in DISALLOWED):
-        raise RuntimeError("Generated code used a disallowed/unknown method; must follow examples exactly.")
+        raise RuntimeError(
+            "Generated code used a disallowed/unknown method; must follow examples exactly."
+        )
     return code
+
 
 # =========================
 # Example expansion policy
@@ -289,12 +317,14 @@ def expand_chosen_examples(all_examples: list[dict], chosen: list[str]) -> list[
     extra = extra[: max(0, MAX_EXAMPLES_FOR_SYNTH - len(chosen))]
     return chosen + extra
 
+
 # =========================
 # MCP wrappers
 # =========================
 async def mcp_list_examples(client: Client) -> List[Dict[str, Any]]:
     res = await call_tool_counted(client, "list_examples", {}, timeout=20)
     return _to_dict_list(res.data)
+
 
 async def mcp_get_sources(client: Client, names: List[str]) -> List[Dict[str, Any]]:
     names = names or []
@@ -303,19 +333,23 @@ async def mcp_get_sources(client: Client, names: List[str]) -> List[Dict[str, An
     )
     return _to_dict_list(res.data)
 
+
 async def mcp_run_generated(client: Client, code: str) -> Dict[str, Any]:
     res = await call_tool_counted(
         client,
         "run_generated_script",
         {"filename": "agent_synth.py", "source_code": code},
-        timeout=240
+        timeout=240,
     )
     return res.data or {}
+
 
 # =========================
 # Main Retry Loop
 # =========================
-async def try_build_loop(client: Client, user_goal: str, examples: List[Dict[str,Any]]):
+async def try_build_loop(
+    client: Client, user_goal: str, examples: List[Dict[str, Any]]
+):
     """
     1. Pick examples and fetch sources
     2. Synthesize Python code via LLM (strict example-following)
@@ -335,8 +369,12 @@ async def try_build_loop(client: Client, user_goal: str, examples: List[Dict[str
 
         try:
             # ✅ Correct arg order: examples first, then goal
-            code = llm_synthesize_script(sources, user_goal, last_error=last_error, api_info=api_info)
-            print(f"🐍 Synthesized code (length: {len(code)} chars). Sending to MCP for execution...")
+            code = llm_synthesize_script(
+                sources, user_goal, last_error=last_error, api_info=api_info
+            )
+            print(
+                f"🐍 Synthesized code (length: {len(code)} chars). Sending to MCP for execution..."
+            )
         except Exception as e:
             print(f"❌ Failed to synthesize code: {e}")
             last_error = f"Code synthesis failed: {e}"
@@ -367,7 +405,9 @@ async def try_build_loop(client: Client, user_goal: str, examples: List[Dict[str
                 FIXED_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
                 output_path = FIXED_OUTPUT_DIR / BOG_FILENAME
                 output_path.write_text(bog_data, encoding="utf-8")
-                print(f"✅ Build Succeeded! Saved {len(bog_data)} bytes to: {output_path.resolve()}")
+                print(
+                    f"✅ Build Succeeded! Saved {len(bog_data)} bytes to: {output_path.resolve()}"
+                )
                 return {"ok": True, "path": str(output_path.resolve())}
             except Exception as e:
                 print(f"❌ CRITICAL: Failed to save BOG data locally: {e}")
@@ -386,6 +426,7 @@ async def try_build_loop(client: Client, user_goal: str, examples: List[Dict[str
     print("❌ All attempts failed.")
     return {"ok": False, "error": last_error}
 
+
 # =========================
 # Orchestrator
 # =========================
@@ -397,7 +438,10 @@ async def main():
     )
 
     async with Client(MCP_SERVER_URL) as client:
-        tools = [t.model_dump() for t in await asyncio.wait_for(client.list_tools(), timeout=10)]
+        tools = [
+            t.model_dump()
+            for t in await asyncio.wait_for(client.list_tools(), timeout=10)
+        ]
         print("🤖 MCP Tools discovered:", [t.get("name") for t in tools])
 
         examples = await mcp_list_examples(client)
@@ -420,6 +464,7 @@ async def main():
         print("LLM calls:", LLM_CALLS)
         print("MCP calls:", MCP_CALLS)
         print("MCP tools:", dict(MCP_TOOL_COUNTS))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

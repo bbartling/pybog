@@ -13,9 +13,7 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog"
-    )
+    parser = argparse.ArgumentParser(description="Build a 4-input adder .bog")
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )

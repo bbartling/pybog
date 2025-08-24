@@ -64,15 +64,25 @@ def build_central_plant(builder: BogFolderBuilder) -> None:
     builder.add_component("kitControl:Not", "Not_FreeCooling")
 
     # Start/Stop comparators
-    builder.add_component("kitControl:LessThanEqual", "HeatStart_Compare")       # OAT <= HeatStartSP
-    builder.add_component("kitControl:GreaterThanEqual", "HeatStop_Compare")     # OAT >= HeatStopSP
-    builder.add_component("kitControl:GreaterThanEqual", "CoolStart_Compare")    # OAT >= CoolStartSP
-    builder.add_component("kitControl:LessThanEqual", "CoolStop_Compare")        # OAT <= CoolStopSP
+    builder.add_component(
+        "kitControl:LessThanEqual", "HeatStart_Compare"
+    )  # OAT <= HeatStartSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "HeatStop_Compare"
+    )  # OAT >= HeatStopSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "CoolStart_Compare"
+    )  # OAT >= CoolStartSP
+    builder.add_component(
+        "kitControl:LessThanEqual", "CoolStop_Compare"
+    )  # OAT <= CoolStopSP
 
     # Start/Stop gates
-    builder.add_component("kitControl:And", "HeatStart_Gate")    # start & not free-cooling
+    builder.add_component(
+        "kitControl:And", "HeatStart_Gate"
+    )  # start & not free-cooling
     builder.add_component("kitControl:And", "CoolStart_Gate")
-    builder.add_component("kitControl:Or", "HeatStop_Or")        # stop OR free-cooling
+    builder.add_component("kitControl:Or", "HeatStop_Or")  # stop OR free-cooling
     builder.add_component("kitControl:Or", "CoolStop_Or")
 
     # Latches (hysteresis behavior)

@@ -8,6 +8,7 @@ try:
 except TypeError:
     mod_file = None  # builtins/frozen
 
+
 def is_defined_here(obj):
     try:
         f = inspect.getsourcefile(obj) or inspect.getfile(obj)
@@ -15,12 +16,15 @@ def is_defined_here(obj):
     except TypeError:
         return False
 
+
 print(f"MODULE: {mod.__name__}")
 print(f"FILE:   {mod_file}")
 
 # ---------- Classes ----------
 print("\nCLASSES (defined in this file):")
-classes = [(n, c) for n, c in inspect.getmembers(mod, inspect.isclass) if is_defined_here(c)]
+classes = [
+    (n, c) for n, c in inspect.getmembers(mod, inspect.isclass) if is_defined_here(c)
+]
 if not classes:
     print("  (none)")
 for name, cls in classes:
@@ -79,7 +83,9 @@ for name, cls in classes:
 
 # ---------- Functions ----------
 print("\nFUNCTIONS (top-level, defined in this file):")
-funcs = [(n, f) for n, f in inspect.getmembers(mod, inspect.isfunction) if is_defined_here(f)]
+funcs = [
+    (n, f) for n, f in inspect.getmembers(mod, inspect.isfunction) if is_defined_here(f)
+]
 if not funcs:
     print("  (none)")
 for name, fn in funcs:

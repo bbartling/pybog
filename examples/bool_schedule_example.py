@@ -6,7 +6,6 @@ making this a useful example for creating basic overrides or enabling flags
 that are controlled by a schedule object.
 """
 
-
 from __future__ import annotations
 
 import argparse
@@ -36,7 +35,9 @@ def build_bool_schedule(output_directory: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a simple boolean schedule .bog file.")
+    parser = argparse.ArgumentParser(
+        description="Generate a simple boolean schedule .bog file."
+    )
     parser.add_argument(
         "-o",
         "--output",

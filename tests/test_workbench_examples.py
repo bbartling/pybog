@@ -217,7 +217,9 @@ def test_workbench_ping_pong_counter(tmp_path: Path) -> None:
 
     # ---- Logic subfolder ----
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"})
+    b.add_component(
+        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"}
+    )
     b.add_component("kitControl:OneShot", "FireOneShot")
     b.add_component("kitControl:And", "And")
     b.add_component("kitControl:Counter", "Counter")

@@ -88,11 +88,8 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         ],
         "outputs": ["out"],
     },
-
     "sch:BooleanSchedule": {"outputs": ["out"]},
-
     "sch:NumericSchedule": {"outputs": ["out"]},
-
     "sch:EnumSchedule": {"outputs": ["out"]},
 }
 

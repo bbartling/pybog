@@ -35,7 +35,9 @@ def main():
     # before a "failure" is confirmed. Note: For standard kitControl:BooleanDelay,
     # 'onDelay' is a static property set at creation, not a dynamically linkable slot.
     # This input will set the initial property value.
-    builder.add_numeric_writable(name="FailureDetectionDelay_ms", default_value=5000.0, precision=0)
+    builder.add_numeric_writable(
+        name="FailureDetectionDelay_ms", default_value=5000.0, precision=0
+    )
 
     # --- Top-level Outputs ---
     # Boolean point indicating if Pump A is currently designated as the lead pump.
@@ -58,22 +60,30 @@ def main():
     # --- Delay for Confirmed Mismatch (BooleanDelay components) ---
     # The 'onDelay' property is set from the default value of 'FailureDetectionDelay_ms'.
     # This addresses the original error: 'onDelay' is a property, not a linkable slot.
-    default_delay_ms_str = str(int(builder.get_component("FailureDetectionDelay_ms").properties["value"]))
+    default_delay_ms_str = str(
+        int(builder.get_component("FailureDetectionDelay_ms").properties["value"])
+    )
     builder.add_component(
         comp_type="kitControl:BooleanDelay",
         name="PumpA_FailureDelay",
-        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"},
     )
     builder.add_component(
         comp_type="kitControl:BooleanDelay",
         name="PumpB_FailureDelay",
-        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"},
     )
 
     # --- Inverter Blocks for various logic conditions ---
-    builder.add_component(comp_type="kitControl:Not", name="Not_LeadPumpPreference_A") # Gives true if B is preferred
-    builder.add_component(comp_type="kitControl:Not", name="Not_PumpA_FailureDelay")   # Gives true if Pump A is healthy
-    builder.add_component(comp_type="kitControl:Not", name="Not_PumpB_FailureDelay")   # Gives true if Pump B is healthy
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_LeadPumpPreference_A"
+    )  # Gives true if B is preferred
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_PumpA_FailureDelay"
+    )  # Gives true if Pump A is healthy
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_PumpB_FailureDelay"
+    )  # Gives true if Pump B is healthy
 
     # --- Logic for determining if Pump A should be the lead ---
     # Condition 1: Pump A is preferred AND Pump A is healthy
@@ -118,16 +128,30 @@ def main():
     builder.add_link("LeadPumpPreference_A", "out", "And_A_Pref_And_A_Healthy", "inA")
     builder.add_link("Not_PumpA_FailureDelay", "out", "And_A_Pref_And_A_Healthy", "inB")
 
-    builder.add_link("Not_LeadPumpPreference_A", "out", "And_B_Pref_And_B_Failed", "inA") # B is preferred
-    builder.add_link("PumpB_FailureDelay", "out", "And_B_Pref_And_B_Failed", "inB")       # B has failed
+    builder.add_link(
+        "Not_LeadPumpPreference_A", "out", "And_B_Pref_And_B_Failed", "inA"
+    )  # B is preferred
+    builder.add_link(
+        "PumpB_FailureDelay", "out", "And_B_Pref_And_B_Failed", "inB"
+    )  # B has failed
 
-    builder.add_link("And_A_Pref_And_A_Healthy", "out", "Or_PumpA_IsLead_Internal", "inA")
-    builder.add_link("And_B_Pref_And_B_Failed", "out", "Or_PumpA_IsLead_Internal", "inB")
+    builder.add_link(
+        "And_A_Pref_And_A_Healthy", "out", "Or_PumpA_IsLead_Internal", "inA"
+    )
+    builder.add_link(
+        "And_B_Pref_And_B_Failed", "out", "Or_PumpA_IsLead_Internal", "inB"
+    )
     builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpA_IsLead", "in16")
 
     # Lead Assignment Logic for Pump B (assuming a two-pump system, B is lead if A is not)
-    builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpB_IsLead", "in16",
-                     link_type="b:ConversionLink", converter_type="conv:BooleanToNotBoolean")
+    builder.add_link(
+        "Or_PumpA_IsLead_Internal",
+        "out",
+        "PumpB_IsLead",
+        "in16",
+        link_type="b:ConversionLink",
+        converter_type="conv:BooleanToNotBoolean",
+    )
 
     # Active Lead Pump Failure Detection Wiring
     builder.add_link("PumpA_IsLead", "out", "And_A_IsLead_And_A_Failed", "inA")

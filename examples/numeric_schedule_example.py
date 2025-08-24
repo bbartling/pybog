@@ -1,40 +1,72 @@
 """
-This script generates a simple numeric schedule. It creates a single
-`sch:NumericSchedule` component and links its output to a NumericWritable
-point. The schedule is configured with a default output, making this a useful
-example for creating basic setpoints or values that are driven by a
-schedule object.
+Generate a simple hard-coded numeric schedule (.bog).
+
+Schedule behavior:
+- Active window: 06:00–18:00, value = 1.0
+- Default/off-hours: value = 0.0
+- Applies Sun–Fri, empty on Saturday
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import sys
-
-
 from bog_builder import BogFolderBuilder
 
 
 def build_numeric_schedule(output_directory: str) -> str:
-    """Build a minimal numeric schedule and save it as a `.bog` file."""
-    builder = BogFolderBuilder("Schedules_Numeric", debug=False)
-    # Create a numeric schedule.  Provide ``defaultOutput`` so the schedule
-    # has a baseline value of 0.0, and set the ``out`` slot to 1.0 so the
-    # schedule immediately outputs 1.0 when imported.
-    builder.add_component(
-        "sch:NumericSchedule",
-        "NumericSchedule",
-        properties={
-            "defaultOutput": {"value": 0.0},
-            "out": {"value": 1.0},
+    builder = BogFolderBuilder("Schedules_Numeric", debug=True)
+
+    # Hard-coded schedule properties (mirrors Workbench "Good.xml")
+    props = {
+        "defaultOutput": {"value": 0.0},
+        "effective": {
+            "start": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
+            "end": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
         },
-    )
-    # Target numeric writable to consume the schedule output
+        "schedule": {
+            "specialEvents": {},
+            "week": {
+                # Active days: Sun–Fri
+                "sunday":    {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                "monday":    {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                "tuesday":   {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                "wednesday": {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                "thursday":  {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                "friday":    {"day": {"time": {"start": "06:00:00.000",
+                                               "finish": "18:00:00.000",
+                                               "effectiveValue": {"value": 1.0}}}},
+                # Saturday empty (falls back to defaultOutput)
+                "saturday":  {"day": {}},
+            },
+        },
+        "out": {"value": 1.0},
+    }
+
+    builder.add_component("sch:NumericSchedule", "NumericSchedule", properties=props)
     builder.add_numeric_writable("NumericWritable")
-    # Connect the schedule's ``out`` slot to the writable's ``in16`` slot
     builder.add_link("NumericSchedule", "out", "NumericWritable", "in16")
-    # Write the .bog file
+
     os.makedirs(output_directory, exist_ok=True)
     out_path = os.path.join(output_directory, "NumericSchedule.bog")
     builder.save(out_path)
@@ -42,16 +74,13 @@ def build_numeric_schedule(output_directory: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a simple numeric schedule .bog file.")
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="examples",
-        help="Directory to write the .bog file (defaults to 'examples').",
-    )
+    parser = argparse.ArgumentParser(description="Generate hard-coded numeric schedule .bog file.")
+    parser.add_argument("-o", "--output", default="examples",
+                        help="Directory to write the .bog file (default: examples).")
     args = parser.parse_args()
-    path = build_numeric_schedule(args.output)
-    print(f"Created {path}")
+
+    out_path = build_numeric_schedule(args.output)
+    print(f"Created {out_path}")
 
 
 if __name__ == "__main__":

@@ -509,8 +509,13 @@ class BogFolderBuilder:
         Subfolders: always tiered.
         """
         folder_name = folder_path_tuple[-1]
-        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
-        folder_element = ET.SubElement(parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"})
+        self.log(
+            f"--- Building folder: {'/'.join(folder_path_tuple)} ---",
+            is_layout_log=True,
+        )
+        folder_element = ET.SubElement(
+            parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"}
+        )
 
         components_in_folder = {
             name: data
@@ -538,16 +543,21 @@ class BogFolderBuilder:
         self._add_component_xml_tags(folder_element, components_in_folder, comp_coords)
 
         links_targeting_this_folder = [
-            l for l in self._links
+            l
+            for l in self._links
             if self._component_to_folder.get(l["target_name"]) == folder_path_tuple
         ]
         self._add_link_xml_tags(folder_element, links_targeting_this_folder)
 
         # Recurse into subfolders
         for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
-            self.log(f"About to recurse into sub-folder: {sub_folder_name}", is_layout_log=True)
-            self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
-
+            self.log(
+                f"About to recurse into sub-folder: {sub_folder_name}",
+                is_layout_log=True,
+            )
+            self._build_folder_contents(
+                folder_element, folder_path_tuple + (sub_folder_name,)
+            )
 
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
@@ -563,8 +573,8 @@ class BogFolderBuilder:
             if data.get("type") == "folder":
                 continue
 
-            is_target = name in all_links_targets       
-            is_source = name in all_links_sources     
+            is_target = name in all_links_targets
+            is_source = name in all_links_sources
 
             if is_target and not is_source:
                 inputs.append(name)
@@ -576,13 +586,18 @@ class BogFolderBuilder:
         y = self.START_Y
         for name in sorted(outputs):
             coords[name] = (self.START_X, y)
-            self.log(f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True)
+            self.log(
+                f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True
+            )
             y += self.Y_INCREMENT
 
         folder_x = self.START_X + self.X_COLUMN_WIDTH
         for folder_name in sorted(sub_folders):
             coords[folder_name] = (folder_x, self.START_Y)
-            self.log(f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}", is_layout_log=True)
+            self.log(
+                f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}",
+                is_layout_log=True,
+            )
 
         y = self.START_Y
         right_x = self.START_X + 2 * self.X_COLUMN_WIDTH
@@ -791,7 +806,9 @@ class BogFolderBuilder:
                 props = data.get("properties", {})
                 raw = props.get("value", props.get("out", False))
                 val = str(bool(raw)).lower()
-                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusBoolean"})
+                out_slot = ET.SubElement(
+                    element, "p", {"n": "out", "t": "b:StatusBoolean"}
+                )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": val})
 
             elif data["type"] == "kitControl:BooleanSwitch":
@@ -801,7 +818,8 @@ class BogFolderBuilder:
                 )
                 ET.SubElement(in_switch_slot, "p", {"n": "value", "v": "false"})
                 ET.SubElement(
-                    in_switch_slot, "p",
+                    in_switch_slot,
+                    "p",
                     {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
                 )
                 # Defaults for inTrue/inFalse (boolean)
@@ -1085,32 +1103,7 @@ class BogFolderBuilder:
                             "v": str(dc_val),
                         },
                     )
-            elif data["type"] == "sch:NumericSchedule":
-                props = data.get("properties", {})
-                default_val: float = 0.0
-                default_prop = props.get("defaultOutput")
-                if isinstance(default_prop, dict):
-                    default_val = float(default_prop.get("value", default_val))
-                elif default_prop is not None:
-                    default_val = float(default_prop)
-                def_slot = ET.SubElement(
-                    element,
-                    "p",
-                    {"n": "defaultOutput", "t": "b:StatusNumeric"},
-                )
-                ET.SubElement(def_slot, "p", {"n": "value", "v": str(default_val)})
-                out_val: float = default_val
-                out_prop = props.get("out")
-                if isinstance(out_prop, dict):
-                    out_val = float(out_prop.get("value", out_val))
-                elif out_prop is not None:
-                    out_val = float(out_prop)
-                out_slot = ET.SubElement(
-                    element,
-                    "p",
-                    {"n": "out", "t": "b:StatusNumeric"},
-                )
-                ET.SubElement(out_slot, "p", {"n": "value", "v": str(out_val)})
+
             elif data["type"] == "sch:EnumSchedule":
                 props = data.get("properties", {})
                 facets_val = props.get("facets")
@@ -1148,6 +1141,101 @@ class BogFolderBuilder:
                     {"n": "out", "t": "b:StatusBoolean"},
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(val).lower()})
+
+            elif data["type"] == "sch:NumericSchedule":
+                self.log(f"Building sch:NumericSchedule component '{name}'...", is_layout_log=True)
+                props = data.get("properties", {})
+
+                # --- 1. Handle defaultOutput ---
+                default_val = 0.0
+                default_prop = props.get("defaultOutput")
+                if isinstance(default_prop, dict):
+                    default_val = float(default_prop.get("value", default_val))
+                elif default_prop is not None:
+                    default_val = float(default_prop)
+                def_slot = ET.SubElement(element, "p", {"n": "defaultOutput", "t": "b:StatusNumeric"})
+                ET.SubElement(def_slot, "p", {"n": "value", "v": str(default_val)})
+                self.log(f"  + Added defaultOutput with value: {default_val}", is_layout_log=True)
+
+                # --- 2. Build the <effective> block ---
+                effective_data = props.get("effective")
+                if effective_data:
+                    self.log("  + Building effective block...", is_layout_log=True)
+                    eff = ET.SubElement(element, "p", {"n": "effective", "t": "sch:DateRangeSchedule"})
+                    for edge in ("start", "end"):
+                        if edge in effective_data:
+                            es = ET.SubElement(eff, "p", {"n": edge, "t": "sch:DateSchedule"})
+                            ET.SubElement(ET.SubElement(es, "p", {"n": "yearSchedule", "t": "sch:YearSchedule"}),
+                                        "p", {"n": "alwaysEffective", "v": "true"})
+                            ET.SubElement(ET.SubElement(es, "p", {"n": "monthSchedule", "t": "sch:MonthSchedule"}),
+                                        "p", {"n": "singleSelection", "v": "true"})
+                            ET.SubElement(ET.SubElement(es, "p", {"n": "daySchedule", "t": "sch:DayOfMonthSchedule"}),
+                                        "p", {"n": "singleSelection", "v": "true"})
+                            ET.SubElement(ET.SubElement(es, "p", {"n": "weekdaySchedule", "t": "sch:WeekdaySchedule"}),
+                                        "p", {"n": "singleSelection", "v": "true"})
+                            self.log(f"    - Added effective/{edge} schedule", is_layout_log=True)
+                else:
+                    self.log("  - No 'effective' data found, skipping.", is_layout_log=True)
+
+                # --- 3. Build the <schedule> and <week> blocks ---
+                schedule_data = props.get("schedule", {})
+                if schedule_data:
+                    self.log("  + Building main schedule block...", is_layout_log=True)
+                    sched = ET.SubElement(element, "p", {"n": "schedule", "t": "sch:CompositeSchedule"})
+                    ET.SubElement(sched, "p", {"n": "specialEvents", "t": "sch:CompositeSchedule"})
+
+                    week_data = schedule_data.get("week", {})
+                    if week_data:
+                        self.log("    - Building week schedule...", is_layout_log=True)
+                        week = ET.SubElement(sched, "p", {"n": "week", "t": "sch:WeekSchedule"})
+                        
+                        days_order = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+                        for idx, day_name in enumerate(days_order):
+                            day_entry = week_data.get(day_name, {})
+                            if not day_entry:
+                                self.log(f"      - Skipping day: {day_name.capitalize()} (not in props)", is_layout_log=True)
+                                continue
+
+                            d = ET.SubElement(week, "p", {"n": day_name, "t": "sch:DailySchedule"})
+                            day_details = day_entry.get("day", {})
+                            day_node = ET.SubElement(d, "p", {"n": "day", "t": "sch:DaySchedule"})
+                            
+                            time_details = day_details.get("time")
+                            if time_details:
+                                value_details = time_details.get("effectiveValue", {})
+                                val = value_details.get("value")
+                                self.log(f"      - Processing active day: {day_name.capitalize()} (Start: {time_details.get('start')}, Finish: {time_details.get('finish')}, Value: {val})", is_layout_log=True)
+                                
+                                tnode = ET.SubElement(day_node, "p", {"n": "time", "t": "sch:TimeSchedule"})
+                                ET.SubElement(tnode, "p", {"n": "start", "t": "b:Time", "v": time_details.get("start")})
+                                ET.SubElement(tnode, "p", {"n": "finish", "t": "b:Time", "v": time_details.get("finish")})
+                                
+                                if val is not None:
+                                    ev = ET.SubElement(tnode, "p", {"n": "effectiveValue", "t": "b:StatusNumeric"})
+                                    ET.SubElement(ev, "p", {"n": "value", "v": str(float(val))})
+                            else:
+                                self.log(f"      - Processing empty day: {day_name.capitalize()}", is_layout_log=True)
+                            
+                            days_node = ET.SubElement(d, "p", {"n": "days", "t": "sch:WeekdaySchedule"})
+                            ET.SubElement(days_node, "p", {"n": "set", "t": "b:EnumSet", "v": str(idx)})
+                    else:
+                        self.log("    - No 'week' data found in schedule, skipping.", is_layout_log=True)
+                else:
+                    self.log("  - No 'schedule' data found, skipping.", is_layout_log=True)
+
+
+                # --- 4. Handle current 'out' value ---
+                out_val = default_val 
+                out_prop = props.get("out")
+                if isinstance(out_prop, dict):
+                    out_val = float(out_prop.get("value", out_val))
+                elif out_prop is not None:
+                    out_val = float(out_prop)
+                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
+                ET.SubElement(out_slot, "p", {"n": "value", "v": str(out_val)})
+                self.log(f"  + Added out with value: {out_val}", is_layout_log=True)
+                self.log(f"Finished building sch:NumericSchedule '{name}'.", is_layout_log=True)
+
             else:
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})

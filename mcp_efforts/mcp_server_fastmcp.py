@@ -22,18 +22,22 @@ try:
     from bog_builder import BogFolderBuilder
 except ImportError:
     print("Warning: BogFolderBuilder not found. Using a mock class for demonstration.")
+
     # Define a mock if the real one isn't available for standalone testing
     class BogFolderBuilder:
         def __init__(self, folder_name: str, debug: bool = True):
             self._folder_name = folder_name
             self._content = f"<bog folder='{folder_name}'>...</bog>"
+
         def to_xml_string(self) -> str:
             # In a real scenario, this would generate the full BOG XML content.
             print(f"Serializing BOG data for '{self._folder_name}'")
             return self._content
+
         def save(self, path: str):
             # This method will be overridden/patched to prevent file writing.
             raise NotImplementedError("File saving is disabled on the MCP server.")
+
 
 # Analyzer is optional; guard import
 try:
@@ -51,6 +55,7 @@ SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_\-\.]{1,80}$")
 # MCP instance
 mcp = FastMCP(name="Bog Builder MCP Server")
 
+
 # ---- Models ----
 class ExampleParameter(BaseModel):
     name: str = Field(description="The name of the parameter.")
@@ -58,18 +63,26 @@ class ExampleParameter(BaseModel):
     description: str = Field(description="A brief description of the parameter.")
     required: bool = Field(description="Whether the parameter is required.")
 
+
 class ExampleDetails(BaseModel):
     name: str = Field(description="The unique name of the example, used for execution.")
-    description: Optional[str] = Field(description="Detailed explanation of what the example does.")
-    inputs: List[ExampleParameter] = Field(description="A list of input parameters the example requires.")
+    description: Optional[str] = Field(
+        description="Detailed explanation of what the example does."
+    )
+    inputs: List[ExampleParameter] = Field(
+        description="A list of input parameters the example requires."
+    )
+
 
 class AnalyzeRequest(BaseModel):
     file_path: str
     plots_dir: Optional[str] = None
 
+
 class SourceCode(BaseModel):
     name: str
     source: str
+
 
 # ---- Helpers ----
 def get_example_details(script_path: Path) -> ExampleDetails:
@@ -89,6 +102,7 @@ def get_example_details(script_path: Path) -> ExampleDetails:
     ]
     return ExampleDetails(name=script_path.name, description=docstring, inputs=inputs)
 
+
 # ---- Tools ----
 @mcp.tool(
     name="list_examples",
@@ -99,6 +113,7 @@ async def list_examples() -> List[ExampleDetails]:
         raise FileNotFoundError(f"Examples directory not found: {EXAMPLES_DIR}")
     scripts = sorted(f for f in EXAMPLES_DIR.glob("*.py") if not f.name.startswith("."))
     return [get_example_details(script) for script in scripts]
+
 
 @mcp.tool(
     name="get_example_source",
@@ -111,9 +126,10 @@ async def get_example_source(example_name: str) -> SourceCode:
     source_text = example_path.read_text(encoding="utf-8")
     return SourceCode(name=example_name, source=source_text)
 
+
 @mcp.tool(
     name="get_example_sources",
-    description="Return sources for multiple example scripts in one call."
+    description="Return sources for multiple example scripts in one call.",
 )
 async def get_example_sources(example_names: List[str]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
@@ -123,9 +139,10 @@ async def get_example_sources(example_names: List[str]) -> List[Dict[str, Any]]:
             out.append({"name": name, "source": p.read_text(encoding="utf-8")})
     return out
 
+
 @mcp.tool(
     name="run_generated_script",
-    description="Executes generated Python code in memory. The code must define a `build()` function that returns the BOG data as an XML string."
+    description="Executes generated Python code in memory. The code must define a `build()` function that returns the BOG data as an XML string.",
 )
 async def run_generated_script(filename: str, source_code: str) -> Dict[str, Any]:
     """
@@ -161,15 +178,19 @@ async def run_generated_script(filename: str, source_code: str) -> Dict[str, Any
         with redirect_stdout(buf_out), redirect_stderr(buf_err):
             spec.loader.exec_module(mod)
             build_func = getattr(mod, "build", None)
-            
+
             if not callable(build_func):
-                raise AttributeError("The script must define a callable function 'build()'.")
+                raise AttributeError(
+                    "The script must define a callable function 'build()'."
+                )
 
             # Call the build function and capture its return value.
             bog_data = build_func()
 
             if not isinstance(bog_data, str) or not bog_data.strip():
-                raise TypeError("The 'build()' function must return a non-empty string of BOG XML data.")
+                raise TypeError(
+                    "The 'build()' function must return a non-empty string of BOG XML data."
+                )
 
         # If everything succeeded, return the captured data.
         return {
@@ -207,30 +228,45 @@ async def builder_api_json() -> str:
         "methods": [
             {"name": "start_sub_folder", "params": [{"name": "name", "type": "str"}]},
             {"name": "end_sub_folder", "params": []},
-            {"name": "add_component", "params": [
-                # ✅ use 'type' not 'comp_type'
-                {"name": "type", "type": "str"},
-                {"name": "name", "type": "str"},
-                {"name": "properties", "type": "dict|null"},
-                {"name": "actions", "type": "dict|null"},
-            ]},
-            {"name": "add_numeric_writable", "params": [
-                {"name": "name", "type": "str"},
-                {"name": "default_value", "type": "float|int|bool|null"}
-            ]},
-            {"name": "add_boolean_writable", "params": [
-                {"name": "name", "type": "str"},
-                {"name": "default_value", "type": "bool|null"}
-            ]},
+            {
+                "name": "add_component",
+                "params": [
+                    # ✅ use 'type' not 'comp_type'
+                    {"name": "type", "type": "str"},
+                    {"name": "name", "type": "str"},
+                    {"name": "properties", "type": "dict|null"},
+                    {"name": "actions", "type": "dict|null"},
+                ],
+            },
+            {
+                "name": "add_numeric_writable",
+                "params": [
+                    {"name": "name", "type": "str"},
+                    {"name": "default_value", "type": "float|int|bool|null"},
+                ],
+            },
+            {
+                "name": "add_boolean_writable",
+                "params": [
+                    {"name": "name", "type": "str"},
+                    {"name": "default_value", "type": "bool|null"},
+                ],
+            },
             # ✅ document link call shape so model doesn't guess
-            {"name": "add_link", "params": [
-                {"name": "src", "type": "str"},
-                {"name": "src_slot", "type": "str"},
-                {"name": "tgt", "type": "str"},
-                {"name": "tgt_slot", "type": "str"}
-            ]},
-            {"name": "to_xml_string", "returns": "str",
-             "desc": "Serializes the entire BOG structure to an XML string."},
+            {
+                "name": "add_link",
+                "params": [
+                    {"name": "src", "type": "str"},
+                    {"name": "src_slot", "type": "str"},
+                    {"name": "tgt", "type": "str"},
+                    {"name": "tgt_slot", "type": "str"},
+                ],
+            },
+            {
+                "name": "to_xml_string",
+                "returns": "str",
+                "desc": "Serializes the entire BOG structure to an XML string.",
+            },
             {"name": "save", "desc": "DEPRECATED in MCP mode. Do not use."},
         ],
         # Optional: declare the execution contract explicitly

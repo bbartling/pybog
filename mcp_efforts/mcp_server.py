@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import ast
@@ -14,7 +12,6 @@ from pydantic import BaseModel, Field
 from bog_builder.analyzer import Analyzer
 
 
-
 BASE_DIR = Path(__file__).resolve().parent
 EXAMPLES_DIR = BASE_DIR / "examples"
 
@@ -23,7 +20,6 @@ app = FastAPI(
     title="Bog Builder MCP Server",
     description="Expose example scripts as callable endpoints. This is a demonstration of the Model Context Protocol.",
 )
-
 
 
 class ExampleParameter(BaseModel):
@@ -45,7 +41,6 @@ class ExampleDetails(BaseModel):
     inputs: List[ExampleParameter] = Field(
         description="A list of input parameters the example requires."
     )
-
 
 
 class AnalyzeRequest(BaseModel):
@@ -79,8 +74,6 @@ def get_example_details(script_path: Path) -> ExampleDetails:
     return ExampleDetails(name=script_path.name, description=docstring, inputs=inputs)
 
 
-
-
 @app.get("/examples", response_model=List[ExampleDetails])
 async def list_examples() -> List[ExampleDetails]:
     """
@@ -103,9 +96,10 @@ async def get_example_source(example_name: str) -> dict:
     """
     example_path = EXAMPLES_DIR / example_name
     if not example_path.is_file():
-        raise HTTPException(status_code=404, detail=f"Example not found: {example_name}")
+        raise HTTPException(
+            status_code=404, detail=f"Example not found: {example_name}"
+        )
     return {"name": example_name, "source": example_path.read_text(encoding="utf-8")}
-
 
 
 @app.post("/analyze")
@@ -132,4 +126,3 @@ async def analyze_station(req: AnalyzeRequest) -> dict:
         return response
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    

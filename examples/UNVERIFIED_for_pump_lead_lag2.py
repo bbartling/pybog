@@ -36,8 +36,12 @@ def main():
     builder.start_sub_folder("StagingLogic")
 
     # --- Constants ---
-    builder.add_component("kitControl:NumericConst", name="Num_0", properties={"out": 0.0})
-    builder.add_component("kitControl:NumericConst", name="Num_1", properties={"out": 1.0})
+    builder.add_component(
+        "kitControl:NumericConst", name="Num_0", properties={"out": 0.0}
+    )
+    builder.add_component(
+        "kitControl:NumericConst", name="Num_1", properties={"out": 1.0}
+    )
 
     # --- Determine if P1 is the designated lead pump (outputs b:Boolean) ---
     # An Equal block is used here to take the 'BooleanWritableExt' type from 'LeadPump1_Select'
@@ -63,67 +67,119 @@ def main():
     # --- Detect Lead Pump Failure Condition for each potential lead pump ---
     # A pump is considered "failed" in its lead role if it's currently designated as lead
     # AND its physical status indicates it is not running (i.e., commanded ON but OFF).
-    builder.add_component("kitControl:And", name="P1_LeadFailureCondition") # Output is b:Boolean
+    builder.add_component(
+        "kitControl:And", name="P1_LeadFailureCondition"
+    )  # Output is b:Boolean
     builder.add_link("P1_IsLeadBool", "out", "P1_LeadFailureCondition", "inA")
     builder.add_link("Not_P1_Status", "out", "P1_LeadFailureCondition", "inB")
 
-    builder.add_component("kitControl:And", name="P2_LeadFailureCondition") # Output is b:Boolean
+    builder.add_component(
+        "kitControl:And", name="P2_LeadFailureCondition"
+    )  # Output is b:Boolean
     builder.add_link("P2_IsLeadBool", "out", "P2_LeadFailureCondition", "inA")
     builder.add_link("Not_P2_Status", "out", "P2_LeadFailureCondition", "inB")
 
     # --- Logic Path: Pump 1 is Designated Lead ---
     # This set of NumericSwitches determines the commands and failure status
     # IF Pump 1 is the lead pump, based on whether Pump 1 has failed.
-    builder.add_numeric_switch(name="P1_Cmd_Path_P1Lead") # Controls P1 command if P1 is designated lead
+    builder.add_numeric_switch(
+        name="P1_Cmd_Path_P1Lead"
+    )  # Controls P1 command if P1 is designated lead
     builder.add_link("P1_LeadFailureCondition", "out", "P1_Cmd_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_0", "out", "P1_Cmd_Path_P1Lead", "inTrue")  # P1 OFF if P1 lead and failed
-    builder.add_link("Num_1", "out", "P1_Cmd_Path_P1Lead", "inFalse") # P1 ON if P1 lead and OK
+    builder.add_link(
+        "Num_0", "out", "P1_Cmd_Path_P1Lead", "inTrue"
+    )  # P1 OFF if P1 lead and failed
+    builder.add_link(
+        "Num_1", "out", "P1_Cmd_Path_P1Lead", "inFalse"
+    )  # P1 ON if P1 lead and OK
 
-    builder.add_numeric_switch(name="P2_Cmd_Path_P1Lead") # Controls P2 command if P1 is designated lead
+    builder.add_numeric_switch(
+        name="P2_Cmd_Path_P1Lead"
+    )  # Controls P2 command if P1 is designated lead
     builder.add_link("P1_LeadFailureCondition", "out", "P2_Cmd_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "P2_Cmd_Path_P1Lead", "inTrue")  # P2 ON (lag takeover) if P1 lead and failed
-    builder.add_link("Num_0", "out", "P2_Cmd_Path_P1Lead", "inFalse") # P2 OFF if P1 lead and OK
+    builder.add_link(
+        "Num_1", "out", "P2_Cmd_Path_P1Lead", "inTrue"
+    )  # P2 ON (lag takeover) if P1 lead and failed
+    builder.add_link(
+        "Num_0", "out", "P2_Cmd_Path_P1Lead", "inFalse"
+    )  # P2 OFF if P1 lead and OK
 
-    builder.add_numeric_switch(name="LeadFail_Path_P1Lead") # Controls LeadPumpFailure if P1 is designated lead
-    builder.add_link("P1_LeadFailureCondition", "out", "LeadFail_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "LeadFail_Path_P1Lead", "inTrue")  # Lead pump failed
-    builder.add_link("Num_0", "out", "LeadFail_Path_P1Lead", "inFalse") # Lead pump OK
+    builder.add_numeric_switch(
+        name="LeadFail_Path_P1Lead"
+    )  # Controls LeadPumpFailure if P1 is designated lead
+    builder.add_link(
+        "P1_LeadFailureCondition", "out", "LeadFail_Path_P1Lead", "inSwitch"
+    )
+    builder.add_link(
+        "Num_1", "out", "LeadFail_Path_P1Lead", "inTrue"
+    )  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P1Lead", "inFalse")  # Lead pump OK
 
     # --- Logic Path: Pump 2 is Designated Lead ---
     # This set of NumericSwitches determines the commands and failure status
     # IF Pump 2 is the lead pump, based on whether Pump 2 has failed.
-    builder.add_numeric_switch(name="P1_Cmd_Path_P2Lead") # Controls P1 command if P2 is designated lead
+    builder.add_numeric_switch(
+        name="P1_Cmd_Path_P2Lead"
+    )  # Controls P1 command if P2 is designated lead
     builder.add_link("P2_LeadFailureCondition", "out", "P1_Cmd_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "P1_Cmd_Path_P2Lead", "inTrue")  # P1 ON (lag takeover) if P2 lead and failed
-    builder.add_link("Num_0", "out", "P1_Cmd_Path_P2Lead", "inFalse") # P1 OFF if P2 lead and OK
+    builder.add_link(
+        "Num_1", "out", "P1_Cmd_Path_P2Lead", "inTrue"
+    )  # P1 ON (lag takeover) if P2 lead and failed
+    builder.add_link(
+        "Num_0", "out", "P1_Cmd_Path_P2Lead", "inFalse"
+    )  # P1 OFF if P2 lead and OK
 
-    builder.add_numeric_switch(name="P2_Cmd_Path_P2Lead") # Controls P2 command if P2 is designated lead
+    builder.add_numeric_switch(
+        name="P2_Cmd_Path_P2Lead"
+    )  # Controls P2 command if P2 is designated lead
     builder.add_link("P2_LeadFailureCondition", "out", "P2_Cmd_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_0", "out", "P2_Cmd_Path_P2Lead", "inTrue")  # P2 OFF if P2 lead and failed
-    builder.add_link("Num_1", "out", "P2_Cmd_Path_P2Lead", "inFalse") # P2 ON if P2 lead and OK
+    builder.add_link(
+        "Num_0", "out", "P2_Cmd_Path_P2Lead", "inTrue"
+    )  # P2 OFF if P2 lead and failed
+    builder.add_link(
+        "Num_1", "out", "P2_Cmd_Path_P2Lead", "inFalse"
+    )  # P2 ON if P2 lead and OK
 
-    builder.add_numeric_switch(name="LeadFail_Path_P2Lead") # Controls LeadPumpFailure if P2 is designated lead
-    builder.add_link("P2_LeadFailureCondition", "out", "LeadFail_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "LeadFail_Path_P2Lead", "inTrue")  # Lead pump failed
-    builder.add_link("Num_0", "out", "LeadFail_Path_P2Lead", "inFalse") # Lead pump OK
+    builder.add_numeric_switch(
+        name="LeadFail_Path_P2Lead"
+    )  # Controls LeadPumpFailure if P2 is designated lead
+    builder.add_link(
+        "P2_LeadFailureCondition", "out", "LeadFail_Path_P2Lead", "inSwitch"
+    )
+    builder.add_link(
+        "Num_1", "out", "LeadFail_Path_P2Lead", "inTrue"
+    )  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P2Lead", "inFalse")  # Lead pump OK
 
     # --- Final Output Selection ---
     # These switches select between the "P1 Lead path" results and "P2 Lead path" results
     # based on which pump is currently designated as lead by 'P1_IsLeadBool'.
     builder.add_numeric_switch(name="Final_P1_Cmd")
     builder.add_link("P1_IsLeadBool", "out", "Final_P1_Cmd", "inSwitch")
-    builder.add_link("P1_Cmd_Path_P1Lead", "out", "Final_P1_Cmd", "inTrue")  # Use P1 cmd from P1 lead path
-    builder.add_link("P1_Cmd_Path_P2Lead", "out", "Final_P1_Cmd", "inFalse") # Use P1 cmd from P2 lead path
+    builder.add_link(
+        "P1_Cmd_Path_P1Lead", "out", "Final_P1_Cmd", "inTrue"
+    )  # Use P1 cmd from P1 lead path
+    builder.add_link(
+        "P1_Cmd_Path_P2Lead", "out", "Final_P1_Cmd", "inFalse"
+    )  # Use P1 cmd from P2 lead path
 
     builder.add_numeric_switch(name="Final_P2_Cmd")
     builder.add_link("P1_IsLeadBool", "out", "Final_P2_Cmd", "inSwitch")
-    builder.add_link("P2_Cmd_Path_P1Lead", "out", "Final_P2_Cmd", "inTrue")  # Use P2 cmd from P1 lead path
-    builder.add_link("P2_Cmd_Path_P2Lead", "out", "Final_P2_Cmd", "inFalse") # Use P2 cmd from P2 lead path
+    builder.add_link(
+        "P2_Cmd_Path_P1Lead", "out", "Final_P2_Cmd", "inTrue"
+    )  # Use P2 cmd from P1 lead path
+    builder.add_link(
+        "P2_Cmd_Path_P2Lead", "out", "Final_P2_Cmd", "inFalse"
+    )  # Use P2 cmd from P2 lead path
 
     builder.add_numeric_switch(name="Final_Lead_Failure")
     builder.add_link("P1_IsLeadBool", "out", "Final_Lead_Failure", "inSwitch")
-    builder.add_link("LeadFail_Path_P1Lead", "out", "Final_Lead_Failure", "inTrue")  # Use failure status from P1 lead path
-    builder.add_link("LeadFail_Path_P2Lead", "out", "Final_Lead_Failure", "inFalse") # Use failure status from P2 lead path
+    builder.add_link(
+        "LeadFail_Path_P1Lead", "out", "Final_Lead_Failure", "inTrue"
+    )  # Use failure status from P1 lead path
+    builder.add_link(
+        "LeadFail_Path_P2Lead", "out", "Final_Lead_Failure", "inFalse"
+    )  # Use failure status from P2 lead path
 
     builder.end_sub_folder()
 
@@ -138,7 +194,9 @@ def main():
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print(
+        f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
+    )
 
 
 if __name__ == "__main__":
