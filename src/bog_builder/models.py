@@ -11,8 +11,7 @@ import re
 from typing import List
 
 try:
-    # Pydantic v2: we import both field_validator and model_validator for modern
-    # validation hooks.  BaseModel and ValidationError are also used.
+
     from pydantic import (
         BaseModel,
         ValidationError,
@@ -25,30 +24,19 @@ except ImportError as exc:
     ) from exc
 
 
-# Mapping of known component types to their valid input and output slot names.
-# This mapping is not exhaustive, but covers all tested blocks from the examples.
-# If a component type is not present, slot validation will be skipped for that type.
 COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
-    # Arithmetic / Math
     "kitControl:Add": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
-    # Reduction blocks.  Average, Minimum and Maximum accept up to four inputs
-    # (inA–inD) and produce a single out output.  Although the builder can
-    # construct reductions using the `add_reduction_block` helper, users may
-    # also add these blocks directly via `add_component`.
     "kitControl:Average": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Minimum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Maximum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
-    # Comparison logic
     "kitControl:GreaterThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:GreaterThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
-    # Logical operators
     "kitControl:Or": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:And": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:Xor": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:Not": {"inputs": ["in"], "outputs": ["out"]},
-    # Switch/select
     "kitControl:NumericSwitch": {
         "inputs": ["inSwitch", "inTrue", "inFalse"],
         "outputs": ["out"],
@@ -57,37 +45,27 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         "inputs": ["select"] + [f"in{chr(65 + i)}" for i in range(10)],
         "outputs": ["out"],
     },
-    # Boolean latch: supports in, clock, set, reset inputs and an out output
     "kitControl:BooleanLatch": {
-        "inputs": ["in", "clock", "set", "reset"],
+        "inputs": ["in", "clock"],
         "outputs": ["out"],
     },
-    # OneShot: pulse edge detector.  Single input and output.
     "kitControl:OneShot": {"inputs": ["in"], "outputs": ["out"]},
-    # BooleanDelay and NumericDelay provide a delayed copy of their input.
     "kitControl:BooleanDelay": {"inputs": ["in"], "outputs": ["out"]},
     "kitControl:NumericDelay": {"inputs": ["in"], "outputs": ["out"]},
-    # Counter: numeric counter block with countUp, countDown, countIncrement and clear inputs.
     "kitControl:Counter": {
         "inputs": ["countUp", "countDown", "countIncrement", "clear"],
         "outputs": ["out"],
     },
-    # MultiVibrator: periodic pulse generator with no inputs and a single out output.
     "kitControl:MultiVibrator": {"inputs": [], "outputs": ["out"]},
-    # Waveform generator
     "kitControl:SineWave": {"inputs": [], "outputs": ["out"]},
-    # Writables (expose values to user)
-    # For NumericWritable and BooleanWritable we only validate the output slot.  The
-    # input slots (e.g. "in1", "in10", "in16") vary and are not exhaustively
-    # mapped here, so we skip input validation by omitting the "inputs" key.
     "control:NumericWritable": {"outputs": ["out"]},
     "control:BooleanWritable": {"outputs": ["out"]},
-    # Constants
     "kitControl:NumericConst": {"inputs": [], "outputs": ["out"]},
-    # Reset block: linear interpolation between input and two limit pairs
-    # The Reset block accepts five inputs (inA, inputLowLimit, inputHighLimit,
-    # outputLowLimit, outputHighLimit) and produces a single out output.  This
-    # slot map enables proper validation of links to and from a Reset block.
+    "kitControl:BooleanConst": {"inputs": [], "outputs": ["out"]},
+    "kitControl:BooleanSwitch": {
+        "inputs": ["inSwitch", "inTrue", "inFalse"],
+        "outputs": ["out"],
+    },
     "kitControl:Reset": {
         "inputs": [
             "inA",
@@ -110,17 +88,11 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         ],
         "outputs": ["out"],
     },
-    # Boolean schedule: schedules from the schedule palette have a single
-    # ``out`` slot which conveys the active boolean value.  We omit inputs since
-    # schedules are configured via properties rather than links.
+
     "sch:BooleanSchedule": {"outputs": ["out"]},
-    # Numeric schedules emit a numeric ``out`` value and do not define
-    # input slots for linking.  The ``defaultOutput`` property sets the
-    # baseline value when no schedule events are in effect.
+
     "sch:NumericSchedule": {"outputs": ["out"]},
-    # Enum schedules emit an enumerated ``out`` value.  They do not have
-    # defined input slots.  The ``facets`` property describes the
-    # enumeration mapping (e.g. ``range=E:{duty1=1,duty2=2}``).
+
     "sch:EnumSchedule": {"outputs": ["out"]},
 }
 
@@ -137,18 +109,14 @@ def _parse_time_to_ms(value) -> str:
         ``_parse_time_to_ms("2s") -> "2000"``
         ``_parse_time_to_ms("1m") -> "60000"``
     """
-    # If a dictionary is passed (e.g., {"value": "1m"}), extract the value field
     if isinstance(value, dict) and "value" in value:
         value = value["value"]
-    # If already a number, return as int string
     if isinstance(value, (int, float)):
         return str(int(float(value)))
     if isinstance(value, str):
         s = value.strip().lower()
-        # Fully numeric string – treat as milliseconds directly
         if s.isdigit():
             return s
-        # Pattern: number with optional decimal and a unit
         match = re.fullmatch(r"(\d+(?:\.\d+)?)(ms|s|m|min|h)", s)
         if match:
             num_str, unit = match.groups()
@@ -276,7 +244,6 @@ class ReductionBlockDefinition(BaseModel):
 
     @field_validator("final_output_name")
     def output_name_valid(cls, v: str) -> str:
-        # Use the same name rules as components
         if not isinstance(v, str) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", v):
             suggestion = f"Calc_{re.sub(r'[^A-Za-z0-9_]', '_', v)}"
             raise ValueError(

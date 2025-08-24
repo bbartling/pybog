@@ -175,9 +175,8 @@ class BogFolderBuilder:
                 normalized_props[prop_name] = prop_value
         if comp_def.comp_type not in COMPONENT_SLOT_MAP and self.debug:
             print(
-                f"[BOG VALIDATION WARNING] Component type '{comp_def.comp_type}' is not in the known slot map. "
-                f"Slot name validation will be skipped for this component. ",
-                f"Please refence more example Python files for proper slot mapping and mimic exactly."
+                f"[BOG VALIDATION WARNING] Component type '{comp_def.comp_type}' is not in the src on models.py in the COMPONENT_SLOT_MAP. "
+                f"This should be reported on a gitissue and tested.",
             )
         handle = self._get_next_handle()
         self._handle_map[comp_def.name] = handle
@@ -248,6 +247,10 @@ class BogFolderBuilder:
     def add_numeric_switch(self, name: str) -> None:
         """Add a kitControl NumericSwitch component."""
         self.add_component("kitControl:NumericSwitch", name)
+
+    def add_boolean_switch(self, name: str) -> None:
+        """Add a kitControl BooleanSwitch component."""
+        self.add_component("kitControl:BooleanSwitch", name)
 
     def add_numeric_select(self, name: str) -> None:
         """Adds a NumericSelect component with default 10 inputs (A‑J)."""
@@ -782,6 +785,35 @@ class BogFolderBuilder:
                     element, "p", {"n": "out", "t": "b:StatusNumeric"}
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(const_val)})
+
+            elif data["type"] == "kitControl:BooleanConst":
+                # Accept either {"value": True/False} or {"out": True/False}
+                props = data.get("properties", {})
+                raw = props.get("value", props.get("out", False))
+                val = str(bool(raw)).lower()
+                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusBoolean"})
+                ET.SubElement(out_slot, "p", {"n": "value", "v": val})
+
+            elif data["type"] == "kitControl:BooleanSwitch":
+                # Not strictly required, but mirrors how we emit defaults for NumericSwitch
+                in_switch_slot = ET.SubElement(
+                    element, "p", {"n": "inSwitch", "f": "sL", "t": "b:StatusBoolean"}
+                )
+                ET.SubElement(in_switch_slot, "p", {"n": "value", "v": "false"})
+                ET.SubElement(
+                    in_switch_slot, "p",
+                    {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
+                )
+                # Defaults for inTrue/inFalse (boolean)
+                in_true_slot = ET.SubElement(
+                    element, "p", {"n": "inTrue", "f": "sL", "t": "b:StatusBoolean"}
+                )
+                ET.SubElement(in_true_slot, "p", {"n": "value", "v": "true"})
+                in_false_slot = ET.SubElement(
+                    element, "p", {"n": "inFalse", "f": "sL", "t": "b:StatusBoolean"}
+                )
+                ET.SubElement(in_false_slot, "p", {"n": "value", "v": "false"})
+
             elif data["type"] == "kitControl:NumericSwitch":
                 in_switch_slot = ET.SubElement(
                     element, "p", {"n": "inSwitch", "f": "sL", "t": "b:StatusBoolean"}
