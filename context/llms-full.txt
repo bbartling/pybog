@@ -38,7 +38,9 @@ def main():
     # before a "failure" is confirmed. Note: For standard kitControl:BooleanDelay,
     # 'onDelay' is a static property set at creation, not a dynamically linkable slot.
     # This input will set the initial property value.
-    builder.add_numeric_writable(name="FailureDetectionDelay_ms", default_value=5000.0, precision=0)
+    builder.add_numeric_writable(
+        name="FailureDetectionDelay_ms", default_value=5000.0, precision=0
+    )
 
     # --- Top-level Outputs ---
     # Boolean point indicating if Pump A is currently designated as the lead pump.
@@ -61,22 +63,30 @@ def main():
     # --- Delay for Confirmed Mismatch (BooleanDelay components) ---
     # The 'onDelay' property is set from the default value of 'FailureDetectionDelay_ms'.
     # This addresses the original error: 'onDelay' is a property, not a linkable slot.
-    default_delay_ms_str = str(int(builder.get_component("FailureDetectionDelay_ms").properties["value"]))
+    default_delay_ms_str = str(
+        int(builder.get_component("FailureDetectionDelay_ms").properties["value"])
+    )
     builder.add_component(
         comp_type="kitControl:BooleanDelay",
         name="PumpA_FailureDelay",
-        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"},
     )
     builder.add_component(
         comp_type="kitControl:BooleanDelay",
         name="PumpB_FailureDelay",
-        properties={"onDelay": default_delay_ms_str, "offDelay": "0"}
+        properties={"onDelay": default_delay_ms_str, "offDelay": "0"},
     )
 
     # --- Inverter Blocks for various logic conditions ---
-    builder.add_component(comp_type="kitControl:Not", name="Not_LeadPumpPreference_A") # Gives true if B is preferred
-    builder.add_component(comp_type="kitControl:Not", name="Not_PumpA_FailureDelay")   # Gives true if Pump A is healthy
-    builder.add_component(comp_type="kitControl:Not", name="Not_PumpB_FailureDelay")   # Gives true if Pump B is healthy
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_LeadPumpPreference_A"
+    )  # Gives true if B is preferred
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_PumpA_FailureDelay"
+    )  # Gives true if Pump A is healthy
+    builder.add_component(
+        comp_type="kitControl:Not", name="Not_PumpB_FailureDelay"
+    )  # Gives true if Pump B is healthy
 
     # --- Logic for determining if Pump A should be the lead ---
     # Condition 1: Pump A is preferred AND Pump A is healthy
@@ -121,16 +131,30 @@ def main():
     builder.add_link("LeadPumpPreference_A", "out", "And_A_Pref_And_A_Healthy", "inA")
     builder.add_link("Not_PumpA_FailureDelay", "out", "And_A_Pref_And_A_Healthy", "inB")
 
-    builder.add_link("Not_LeadPumpPreference_A", "out", "And_B_Pref_And_B_Failed", "inA") # B is preferred
-    builder.add_link("PumpB_FailureDelay", "out", "And_B_Pref_And_B_Failed", "inB")       # B has failed
+    builder.add_link(
+        "Not_LeadPumpPreference_A", "out", "And_B_Pref_And_B_Failed", "inA"
+    )  # B is preferred
+    builder.add_link(
+        "PumpB_FailureDelay", "out", "And_B_Pref_And_B_Failed", "inB"
+    )  # B has failed
 
-    builder.add_link("And_A_Pref_And_A_Healthy", "out", "Or_PumpA_IsLead_Internal", "inA")
-    builder.add_link("And_B_Pref_And_B_Failed", "out", "Or_PumpA_IsLead_Internal", "inB")
+    builder.add_link(
+        "And_A_Pref_And_A_Healthy", "out", "Or_PumpA_IsLead_Internal", "inA"
+    )
+    builder.add_link(
+        "And_B_Pref_And_B_Failed", "out", "Or_PumpA_IsLead_Internal", "inB"
+    )
     builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpA_IsLead", "in16")
 
     # Lead Assignment Logic for Pump B (assuming a two-pump system, B is lead if A is not)
-    builder.add_link("Or_PumpA_IsLead_Internal", "out", "PumpB_IsLead", "in16",
-                     link_type="b:ConversionLink", converter_type="conv:BooleanToNotBoolean")
+    builder.add_link(
+        "Or_PumpA_IsLead_Internal",
+        "out",
+        "PumpB_IsLead",
+        "in16",
+        link_type="b:ConversionLink",
+        converter_type="conv:BooleanToNotBoolean",
+    )
 
     # Active Lead Pump Failure Detection Wiring
     builder.add_link("PumpA_IsLead", "out", "And_A_IsLead_And_A_Failed", "inA")
@@ -205,8 +229,12 @@ def main():
     builder.start_sub_folder("StagingLogic")
 
     # --- Constants ---
-    builder.add_component("kitControl:NumericConst", name="Num_0", properties={"out": 0.0})
-    builder.add_component("kitControl:NumericConst", name="Num_1", properties={"out": 1.0})
+    builder.add_component(
+        "kitControl:NumericConst", name="Num_0", properties={"out": 0.0}
+    )
+    builder.add_component(
+        "kitControl:NumericConst", name="Num_1", properties={"out": 1.0}
+    )
 
     # --- Determine if P1 is the designated lead pump (outputs b:Boolean) ---
     # An Equal block is used here to take the 'BooleanWritableExt' type from 'LeadPump1_Select'
@@ -232,67 +260,119 @@ def main():
     # --- Detect Lead Pump Failure Condition for each potential lead pump ---
     # A pump is considered "failed" in its lead role if it's currently designated as lead
     # AND its physical status indicates it is not running (i.e., commanded ON but OFF).
-    builder.add_component("kitControl:And", name="P1_LeadFailureCondition") # Output is b:Boolean
+    builder.add_component(
+        "kitControl:And", name="P1_LeadFailureCondition"
+    )  # Output is b:Boolean
     builder.add_link("P1_IsLeadBool", "out", "P1_LeadFailureCondition", "inA")
     builder.add_link("Not_P1_Status", "out", "P1_LeadFailureCondition", "inB")
 
-    builder.add_component("kitControl:And", name="P2_LeadFailureCondition") # Output is b:Boolean
+    builder.add_component(
+        "kitControl:And", name="P2_LeadFailureCondition"
+    )  # Output is b:Boolean
     builder.add_link("P2_IsLeadBool", "out", "P2_LeadFailureCondition", "inA")
     builder.add_link("Not_P2_Status", "out", "P2_LeadFailureCondition", "inB")
 
     # --- Logic Path: Pump 1 is Designated Lead ---
     # This set of NumericSwitches determines the commands and failure status
     # IF Pump 1 is the lead pump, based on whether Pump 1 has failed.
-    builder.add_numeric_switch(name="P1_Cmd_Path_P1Lead") # Controls P1 command if P1 is designated lead
+    builder.add_numeric_switch(
+        name="P1_Cmd_Path_P1Lead"
+    )  # Controls P1 command if P1 is designated lead
     builder.add_link("P1_LeadFailureCondition", "out", "P1_Cmd_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_0", "out", "P1_Cmd_Path_P1Lead", "inTrue")  # P1 OFF if P1 lead and failed
-    builder.add_link("Num_1", "out", "P1_Cmd_Path_P1Lead", "inFalse") # P1 ON if P1 lead and OK
+    builder.add_link(
+        "Num_0", "out", "P1_Cmd_Path_P1Lead", "inTrue"
+    )  # P1 OFF if P1 lead and failed
+    builder.add_link(
+        "Num_1", "out", "P1_Cmd_Path_P1Lead", "inFalse"
+    )  # P1 ON if P1 lead and OK
 
-    builder.add_numeric_switch(name="P2_Cmd_Path_P1Lead") # Controls P2 command if P1 is designated lead
+    builder.add_numeric_switch(
+        name="P2_Cmd_Path_P1Lead"
+    )  # Controls P2 command if P1 is designated lead
     builder.add_link("P1_LeadFailureCondition", "out", "P2_Cmd_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "P2_Cmd_Path_P1Lead", "inTrue")  # P2 ON (lag takeover) if P1 lead and failed
-    builder.add_link("Num_0", "out", "P2_Cmd_Path_P1Lead", "inFalse") # P2 OFF if P1 lead and OK
+    builder.add_link(
+        "Num_1", "out", "P2_Cmd_Path_P1Lead", "inTrue"
+    )  # P2 ON (lag takeover) if P1 lead and failed
+    builder.add_link(
+        "Num_0", "out", "P2_Cmd_Path_P1Lead", "inFalse"
+    )  # P2 OFF if P1 lead and OK
 
-    builder.add_numeric_switch(name="LeadFail_Path_P1Lead") # Controls LeadPumpFailure if P1 is designated lead
-    builder.add_link("P1_LeadFailureCondition", "out", "LeadFail_Path_P1Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "LeadFail_Path_P1Lead", "inTrue")  # Lead pump failed
-    builder.add_link("Num_0", "out", "LeadFail_Path_P1Lead", "inFalse") # Lead pump OK
+    builder.add_numeric_switch(
+        name="LeadFail_Path_P1Lead"
+    )  # Controls LeadPumpFailure if P1 is designated lead
+    builder.add_link(
+        "P1_LeadFailureCondition", "out", "LeadFail_Path_P1Lead", "inSwitch"
+    )
+    builder.add_link(
+        "Num_1", "out", "LeadFail_Path_P1Lead", "inTrue"
+    )  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P1Lead", "inFalse")  # Lead pump OK
 
     # --- Logic Path: Pump 2 is Designated Lead ---
     # This set of NumericSwitches determines the commands and failure status
     # IF Pump 2 is the lead pump, based on whether Pump 2 has failed.
-    builder.add_numeric_switch(name="P1_Cmd_Path_P2Lead") # Controls P1 command if P2 is designated lead
+    builder.add_numeric_switch(
+        name="P1_Cmd_Path_P2Lead"
+    )  # Controls P1 command if P2 is designated lead
     builder.add_link("P2_LeadFailureCondition", "out", "P1_Cmd_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "P1_Cmd_Path_P2Lead", "inTrue")  # P1 ON (lag takeover) if P2 lead and failed
-    builder.add_link("Num_0", "out", "P1_Cmd_Path_P2Lead", "inFalse") # P1 OFF if P2 lead and OK
+    builder.add_link(
+        "Num_1", "out", "P1_Cmd_Path_P2Lead", "inTrue"
+    )  # P1 ON (lag takeover) if P2 lead and failed
+    builder.add_link(
+        "Num_0", "out", "P1_Cmd_Path_P2Lead", "inFalse"
+    )  # P1 OFF if P2 lead and OK
 
-    builder.add_numeric_switch(name="P2_Cmd_Path_P2Lead") # Controls P2 command if P2 is designated lead
+    builder.add_numeric_switch(
+        name="P2_Cmd_Path_P2Lead"
+    )  # Controls P2 command if P2 is designated lead
     builder.add_link("P2_LeadFailureCondition", "out", "P2_Cmd_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_0", "out", "P2_Cmd_Path_P2Lead", "inTrue")  # P2 OFF if P2 lead and failed
-    builder.add_link("Num_1", "out", "P2_Cmd_Path_P2Lead", "inFalse") # P2 ON if P2 lead and OK
+    builder.add_link(
+        "Num_0", "out", "P2_Cmd_Path_P2Lead", "inTrue"
+    )  # P2 OFF if P2 lead and failed
+    builder.add_link(
+        "Num_1", "out", "P2_Cmd_Path_P2Lead", "inFalse"
+    )  # P2 ON if P2 lead and OK
 
-    builder.add_numeric_switch(name="LeadFail_Path_P2Lead") # Controls LeadPumpFailure if P2 is designated lead
-    builder.add_link("P2_LeadFailureCondition", "out", "LeadFail_Path_P2Lead", "inSwitch")
-    builder.add_link("Num_1", "out", "LeadFail_Path_P2Lead", "inTrue")  # Lead pump failed
-    builder.add_link("Num_0", "out", "LeadFail_Path_P2Lead", "inFalse") # Lead pump OK
+    builder.add_numeric_switch(
+        name="LeadFail_Path_P2Lead"
+    )  # Controls LeadPumpFailure if P2 is designated lead
+    builder.add_link(
+        "P2_LeadFailureCondition", "out", "LeadFail_Path_P2Lead", "inSwitch"
+    )
+    builder.add_link(
+        "Num_1", "out", "LeadFail_Path_P2Lead", "inTrue"
+    )  # Lead pump failed
+    builder.add_link("Num_0", "out", "LeadFail_Path_P2Lead", "inFalse")  # Lead pump OK
 
     # --- Final Output Selection ---
     # These switches select between the "P1 Lead path" results and "P2 Lead path" results
     # based on which pump is currently designated as lead by 'P1_IsLeadBool'.
     builder.add_numeric_switch(name="Final_P1_Cmd")
     builder.add_link("P1_IsLeadBool", "out", "Final_P1_Cmd", "inSwitch")
-    builder.add_link("P1_Cmd_Path_P1Lead", "out", "Final_P1_Cmd", "inTrue")  # Use P1 cmd from P1 lead path
-    builder.add_link("P1_Cmd_Path_P2Lead", "out", "Final_P1_Cmd", "inFalse") # Use P1 cmd from P2 lead path
+    builder.add_link(
+        "P1_Cmd_Path_P1Lead", "out", "Final_P1_Cmd", "inTrue"
+    )  # Use P1 cmd from P1 lead path
+    builder.add_link(
+        "P1_Cmd_Path_P2Lead", "out", "Final_P1_Cmd", "inFalse"
+    )  # Use P1 cmd from P2 lead path
 
     builder.add_numeric_switch(name="Final_P2_Cmd")
     builder.add_link("P1_IsLeadBool", "out", "Final_P2_Cmd", "inSwitch")
-    builder.add_link("P2_Cmd_Path_P1Lead", "out", "Final_P2_Cmd", "inTrue")  # Use P2 cmd from P1 lead path
-    builder.add_link("P2_Cmd_Path_P2Lead", "out", "Final_P2_Cmd", "inFalse") # Use P2 cmd from P2 lead path
+    builder.add_link(
+        "P2_Cmd_Path_P1Lead", "out", "Final_P2_Cmd", "inTrue"
+    )  # Use P2 cmd from P1 lead path
+    builder.add_link(
+        "P2_Cmd_Path_P2Lead", "out", "Final_P2_Cmd", "inFalse"
+    )  # Use P2 cmd from P2 lead path
 
     builder.add_numeric_switch(name="Final_Lead_Failure")
     builder.add_link("P1_IsLeadBool", "out", "Final_Lead_Failure", "inSwitch")
-    builder.add_link("LeadFail_Path_P1Lead", "out", "Final_Lead_Failure", "inTrue")  # Use failure status from P1 lead path
-    builder.add_link("LeadFail_Path_P2Lead", "out", "Final_Lead_Failure", "inFalse") # Use failure status from P2 lead path
+    builder.add_link(
+        "LeadFail_Path_P1Lead", "out", "Final_Lead_Failure", "inTrue"
+    )  # Use failure status from P1 lead path
+    builder.add_link(
+        "LeadFail_Path_P2Lead", "out", "Final_Lead_Failure", "inFalse"
+    )  # Use failure status from P2 lead path
 
     builder.end_sub_folder()
 
@@ -307,7 +387,9 @@ def main():
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print(
+        f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
+    )
 
 
 if __name__ == "__main__":
@@ -383,15 +465,25 @@ def build_central_plant(builder: BogFolderBuilder) -> None:
     builder.add_component("kitControl:Not", "Not_FreeCooling")
 
     # Start/Stop comparators
-    builder.add_component("kitControl:LessThanEqual", "HeatStart_Compare")       # OAT <= HeatStartSP
-    builder.add_component("kitControl:GreaterThanEqual", "HeatStop_Compare")     # OAT >= HeatStopSP
-    builder.add_component("kitControl:GreaterThanEqual", "CoolStart_Compare")    # OAT >= CoolStartSP
-    builder.add_component("kitControl:LessThanEqual", "CoolStop_Compare")        # OAT <= CoolStopSP
+    builder.add_component(
+        "kitControl:LessThanEqual", "HeatStart_Compare"
+    )  # OAT <= HeatStartSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "HeatStop_Compare"
+    )  # OAT >= HeatStopSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "CoolStart_Compare"
+    )  # OAT >= CoolStartSP
+    builder.add_component(
+        "kitControl:LessThanEqual", "CoolStop_Compare"
+    )  # OAT <= CoolStopSP
 
     # Start/Stop gates
-    builder.add_component("kitControl:And", "HeatStart_Gate")    # start & not free-cooling
+    builder.add_component(
+        "kitControl:And", "HeatStart_Gate"
+    )  # start & not free-cooling
     builder.add_component("kitControl:And", "CoolStart_Gate")
-    builder.add_component("kitControl:Or", "HeatStop_Or")        # stop OR free-cooling
+    builder.add_component("kitControl:Or", "HeatStop_Or")  # stop OR free-cooling
     builder.add_component("kitControl:Or", "CoolStop_Or")
 
     # Latches (hysteresis behavior)
@@ -702,9 +794,14 @@ import os
 import argparse
 from bog_builder import BogFolderBuilder
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Boolean→Numeric switching demo (.bog)")
-    parser.add_argument("-o", "--output_dir", default="examples", help="Output directory.")
+    parser = argparse.ArgumentParser(
+        description="Boolean→Numeric switching demo (.bog)"
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory."
+    )
     args = parser.parse_args()
 
     script_filename = os.path.basename(__file__).replace(".py", "")
@@ -723,8 +820,10 @@ def main():
     b.add_component("kitControl:Subtract", "Subtract")
     b.add_numeric_switch("NumericSwitch")
     b.add_boolean_switch("ModeSwitch")  # <-- your new helper
-    b.add_component("kitControl:BooleanConst", "ConstTrue",  properties={"value": True})
-    b.add_component("kitControl:BooleanConst", "ConstFalse", properties={"value": False})
+    b.add_component("kitControl:BooleanConst", "ConstTrue", properties={"value": True})
+    b.add_component(
+        "kitControl:BooleanConst", "ConstFalse", properties={"value": False}
+    )
     b.end_sub_folder()
 
     # Wire math
@@ -735,21 +834,22 @@ def main():
 
     # Boolean path: BooleanWritable → BooleanSwitch → NumericSwitch.inSwitch
     b.add_link("BooleanWritable", "out", "ModeSwitch", "inSwitch")
-    b.add_link("ConstTrue",  "out", "ModeSwitch", "inTrue")
+    b.add_link("ConstTrue", "out", "ModeSwitch", "inTrue")
     b.add_link("ConstFalse", "out", "ModeSwitch", "inFalse")
     b.add_link("ModeSwitch", "out", "NumericSwitch", "inSwitch")
 
     # Numeric selection
-    b.add_link("Add",      "out", "NumericSwitch", "inTrue")
+    b.add_link("Add", "out", "NumericSwitch", "inTrue")
     b.add_link("Subtract", "out", "NumericSwitch", "inFalse")
     b.add_link("NumericSwitch", "out", "Output", "in16")
 
     # Save
     bog_filename = f"{script_filename}.bog"
-    output_path  = os.path.join(args.output_dir, bog_filename)
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     b.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
 
 if __name__ == "__main__":
     main()
@@ -953,63 +1053,6 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: bool_schedule_example.py ===
-DIR: .
-=== CODE START ===
-"""
-This script generates a simple boolean schedule. It creates a single
-`sch:BooleanSchedule` component and links its output to a BooleanWritable
-point. The schedule is configured to be permanently 'True' by default,
-making this a useful example for creating basic overrides or enabling flags
-that are controlled by a schedule object.
-"""
-
-
-from __future__ import annotations
-
-import argparse
-import os
-import sys
-
-
-from src.bog_builder import BogFolderBuilder
-
-
-def build_bool_schedule(output_directory: str) -> str:
-    """Build a minimal boolean schedule and save it as a `.bog` file."""
-    builder = BogFolderBuilder("Schedules_Bool", debug=False)
-    builder.add_component(
-        "sch:BooleanSchedule",
-        "BooleanSchedule",
-        properties={"out": {"value": True}},
-    )
-    # Create a BooleanWritable to act on the schedule's output
-    builder.add_boolean_writable("BooleanWritable")
-    builder.add_link("BooleanSchedule", "out", "BooleanWritable", "in16")
-    # Save the archive
-    os.makedirs(output_directory, exist_ok=True)
-    out_path = os.path.join(output_directory, "BoolSchedule.bog")
-    builder.save(out_path)
-    return out_path
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a simple boolean schedule .bog file.")
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="examples",
-        help="Output directory for the .bog file (defaults to 'examples').",
-    )
-    args = parser.parse_args()
-    path = build_bool_schedule(args.output)
-    print(f"Created {path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: counter_smoke_test.py ===
 DIR: .
 === CODE START ===
@@ -1143,7 +1186,7 @@ def main():
 
     builder.add_numeric_writable("MaxValue")
 
-    #builder.start_sub_folder("CalculationLogic")
+    # builder.start_sub_folder("CalculationLogic")
 
     print("Building comparison logic tree...")
     current_tier_outputs = inputs[:]
@@ -1172,7 +1215,7 @@ def main():
 
     final_winner = current_tier_outputs[0]
 
-    #builder.end_sub_folder()
+    # builder.end_sub_folder()
 
     print(f"\nFinal winner component is '{final_winner}'. Linking to output.")
     builder.add_link(final_winner, "out", "MaxValue", "in16")
@@ -1346,9 +1389,7 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Build a 4-input adder .bog"
-    )
+    parser = argparse.ArgumentParser(description="Build a 4-input adder .bog")
     parser.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory."
     )
@@ -1404,6 +1445,7 @@ import os
 import sys
 
 from bog_builder import BogFolderBuilder
+
 
 def build_hot_water_reset(output_directory: str) -> str:
     """Build the hot water reset .bog file.
@@ -2001,69 +2043,6 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: numeric_schedule_example.py ===
-DIR: .
-=== CODE START ===
-"""
-This script generates a simple numeric schedule. It creates a single
-`sch:NumericSchedule` component and links its output to a NumericWritable
-point. The schedule is configured with a default output, making this a useful
-example for creating basic setpoints or values that are driven by a
-schedule object.
-"""
-
-from __future__ import annotations
-
-import argparse
-import os
-import sys
-
-
-from bog_builder import BogFolderBuilder
-
-
-def build_numeric_schedule(output_directory: str) -> str:
-    """Build a minimal numeric schedule and save it as a `.bog` file."""
-    builder = BogFolderBuilder("Schedules_Numeric", debug=False)
-    # Create a numeric schedule.  Provide ``defaultOutput`` so the schedule
-    # has a baseline value of 0.0, and set the ``out`` slot to 1.0 so the
-    # schedule immediately outputs 1.0 when imported.
-    builder.add_component(
-        "sch:NumericSchedule",
-        "NumericSchedule",
-        properties={
-            "defaultOutput": {"value": 0.0},
-            "out": {"value": 1.0},
-        },
-    )
-    # Target numeric writable to consume the schedule output
-    builder.add_numeric_writable("NumericWritable")
-    # Connect the schedule's ``out`` slot to the writable's ``in16`` slot
-    builder.add_link("NumericSchedule", "out", "NumericWritable", "in16")
-    # Write the .bog file
-    os.makedirs(output_directory, exist_ok=True)
-    out_path = os.path.join(output_directory, "NumericSchedule.bog")
-    builder.save(out_path)
-    return out_path
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a simple numeric schedule .bog file.")
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="examples",
-        help="Directory to write the .bog file (defaults to 'examples').",
-    )
-    args = parser.parse_args()
-    path = build_numeric_schedule(args.output)
-    print(f"Created {path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: numeric_select.py ===
 DIR: .
 === CODE START ===
@@ -2430,42 +2409,29 @@ DIR: .
 Ping-Pong Counter Algorithm (MultiVibrator 2s)
 
 G36 trim-and-respond scaffold.
-
-What it does
-- Pulse: MultiVibrator → OneShot → And(Enabled) ticks Counter.
-- Counter oscillates: up to TopLimit, down to LowLimit, repeat.
-- Direction via BooleanLatch:
-  • Or(>=Top, <=Low) → Latch.clock
-  • (>=Top) → Latch.in  → True=DOWN, False=UP
+Pay close attention how Bool Switches CountDown And CountUp
+is wired to inSwitch slots and wires to respected InFalse on
+CountUp and inTrue on CountDown as well as the Bool Latch
+Clock and In slots to make the Counter oscillates up to
+TopLimit, down to LowLimit, repeat on the 2000 multi vibe
+interval.
 
 Why it matters (G36)
 - Models stepwise setpoint trim and respond HVAC algorithms for guideline 36.
 - Replace limit checks with aggregated “requests”
   (e.g., many zones high → UP; many low → DOWN).
 
-Tuning
-- Step: size per pulse
-- period: 2000 ms
-- TopLimit/LowLimit: bounds
-
-Wiring cheat-sheet
-- Pulse: MultiVibrator → OneShot → And
-- Limits: Counter.out → (>=Top, <=Low) → Or → Latch.clock
-- Direction: (>=Top) → Latch.in
-- Routing:
-  • Latch.out → CountDown.inSwitch / CountUp.inSwitch
-  • And.out → CountDown.inTrue → Counter.countDown
-             → CountUp.inFalse → Counter.countUp
-
 """
-
 
 import os, argparse
 from bog_builder import BogFolderBuilder
 
+
 def main():
     ap = argparse.ArgumentParser(description="Ping-pong with MultiVibrator (2s)")
-    ap.add_argument("-o", "--output_dir", default="examples", help="Output directory for .bog")
+    ap.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for .bog"
+    )
     args = ap.parse_args()
 
     b = BogFolderBuilder("PingPongAlgorithm", debug=True)
@@ -2480,7 +2446,9 @@ def main():
 
     # ---- Logic subfolder ----
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"})
+    b.add_component(
+        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"}
+    )
     b.add_component("kitControl:OneShot", "FireOneShot")
     b.add_component("kitControl:And", "And")
     b.add_component("kitControl:Counter", "Counter")
@@ -2522,6 +2490,412 @@ def main():
     out = os.path.join(args.output_dir, "ping_pong_multivib.bog")
     b.save(out)
     print(f"Created Niagara .bog at: {os.path.abspath(out)}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: schedule_bool_example.py ===
+DIR: .
+=== CODE START ===
+"""
+Generate a .bog file with a detailed Boolean schedule.
+
+The schedule has the following behavior:
+- Active window (True): 06:00–18:00
+- Default (False): All other times
+- Applies Sun–Fri, empty on Saturday
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from bog_builder import BogFolderBuilder
+import copy
+
+
+def build_boolean_schedule_example(output_directory: str) -> str:
+    """Builds and saves a .bog file with a single detailed boolean schedule."""
+    builder = BogFolderBuilder("Schedules_Example", debug=True)
+
+    # --- 1. Common Schedule Structure ---
+    # This dictionary defines the "always effective" date range and the weekly
+    # time blocks.
+    common_schedule_structure = {
+        "effective": {
+            "start": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
+            "end": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
+        },
+        "schedule": {
+            "specialEvents": {},
+            "week": {
+                "sunday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "monday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "tuesday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "wednesday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "thursday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "friday": {
+                    "day": {"time": {"start": "06:00:00.000", "finish": "18:00:00.000"}}
+                },
+                "saturday": {"day": {}},  # Empty day
+            },
+        },
+    }
+
+    # --- 2. Boolean Schedule ---
+    # Use a deep copy to avoid modifying the original structure if reused
+    boolean_props = copy.deepcopy(common_schedule_structure)
+    boolean_props.update(
+        {"defaultOutput": {"value": False}, "out": {"value": True}}  # Current value
+    )
+    # Add the specific boolean value for the active time blocks
+    for day in boolean_props["schedule"]["week"].values():
+        if day["day"].get("time"):
+            day["day"]["time"]["effectiveValue"] = {"value": True}
+
+    builder.add_component(
+        "sch:BooleanSchedule", "BooleanSchedule", properties=boolean_props
+    )
+    builder.add_boolean_writable("BooleanWritable")
+    builder.add_link("BooleanSchedule", "out", "BooleanWritable", "in16")
+
+    # --- 3. Save the file ---
+    os.makedirs(output_directory, exist_ok=True)
+    out_path = os.path.join(output_directory, "BooleanSchedule.bog")
+    builder.save(out_path)
+    return out_path
+
+
+def main() -> None:
+    """Main entry point for the script."""
+    parser = argparse.ArgumentParser(
+        description="Generate a .bog file with a detailed boolean schedule."
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="examples",
+        help="Directory to write the .bog file (default: examples).",
+    )
+    args = parser.parse_args()
+
+    out_path = build_boolean_schedule_example(args.output)
+    print(f"Successfully created schedule example at: {out_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: schedule_enum_example.py ===
+DIR: .
+=== CODE START ===
+"""
+Generate a .bog file with a detailed Enum schedule.
+
+The schedule has the following behavior:
+- Default state is "duty1".
+- Sun-Fri have an active state from 07:00 to 13:30, with a unique "duty" state for each day.
+- Saturday has two active blocks with different "duty" states.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from bog_builder import BogFolderBuilder
+import copy
+
+
+def build_enum_schedule_example(output_directory: str) -> str:
+    """Builds and saves a .bog file with a single detailed enum schedule."""
+    builder = BogFolderBuilder("Enum_Schedule_Example", debug=True)
+
+    facets_str = "range=E:{duty1=1,duty2=2,duty3=3,duty4=4,duty5=5,duty6=6,duty7=7,duty8=8,duty9=9}"
+
+    # --- 1. Define the Enum Schedule Structure ---
+    enum_schedule_props = {
+        "facets": facets_str,
+        "defaultOutput": {"value": "1"},  # Default to duty1
+        "effective": {
+            "start": {"yearSchedule": {"alwaysEffective": True}},
+            "end": {"yearSchedule": {"alwaysEffective": True}},
+        },
+        "schedule": {
+            "specialEvents": {},
+            "week": {
+                "sunday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "2"},
+                            }  # duty2
+                        ]
+                    }
+                },
+                "monday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "3"},
+                            }  # duty3
+                        ]
+                    }
+                },
+                "tuesday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "4"},
+                            }  # duty4
+                        ]
+                    }
+                },
+                "wednesday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "5"},
+                            }  # duty5
+                        ]
+                    }
+                },
+                "thursday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "6"},
+                            }  # duty6
+                        ]
+                    }
+                },
+                "friday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "07:00:00.000",
+                                "finish": "13:30:00.000",
+                                "effectiveValue": {"value": "7"},
+                            }  # duty7
+                        ]
+                    }
+                },
+                "saturday": {
+                    "day": {
+                        "times": [
+                            {
+                                "start": "02:30:00.000",
+                                "finish": "09:00:00.000",
+                                "effectiveValue": {"value": "8"},
+                            },  # duty8
+                            {
+                                "start": "14:30:00.000",
+                                "finish": "22:30:00.000",
+                                "effectiveValue": {"value": "9"},
+                            },  # duty9
+                        ]
+                    }
+                },
+            },
+        },
+        "out": {"value": "1"},  # Current value is duty1
+    }
+
+    builder.add_component(
+        "sch:EnumSchedule", "EnumSchedule", properties=enum_schedule_props
+    )
+    builder.add_enum_writable("EnumWritable", facets=facets_str, default_value="1")
+    builder.add_link("EnumSchedule", "out", "EnumWritable", "in16")
+
+    # --- 2. Save the file ---
+    os.makedirs(output_directory, exist_ok=True)
+    out_path = os.path.join(output_directory, "EnumSchedule.bog")
+    builder.save(out_path)
+    return out_path
+
+
+def main() -> None:
+    """Main entry point for the script."""
+    parser = argparse.ArgumentParser(
+        description="Generate a .bog file with a detailed enum schedule."
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="examples",
+        help="Directory to write the .bog file (default: examples).",
+    )
+    args = parser.parse_args()
+
+    out_path = build_enum_schedule_example(args.output)
+    print(f"Successfully created schedule example at: {out_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: schedule_numeric_example.py ===
+DIR: .
+=== CODE START ===
+"""
+Generate a simple hard-coded numeric schedule (.bog).
+
+Schedule behavior:
+- Active window: 06:00–18:00, value = 1.0
+- Default/off-hours: value = 0.0
+- Applies Sun–Fri, empty on Saturday
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from bog_builder import BogFolderBuilder
+
+
+def build_numeric_schedule(output_directory: str) -> str:
+    builder = BogFolderBuilder("Schedules_Numeric", debug=True)
+
+    # Hard-coded schedule properties (mirrors Workbench "Good.xml")
+    props = {
+        "defaultOutput": {"value": 0.0},
+        "effective": {
+            "start": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
+            "end": {
+                "yearSchedule": {"alwaysEffective": True},
+                "monthSchedule": {"singleSelection": True},
+                "daySchedule": {"singleSelection": True},
+                "weekdaySchedule": {"singleSelection": True},
+            },
+        },
+        "schedule": {
+            "specialEvents": {},
+            "week": {
+                # Active days: Sun–Fri
+                "sunday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                "monday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                "tuesday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                "wednesday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                "thursday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                "friday": {
+                    "day": {
+                        "time": {
+                            "start": "06:00:00.000",
+                            "finish": "18:00:00.000",
+                            "effectiveValue": {"value": 1.0},
+                        }
+                    }
+                },
+                # Saturday empty (falls back to defaultOutput)
+                "saturday": {"day": {}},
+            },
+        },
+        "out": {"value": 1.0},
+    }
+
+    builder.add_component("sch:NumericSchedule", "NumericSchedule", properties=props)
+    builder.add_numeric_writable("NumericWritable")
+    builder.add_link("NumericSchedule", "out", "NumericWritable", "in16")
+
+    os.makedirs(output_directory, exist_ok=True)
+    out_path = os.path.join(output_directory, "NumericSchedule.bog")
+    builder.save(out_path)
+    return out_path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate hard-coded numeric schedule .bog file."
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="examples",
+        help="Directory to write the .bog file (default: examples).",
+    )
+    args = parser.parse_args()
+
+    out_path = build_numeric_schedule(args.output)
+    print(f"Created {out_path}")
+
 
 if __name__ == "__main__":
     main()
@@ -2837,8 +3211,12 @@ def build_thermostat(builder: BogFolderBuilder) -> None:
     builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
 
     # Threshold compares
-    builder.add_component("kitControl:LessThanEqual", "IsBelowHeat")      # Space+Hyst <= HeatSP
-    builder.add_component("kitControl:GreaterThanEqual", "IsAboveCool")   # Space >= CoolSP+Hyst
+    builder.add_component(
+        "kitControl:LessThanEqual", "IsBelowHeat"
+    )  # Space+Hyst <= HeatSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "IsAboveCool"
+    )  # Space >= CoolSP+Hyst
 
     # Command gates
     builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
@@ -2904,7 +3282,8 @@ def build_thermostat(builder: BogFolderBuilder) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Generate a thermostat .bog file.")
     p.add_argument(
-        "-o", "--output_dir",
+        "-o",
+        "--output_dir",
         default="examples",
         help="Directory to write the .bog file.",
     )
@@ -3168,12 +3547,12 @@ and potentially learn from builder script failures. DO NOT use this script
 as a template for valid logic.
 """
 
-
 import sys
 import os
 import argparse
 
 from bog_builder import BogFolderBuilder
+
 
 def main():
     """
@@ -3184,7 +3563,10 @@ def main():
         description="Build a .bog file for the SAT Trim and Respond logic."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -3247,11 +3629,23 @@ def main():
 
     # --- StateLogic Wiring ---
     builder.add_link("FanRunCmd", "out", "StartupDelay", "in")
-    builder.add_link("StartUpDelayMinutes", "out", "StartupDelay", "onDelay",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+    builder.add_link(
+        "StartUpDelayMinutes",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
 
-    builder.add_link("UpdateMinutes", "out", "UpdateTimer", "period",
-                     link_type="b:ConversionLink", converter_type="conv:StatusNumericToNumber")
+    builder.add_link(
+        "UpdateMinutes",
+        "out",
+        "UpdateTimer",
+        "period",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
     builder.add_link("UpdateTimer", "out", "UpdatePulse", "in")
 
     builder.add_link("StartupDelay", "out", "MainLogicEnable", "inA")
@@ -3261,7 +3655,6 @@ def main():
     builder.add_link("FanNotRunning", "out", "ResetTmaxCondition", "inA")
     # This is a simplification: we reset tMax when the fan is off OR on the first pulse
     builder.add_link("UpdatePulse", "out", "ResetTmaxCondition", "inB")
-
 
     # --- TrimRespondLogic Wiring ---
     builder.add_link("TotalRequests", "out", "RequestsExceedIgnore", "inA")
@@ -3291,7 +3684,6 @@ def main():
     builder.add_link("TmaxMux", "out", "TmaxState", "in")
     builder.add_link("MainLogicEnable", "out", "TmaxState", "clock")
 
-
     # --- InterpolationLogic Wiring ---
     builder.add_link("OutsideAirTemp", "out", "SatSetpointInterpolator", "inA")
     builder.add_link("OatMin", "out", "SatSetpointInterpolator", "inputLowLimit")
@@ -3301,13 +3693,13 @@ def main():
 
     builder.add_link("SatSetpointInterpolator", "out", "DischargeAirTempSp", "in16")
 
-
     # --- Save the File ---
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
 
 if __name__ == "__main__":
     main()
