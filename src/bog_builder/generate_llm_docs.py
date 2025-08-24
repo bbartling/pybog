@@ -1,28 +1,3 @@
-"""Generate LLM‑friendly documentation for the example scripts.
-
-This script walks the ``examples`` directory in this repository and
-produces two text files containing the contents of each Python example.
-The files are written into a user‑specified output directory (which
-defaults to a ``context`` subfolder alongside this script).  These
-generated documents can be consumed by large language models to
-provide context about how the builder API is used in practice.
-
-Two files are emitted:
-
-* ``llms.txt`` – a sitemap listing each example file name and its
-  relative directory.
-* ``llms-full.txt`` – the full source code of every example, with
-  marker headers denoting the file name and directory.  Delimiters
-  ``=== FILE: <name> ===`` and ``=== CODE START ===/=== CODE END ===``
-  separate the individual files.
-
-Example usage:
-
-   python src\bog_builder\generate_llm_docs.py --examples examples --output context
-
-If the output directory does not exist it will be created.
-"""
-
 from __future__ import annotations
 
 import argparse

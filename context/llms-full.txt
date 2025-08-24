@@ -841,15 +841,10 @@ def main():
     builder.add_boolean_writable("CountDown", default_value=False)  # display latch OUT
     builder.add_component("kitControl:SineWave", "SineWave")
 
-    # -------- Logic folder --------
-    builder.start_sub_folder("LatchSandbox")
-
     builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
     builder.add_component("kitControl:LessThanEqual", "LessThanEq")
     builder.add_component("kitControl:Or", "Or_Block")
     builder.add_component("kitControl:BooleanLatch", "BooleanLatch")
-
-    builder.end_sub_folder()
 
     # -------- Wiring (match GOOD.xml exactly) --------
     # Sine wave to both comparators (inA)
@@ -865,9 +860,9 @@ def main():
     builder.add_link("LessThanEq", "out", "Or_Block", "inB")
 
     # this is the latch reset to the clock input
-    builder.add_link("GreaterThanEq", "out", "BooleanLatch", "clock")
+    builder.add_link("GreaterThanEq", "out", "BooleanLatch", "in")
 
-    builder.add_link("Or_Block", "out", "BooleanLatch", "in")
+    builder.add_link("Or_Block", "out", "BooleanLatch", "clock")
 
     # Expose the latched OUT at top-level display point
     builder.add_link("BooleanLatch", "out", "CountDown", "in16")

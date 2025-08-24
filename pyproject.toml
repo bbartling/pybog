@@ -11,6 +11,7 @@ requires-python = ">=3.8"
 dependencies = [
     "pydantic",
     "google-generativeai",
+    "matplotlib"
 ]
 
 [project.optional-dependencies]

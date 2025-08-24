@@ -1,6 +1,6 @@
 # pybog: A Python Toolkit for Niagara BOG & DIST Files
 
-`bog_builder` is a Python package for constructing Niagara Baja Object Graphs `.bog` files programmatically.
+`bog_builder` is a Python package for constructing Niagara Baja Object Graphs `.bog` files programmatically. The goal is for AI to assist human controls engineers in rapidly prototyping complex HVAC sequencing within wire sheet logic. If the software engineering community can prototype quickly, why shouldn’t the controls engineering community be able to do the same?
 
 ![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
@@ -111,7 +111,7 @@ python examples/subtract_simple.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
 ![subtract image](snips/simpleSubtract.png)
 
 
-## 👷 Write Your Own `.bog` File in XML from scratch
+## Write Your Own `.bog` File in XML from scratch
 
 The Python script operates by creating the entire XML structure of the Niagara .bog file as a single, multi-line text string. This string contains all the necessary tags to define each component, its properties, and the links between them. Finally, the script writes this complete XML string directly into a new file, which Niagara can then open and display as a standard wiresheet.
 
@@ -195,7 +195,7 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ```
 
-### 📌 How it Works
+### How it Works
 
 * Each `<p>` tag represents a Niagara component or a **slot within a component** (like `out` or `fallback`). Each `<a>` tag represents an **action** on that component, like `set` or `override`.
 * The `f` attribute (flags) is critical for controlling behavior. `f="s"` makes a slot **settable**, while `f="h"` or `f="ho"` **hides** a slot or action, which is how we create read-only points.
@@ -213,18 +213,21 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
 
 
-## LLM Agent - `generic_agent.py`
+## 🚀 LLM Agent - `generic_agent.py`
 
-🚀 Experimental Iterative **BOG File Builder**!
+Experimental Iterative **BOG File Builder**!
 Tested on **WSL** 🐧  
 Powered by a **FREE API Key** from [Google AI Studio](https://aistudio.google.com/apikey) 🔑  
 Running with **Gemini-2.5 Flash** ⚡
 
+
+From the WSL bash console, set your API key as a temporary OS environment variable:
+
 ```bash
-export GOOGLE_API_KEY='PASTE IT IN HERE!'
+export GOOGLE_API_KEY="PASTE_IT_HERE"
 ```
 
-The `generic_agent.py` script lets you describe an HVAC control sequence in plain English and iteratively synthesizes a runnable Python builder script that creates a Niagara `.bog` file.  
+The `generic_agent.py` reads in your API key, lets you input a desired an HVAC control sequence, and iteratively synthesizes a runnable Python builder script that creates a Niagara `.bog` file.  
 
 It works like this:
 
@@ -387,13 +390,13 @@ which Niagara control blocks are most common in a given station.
 
 ---
 
-## 🧱 Component Library (kitControl)
+## Component Library (kitControl)
 
 Reference logic building blocks from Niagara’s kitControl palette are documented in `pdf/docKitControl.pdf`.
 
 ---
 
-## 📄 License
+## License
 
-MIT License — free for reuse with attribution.
+MIT License — free for reuse with attribution. Pull requests welcome.
 
