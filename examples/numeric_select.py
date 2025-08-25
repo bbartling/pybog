@@ -35,7 +35,6 @@ def main():
 
     print("Creating components...")
 
-    builder.start_sub_folder("CalculationLogic")
 
     # --- Inputs ---
     builder.add_numeric_writable("Input_A", default_value=100.0)
@@ -50,8 +49,6 @@ def main():
 
     # --- Output ---
     builder.add_numeric_writable("Selected_Value")
-
-    builder.end_sub_folder()
 
     print("Wiring components...")
 

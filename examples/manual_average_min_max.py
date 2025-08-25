@@ -25,7 +25,6 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
     builder = BogFolderBuilder("MultiAlgorithmTest")
 
     # --- Inputs ---

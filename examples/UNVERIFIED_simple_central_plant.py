@@ -152,7 +152,7 @@ def main() -> None:
     args = p.parse_args()
 
     # Build graph
-    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=False)
+    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=True)
     build_central_plant(builder)
 
     # Save to hard-coded name inside the chosen output directory

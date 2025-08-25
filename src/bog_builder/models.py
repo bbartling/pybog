@@ -29,6 +29,8 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:Average": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Minimum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Maximum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:Divide": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:Subract": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:GreaterThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:GreaterThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
@@ -60,6 +62,7 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:SineWave": {"inputs": [], "outputs": ["out"]},
     "control:NumericWritable": {"outputs": ["out"]},
     "control:BooleanWritable": {"outputs": ["out"]},
+    "control:EnumWritable": {"outputs": ["out"]},
     "kitControl:NumericConst": {"inputs": [], "outputs": ["out"]},
     "kitControl:BooleanConst": {"inputs": [], "outputs": ["out"]},
     "kitControl:BooleanSwitch": {

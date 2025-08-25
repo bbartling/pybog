@@ -16,21 +16,9 @@ from bog_builder import BogFolderBuilder
 
 
 def build_hot_water_reset(output_directory: str) -> str:
-    """Build the hot water reset .bog file.
 
-    Parameters
-    ----------
-    output_directory : str
-        Destination directory in which to write the .bog file.  The
-        directory will be created if it does not exist.
-
-    Returns
-    -------
-    str
-        The full path to the generated .bog file.
-    """
     # Create builder with a descriptive folder name
-    builder = BogFolderBuilder("HotWaterTempReset", debug=False)
+    builder = BogFolderBuilder("HotWaterTempReset", debug=True)
 
     # Define numeric writables for outdoor air temperature and limits
     builder.add_numeric_writable("OAT", default_value=11.0)

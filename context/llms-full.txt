@@ -553,7 +553,7 @@ def main() -> None:
     args = p.parse_args()
 
     # Build graph
-    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=False)
+    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=True)
     build_central_plant(builder)
 
     # Save to hard-coded name inside the chosen output directory
@@ -1448,21 +1448,9 @@ from bog_builder import BogFolderBuilder
 
 
 def build_hot_water_reset(output_directory: str) -> str:
-    """Build the hot water reset .bog file.
 
-    Parameters
-    ----------
-    output_directory : str
-        Destination directory in which to write the .bog file.  The
-        directory will be created if it does not exist.
-
-    Returns
-    -------
-    str
-        The full path to the generated .bog file.
-    """
     # Create builder with a descriptive folder name
-    builder = BogFolderBuilder("HotWaterTempReset", debug=False)
+    builder = BogFolderBuilder("HotWaterTempReset", debug=True)
 
     # Define numeric writables for outdoor air temperature and limits
     builder.add_numeric_writable("OAT", default_value=11.0)
@@ -1536,6 +1524,12 @@ from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
 cooling loop demand. A higher value indicates a more urgent request. The
 final output is the maximum of all generated requests, ensuring the highest
 priority request is always represented.
+
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1.
+
+It uses a parallel structure with a final Maximum block to prioritize
+requests based on zone temperature deviation and cooling demand.
 """
 
 import sys
@@ -1546,13 +1540,7 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    """
-    This script programmatically builds the VAV Box Cooling Request logic
-    from ASHRAE Guideline 36, §5.6.8.1.
 
-    It uses a parallel structure with a final Maximum block to prioritize
-    requests based on zone temperature deviation and cooling demand.
-    """
     parser = argparse.ArgumentParser(
         description="Build a .bog file for VAV Cooling Request logic."
     )
@@ -1566,10 +1554,7 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
     builder = BogFolderBuilder("G36_VAV_Cooling_Req")
-
-    # 2. Create all the top-level components for user interaction.
     print("Creating top-level inputs and outputs...")
 
     # --- Inputs ---
@@ -1577,15 +1562,11 @@ def main():
     builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
     builder.add_numeric_writable(
         "ZoneDemand", default_value=96.0
-    )  # Represents the cooling loop command
+    )
 
-    # --- Outputs ---
     builder.add_numeric_writable("VAVCoolingRequestsTotal")
-
-    # 3. Build the logic, encapsulating each part in its own sub-folder.
     print("Creating and organizing logic components in sub-folders...")
 
-    # --- Sub-Folder for Setpoint Deviation Calculations ---
     builder.start_sub_folder("SetpointDeviationCalcs")
     builder.add_component("kitControl:Add", "Setpoint_Plus_5F")
     builder.add_component("kitControl:Add", "Setpoint_Plus_3F")
@@ -1593,31 +1574,28 @@ def main():
     builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 3 Requests Logic (Temp > SP + 5F) ---
     builder.start_sub_folder("Generate3RequestsLogic")
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
     builder.add_component(
         "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
-    )  # 2 minutes
+    ) 
     builder.add_numeric_switch("NumericSwitch_3_Req")
     builder.add_component(
         "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
     )
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 2 Requests Logic (Temp > SP + 3F) ---
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
     builder.add_component(
         "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
-    )  # 2 minutes
+    ) 
     builder.add_numeric_switch("NumericSwitch_2_Req")
     builder.add_component(
         "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}
     )
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 1 Request Logic (ZoneDemand > 95%) ---
     builder.start_sub_folder("Generate1RequestLogic")
     builder.add_component("kitControl:GreaterThan", "Demand_GT_95")
     builder.add_numeric_switch("NumericSwitch_1_Req")
@@ -1629,47 +1607,39 @@ def main():
     )
     builder.end_sub_folder()
 
-    # --- Sub-Folder for Final Prioritization ---
     builder.start_sub_folder("Prioritization")
     builder.add_component("kitControl:Maximum", "Maximum")
     builder.end_sub_folder()
 
-    # 4. Register all links to define the data flow.
     print("Wiring components across all folders...")
 
-    # --- Wire Setpoint Deviation Calculations ---
     builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_5F", "inA")
     builder.add_link("Const_5", "out", "Setpoint_Plus_5F", "inB")
     builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_3F", "inA")
     builder.add_link("Const_3", "out", "Setpoint_Plus_3F", "inB")
 
-    # --- Wire Logic for 3 Requests ---
     builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_5F", "inA")
     builder.add_link("Setpoint_Plus_5F", "out", "Temp_GT_SP_plus_5F", "inB")
     builder.add_link("Temp_GT_SP_plus_5F", "out", "Timer_2min_Delay3", "in")
     builder.add_link("Timer_2min_Delay3", "out", "NumericSwitch_3_Req", "inSwitch")
     builder.add_link("Const_3_Req", "out", "NumericSwitch_3_Req", "inTrue")
 
-    # --- Wire Logic for 2 Requests ---
     builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_3F", "inA")
     builder.add_link("Setpoint_Plus_3F", "out", "Temp_GT_SP_plus_3F", "inB")
     builder.add_link("Temp_GT_SP_plus_3F", "out", "Timer_2min_Delay2", "in")
     builder.add_link("Timer_2min_Delay2", "out", "NumericSwitch_2_Req", "inSwitch")
     builder.add_link("Const_2_Req", "out", "NumericSwitch_2_Req", "inTrue")
 
-    # --- Wire Logic for 1 Request ---
     builder.add_link("ZoneDemand", "out", "Demand_GT_95", "inA")
     builder.add_link("Const_95", "out", "Demand_GT_95", "inB")
     builder.add_link("Demand_GT_95", "out", "NumericSwitch_1_Req", "inSwitch")
     builder.add_link("Const_1_Req", "out", "NumericSwitch_1_Req", "inTrue")
 
-    # --- Wire Final Prioritization ---
     builder.add_link("NumericSwitch_3_Req", "out", "Maximum", "inA")
     builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
     builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
     builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
 
-    # 5. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
@@ -1691,6 +1661,12 @@ from ASHRAE Guideline 36, §5.6.8.2. It generates a numeric request value
 The logic identifies zones that are struggling to get enough airflow and
 generates a request to increase duct static pressure. The final output is
 the maximum of all requests.
+
+This script programmatically builds the VAV Box Static Pressure Request logic
+from ASHRAE Guideline 36, §5.6.8.2, based on a proven manual design.
+
+It uses multiple sub-folders to cleanly organize the logic for calculations,
+each request condition, and final prioritization.
 """
 
 import sys
@@ -1701,13 +1677,7 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    """
-    This script programmatically builds the VAV Box Static Pressure Request logic
-    from ASHRAE Guideline 36, §5.6.8.2, based on a proven manual design.
 
-    It uses multiple sub-folders to cleanly organize the logic for calculations,
-    each request condition, and final prioritization.
-    """
     parser = argparse.ArgumentParser(
         description="Build a .bog file for VAV Static Pressure Request logic."
     )
@@ -1721,31 +1691,25 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
-    builder = BogFolderBuilder("G36_VAV_Pressure_Req")
 
-    # 2. Create all the top-level components for user interaction.
+    builder = BogFolderBuilder("G36_VAV_Pressure_Req")
     print("Creating top-level inputs and outputs...")
 
     # --- Inputs ---
     builder.add_numeric_writable("VavDamperCmd", default_value=96.0)
     builder.add_numeric_writable(
         "VavDamperSpt", default_value=95.0
-    )  # From manual build
+    ) 
     builder.add_numeric_writable("VavFlow", default_value=580.0)
     builder.add_numeric_writable("VavFlowSpt", default_value=970.0)
 
     # --- Outputs ---
     builder.add_numeric_writable("VAVrequestsTotal")
-
-    # 3. Build the logic, encapsulating each part in its own sub-folder.
     print("Creating and organizing logic components in sub-folders...")
 
-    # --- Sub-Folder for Percentage Calculations ---
     builder.start_sub_folder("PercentageCalculations")
     builder.add_component("kitControl:Multiply", "Calc_50_percent")
     builder.add_component("kitControl:Multiply", "Calc_70_percent")
-    # MODIFIED: Create explicit NumericConst blocks for the constant values.
     builder.add_component(
         "kitControl:NumericConst", "Const_0_5", properties={"out": 0.5}
     )
@@ -1754,7 +1718,6 @@ def main():
     )
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 3 Requests Logic ---
     builder.start_sub_folder("Generate3RequestsLogic")
     builder.add_component("kitControl:LessThan", "LessThan_Flow_50pct")
     builder.add_component("kitControl:GreaterThan", "GreaterThan_Damper_95")
@@ -1766,7 +1729,6 @@ def main():
     builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 2 Requests Logic ---
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_component("kitControl:LessThan", "LessThan_Flow_70pct")
     builder.add_component("kitControl:And", "Generate2requests")
@@ -1777,7 +1739,6 @@ def main():
     builder.add_component("kitControl:NumericConst", "Const_2", properties={"out": 2.0})
     builder.end_sub_folder()
 
-    # --- Sub-Folder for 1 Request Logic ---
     builder.start_sub_folder("Generate1RequestLogic")
     builder.add_component(
         "kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"}
@@ -1786,17 +1747,14 @@ def main():
     builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
     builder.end_sub_folder()
 
-    # --- Sub-Folder for Final Prioritization ---
     builder.start_sub_folder("Prioritization")
     builder.add_component("kitControl:Maximum", "Maximum")
     builder.end_sub_folder()
 
-    # 4. Register all links to define the data flow.
     print("Wiring components across all folders...")
 
     # --- Wire Percentage Calculations ---
     builder.add_link("VavFlowSpt", "out", "Calc_50_percent", "inA")
-    # MODIFIED: Link the new NumericConst to the Multiply block's input.
     builder.add_link("Const_0_5", "out", "Calc_50_percent", "inB")
     builder.add_link("VavFlowSpt", "out", "Calc_70_percent", "inA")
     builder.add_link("Const_0_7", "out", "Calc_70_percent", "inB")
@@ -1832,7 +1790,6 @@ def main():
     builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
     builder.add_link("Maximum", "out", "VAVrequestsTotal", "in16")
 
-    # 5. Save the file.
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
@@ -1874,7 +1831,6 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # 1. Initialize the builder
     builder = BogFolderBuilder("MultiAlgorithmTest")
 
     # --- Inputs ---
@@ -1996,9 +1952,7 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    """
-    Builds a minimal .bog file to test the wiring of a kitControl:BooleanLatch.
-    """
+
     parser = argparse.ArgumentParser(
         description="Build a minimal .bog file to test the BooleanLatch component."
     )
@@ -2012,27 +1966,15 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
     builder = BogFolderBuilder("Minimal_Latch_Demo", debug=True)
-
-    # -------- Component Creation --------
-    # A controllable switch for the main input signal.
     builder.add_boolean_writable("Input_Signal", default_value=False)
-
-    # A controllable switch to trigger the latch's clock.
     builder.add_boolean_writable("Clock_Signal", default_value=False)
-
-    # The BooleanLatch component under test.
     builder.add_component("kitControl:BooleanLatch", "My_Latch")
-
-    # A point to display the final latched value.
     builder.add_boolean_writable("Latched_Output", default_value=False)
 
     builder.add_link("Input_Signal", "out", "My_Latch", "in")
     builder.add_link("Clock_Signal", "out", "My_Latch", "clock")
-
-    # Link the latch's output to the display component's input ('in16' for BooleanWritable).
     builder.add_link("My_Latch", "out", "Latched_Output", "in16")
 
-    # -------- Save .bog --------
     os.makedirs(args.output_dir, exist_ok=True)
     out_path = os.path.join(args.output_dir, f"{script_filename}.bog")
     builder.save(out_path)
@@ -2083,7 +2025,6 @@ def main():
 
     print("Creating components...")
 
-    builder.start_sub_folder("CalculationLogic")
 
     # --- Inputs ---
     builder.add_numeric_writable("Input_A", default_value=100.0)
@@ -2098,8 +2039,6 @@ def main():
 
     # --- Output ---
     builder.add_numeric_writable("Selected_Value")
-
-    builder.end_sub_folder()
 
     print("Wiring components...")
 
@@ -2260,142 +2199,114 @@ if __name__ == "__main__":
 === FILE: pid_example.py ===
 DIR: .
 === CODE START ===
-"""
-This script constructs an improved "ping‑pong" oscillating counter logic for
-Niagara 4.  It follows the pattern shown in the provided PingPongGood.xml:
+"""Example script for generating a PID loop .bog file.
 
-* A periodic interval trigger generates pulses via a OneShot block.
-* An And gate combines the pulse with an ``Enabled`` boolean to gate the logic.
-* A Counter counts up or down depending on the state of a BooleanLatch.
-* GreaterThanEqual and LessThanEqual blocks detect when the counter hits
-  configured top and bottom limits.
-* An Or combines the two limit signals and drives the latch clock; the
-  GreaterThanEqual output drives the latch input.
-* Two BooleanSwitch blocks (CountDown and CountUp) route the gated pulse to
-  either the ``countDown`` or ``countUp`` input on the Counter based on the
-  latch state.
+This example uses a `kitControl:LoopPoint` block to implement a basic PID
+controller.  The loop point accepts a process variable (e.g. temperature), a
+setpoint, a boolean enable, a loop action (an enum derived from a boolean
+status), and tuning constants for the proportional and integral terms.  The
+script demonstrates how to wire numeric and boolean writables to these slots
+and how to use explicit conversion links when a type conversion is required.
 
-Compared to the original example, this version places all logic inside a
-dedicated ``Logic`` subfolder and uses a ``control:TimeTrigger`` instead of a
-MultiVibrator.  It also links the reset input via ``clearIn`` and utilises
-explicit BooleanSwitch components to steer pulses, mirroring the behaviour seen
-in the working PingPongGood XML file.
+Note that the example would be for a cooling valve where if a reverse
+acting PID was needed for a heating valve LoopActionDirect would need
+to be set True.
+
 """
 
-import os
+from __future__ import annotations
+
 import argparse
+import os
+import sys
+
 
 from bog_builder import BogFolderBuilder
 
+def build_pid_loop(output_directory: str) -> str:
 
-def build_ping_pong(output_dir: str) -> str:
-    """Construct and save the ping‑pong algorithm .bog.
+    builder = BogFolderBuilder("PID", debug=True)
 
-    Parameters
-    ----------
-    output_dir : str
-        The directory in which the .bog file will be written.
+    # Define process variable and setpoint numeric writables
+    builder.add_numeric_writable("Temp", default_value=80.0)
+    builder.add_numeric_writable("Setpoint", default_value=70.0)
+    # Define tuning writables
+    builder.add_numeric_writable("PropBand", default_value=5.0)
+    builder.add_numeric_writable("Integral", default_value=0.05)
+    # Define boolean writables for enabling and loop action
+    builder.add_boolean_writable("BooleanWritable", default_value=True)
+    builder.add_boolean_writable("LoopActionDirect", default_value=False)
 
-    Returns
-    -------
-    str
-        Absolute path to the generated .bog file.
-    """
-    builder = BogFolderBuilder("PingPongAlgorithm", debug=True)
+    # Create the LoopPoint with fallback values matching our writables
+    lp_props = {
+        "loopEnable": {"value": True},
+        "controlledVariable": {"value": 80.0},
+        "setpoint": {"value": 70.0},
+        "proportionalConstant": {"value": 5.0},
+        "integralConstant": {"value": 0.05},
+    }
+    builder.add_component("kitControl:LoopPoint", "LoopPoint", properties=lp_props)
 
-    # Top‑level control knobs and display
-    builder.add_boolean_writable("ManualReset", default_value=False)
-    builder.add_boolean_writable("Enabled", default_value=True)
-    builder.add_numeric_writable("Step", 1.05)
-    builder.add_numeric_writable("TopLimit", 20.0)
-    builder.add_numeric_writable("LowLimit", -20.0)
+    # Define an output writable for the PID result
     builder.add_numeric_writable("Output")
 
-    # Logic subfolder holds all the dynamic components
-    builder.start_sub_folder("Logic")
-    # Periodic trigger: fires every 2000 ms.  The triggerMode property
-    # follows Niagara's IntervalTriggerMode format: ``enabled;start;end;period;mask``.
-    builder.add_component(
-        "control:TimeTrigger",
-        "Interval",
-        properties={"triggerMode": "false;00:00:00.000;23:59:59.999;2000;7f"},
+    # Wire the process variable and setpoint directly
+    builder.add_link("Temp", "out", "LoopPoint", "controlledVariable")
+    builder.add_link("Setpoint", "out", "LoopPoint", "setpoint")
+
+    # Conversion from a boolean writable to the loopAction enum
+    builder.add_link(
+        "LoopActionDirect",
+        "out",
+        "LoopPoint",
+        "loopAction",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusBooleanToFrozenEnum",
     )
-    # Edge detector for interval pulses
-    builder.add_component("kitControl:OneShot", "FireOneShot")
-    # Gate the pulse with the Enabled writable
-    builder.add_component("kitControl:And", "And")
-    # Numeric counter with configurable increment
-    builder.add_component("kitControl:Counter", "Counter")
-    # Limit detection
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEqual")
-    # Combine limit signals
-    builder.add_component("kitControl:Or", "Or1")
-    # State machine: remembers whether we're counting up (False) or down (True)
-    builder.add_component("kitControl:BooleanLatch", "BooleanLatch1")
-    # Route pulses based on the latch state
-    builder.add_component("kitControl:BooleanSwitch", "CountDown")
-    builder.add_component("kitControl:BooleanSwitch", "CountUp")
-    # Manual reset edge detector
-    builder.add_component("kitControl:OneShot", "ResetOneShot")
 
-    # --- Wiring ---
-    # Step value drives the counter's increment
-    builder.add_link("Step", "out", "Counter", "countIncrement")
-    # Display counter value at top level
-    builder.add_link("Counter", "out", "Output", "in16")
-    # Manual reset: trigger a reset pulse and clear the counter
-    builder.add_link("ManualReset", "out", "ResetOneShot", "in")
-    builder.add_link("ResetOneShot", "out", "Counter", "clearIn")
-    # Interval pulse to OneShot (edge detection)
-    builder.add_link("Interval", "fireTrigger", "FireOneShot", "in")
-    # Gate the edge pulse with the Enabled flag
-    builder.add_link("FireOneShot", "out", "And", "inA")
-    builder.add_link("Enabled", "out", "And", "inB")
-    # Feed counter output to limit detectors
-    builder.add_link("Counter", "out", "GreaterThanEqual", "inA")
-    builder.add_link("TopLimit", "out", "GreaterThanEqual", "inB")
-    builder.add_link("Counter", "out", "LessThanEqual", "inA")
-    builder.add_link("LowLimit", "out", "LessThanEqual", "inB")
-    # Combine the two limit signals via an OR
-    builder.add_link("GreaterThanEqual", "out", "Or1", "inA")
-    builder.add_link("LessThanEqual", "out", "Or1", "inB")
-    # Boolean latch: clock on either limit event; input true when upper limit hit
-    builder.add_link("Or1", "out", "BooleanLatch1", "clock")
-    builder.add_link("GreaterThanEqual", "out", "BooleanLatch1", "in")
-    # Route pulses to down/up based on latch state
-    builder.add_link("And", "out", "CountDown", "inTrue")
-    builder.add_link("BooleanLatch1", "out", "CountDown", "inSwitch")
-    builder.add_link("And", "out", "CountUp", "inFalse")
-    builder.add_link("BooleanLatch1", "out", "CountUp", "inSwitch")
-    # Pulse to counter inputs
-    builder.add_link("CountDown", "out", "Counter", "countDown")
-    builder.add_link("CountUp", "out", "Counter", "countUp")
+    # Link the enable boolean directly
+    builder.add_link("BooleanWritable", "out", "LoopPoint", "loopEnable")
 
-    # End logic subfolder
-    builder.end_sub_folder()
+    # Conversion from numeric writables to numbers for the tuning constants
+    builder.add_link(
+        "PropBand",
+        "out",
+        "LoopPoint",
+        "proportionalConstant",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
+    builder.add_link(
+        "Integral",
+        "out",
+        "LoopPoint",
+        "integralConstant",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToNumber",
+    )
+
+    # Connect the LoopPoint output to the output writable
+    builder.add_link("LoopPoint", "out", "Output", "in10")
 
     # Write the .bog file
-    os.makedirs(output_dir, exist_ok=True)
-    script_name = "fixed_ping_pong_algorithm"
-    out_path = os.path.join(output_dir, f"{script_name}.bog")
+    os.makedirs(output_directory, exist_ok=True)
+    out_path = os.path.join(output_directory, "PID.bog")
     builder.save(out_path)
-    return os.path.abspath(out_path)
+    return out_path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate a fixed ping‑pong counter .bog file using Niagara kitControl blocks."
-    )
+    parser = argparse.ArgumentParser(description="Generate a PID loop .bog file.")
     parser.add_argument(
         "-o",
-        "--output_dir",
+        "--output",
         default="examples",
-        help="Directory in which to place the generated .bog file.",
+        help="Directory to write the output .bog file (defaults to 'examples').",
     )
     args = parser.parse_args()
-    out_file = build_ping_pong(args.output_dir)
-    print(f"\nGenerated .bog file at: {out_file}")
+    out_dir = args.output
+    path = build_pid_loop(out_dir)
+    print(f"Created {path}")
 
 
 if __name__ == "__main__":
