@@ -663,47 +663,62 @@ class BogFolderBuilder:
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
     ) -> Dict[str, Tuple[int, int]]:
-        """Special layout for the root folder: Inputs (left) | Folders (center) | Outputs (right)."""
+        """
+        Special layout for the root folder with column wrapping.
+        Layout: Outputs (left, wraps) | Folders (center) | Inputs (right, wraps).
+        """
         self.log("Using TOP‑LEVEL interface layout.", is_layout_log=True)
         coords: Dict[str, Tuple[int, int]] = {}
         inputs: List[str] = []
         outputs: List[str] = []
+        MAX_ITEMS_PER_COLUMN = 150 
+
         all_links_sources = {l["source_name"] for l in self._links}
         all_links_targets = {l["target_name"] for l in self._links}
         for name, data in components.items():
             if data.get("type") == "folder":
                 continue
-
             is_target = name in all_links_targets
             is_source = name in all_links_sources
-
             if is_target and not is_source:
                 inputs.append(name)
             elif is_source and not is_target:
                 outputs.append(name)
+            else:
+                outputs.append(name)
+
         self.log(f"Categorised as INPUTS: {sorted(inputs)}", is_layout_log=True)
         self.log(f"Categorised as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
         self.log(f"Found SUB‑FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
+
+        # --- Position Outputs with wrapping ---
+        x = self.START_X
         y = self.START_Y
-        for name in sorted(outputs):
-            coords[name] = (self.START_X, y)
-            self.log(
-                f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True
-            )
+        for i, name in enumerate(sorted(outputs)):
+            if i > 0 and i % MAX_ITEMS_PER_COLUMN == 0:
+                x += self.X_COLUMN_WIDTH
+                y = self.START_Y
+            coords[name] = (x, y)
+            self.log(f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True)
+            y += self.Y_INCREMENT
+        
+        num_output_cols = (len(outputs) - 1) // MAX_ITEMS_PER_COLUMN + 1
+        folder_x = self.START_X + (num_output_cols * self.X_COLUMN_WIDTH)
+
+        y = self.START_Y
+        for name in sorted(sub_folders):
+            coords[name] = (folder_x, y)
+            self.log(f"Positioned FOLDER '{name}' at {coords[name]}", is_layout_log=True)
             y += self.Y_INCREMENT
 
-        folder_x = self.START_X + self.X_COLUMN_WIDTH
-        for folder_name in sorted(sub_folders):
-            coords[folder_name] = (folder_x, self.START_Y)
-            self.log(
-                f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}",
-                is_layout_log=True,
-            )
-
+        input_x_start = folder_x + self.X_COLUMN_WIDTH
+        x = input_x_start
         y = self.START_Y
-        right_x = self.START_X + 2 * self.X_COLUMN_WIDTH
-        for name in sorted(inputs):
-            coords[name] = (right_x, y)
+        for i, name in enumerate(sorted(inputs)):
+            if i > 0 and i % MAX_ITEMS_PER_COLUMN == 0:
+                x += self.X_COLUMN_WIDTH
+                y = self.START_Y
+            coords[name] = (x, y)
             self.log(f"Positioned INPUT '{name}' at {coords[name]}", is_layout_log=True)
             y += self.Y_INCREMENT
 
@@ -813,7 +828,6 @@ class BogFolderBuilder:
                 return True
             return "Numeric" in t
 
-        # --- NEW LOGIC BLOCK TO HANDLE ENUM -> NUMERIC CONVERSION FOR COMPARISON BLOCKS ---
         if "Enum" in s_type and t_type in (
             "kitControl:Equal",
             "kitControl:NotEqual",
@@ -824,7 +838,6 @@ class BogFolderBuilder:
         ):
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusEnumToStatusNumeric"
-        # --- END OF NEW LOGIC BLOCK ---
 
         elif t_type == "kitControl:NumericSelect" and target_slot == "select":
             link_type = "b:ConversionLink"
