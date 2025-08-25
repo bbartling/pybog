@@ -20,8 +20,14 @@ def iter_example_files(examples_dir: Path) -> Iterable[Path]:
         for filename in sorted(filenames):
             if filename.startswith("."):
                 continue
+            
             if not filename.endswith(".py"):
                 continue
+
+            if filename.startswith("UNVERIFIED_"):
+                print(f"[LLM DOC MAKER] Skipping {filename}")
+                continue
+
             yield Path(root) / filename
 
 
