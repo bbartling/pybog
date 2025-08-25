@@ -35,7 +35,6 @@ def main():
 
     print("Creating components...")
 
-
     # --- Inputs ---
     builder.add_numeric_writable("Input_A", default_value=100.0)
     builder.add_numeric_writable("Input_B", default_value=200.0)

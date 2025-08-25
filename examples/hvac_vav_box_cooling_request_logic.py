@@ -41,9 +41,7 @@ def main():
     # --- Inputs ---
     builder.add_numeric_writable("ZoneTemp", default_value=78.0)
     builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
-    builder.add_numeric_writable(
-        "ZoneDemand", default_value=96.0
-    )
+    builder.add_numeric_writable("ZoneDemand", default_value=96.0)
 
     builder.add_numeric_writable("VAVCoolingRequestsTotal")
     print("Creating and organizing logic components in sub-folders...")
@@ -59,7 +57,7 @@ def main():
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
     builder.add_component(
         "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
-    ) 
+    )
     builder.add_numeric_switch("NumericSwitch_3_Req")
     builder.add_component(
         "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
@@ -70,7 +68,7 @@ def main():
     builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
     builder.add_component(
         "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
-    ) 
+    )
     builder.add_numeric_switch("NumericSwitch_2_Req")
     builder.add_component(
         "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}

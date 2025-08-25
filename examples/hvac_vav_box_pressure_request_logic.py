@@ -35,15 +35,12 @@ def main():
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-
     builder = BogFolderBuilder("G36_VAV_Pressure_Req")
     print("Creating top-level inputs and outputs...")
 
     # --- Inputs ---
     builder.add_numeric_writable("VavDamperCmd", default_value=96.0)
-    builder.add_numeric_writable(
-        "VavDamperSpt", default_value=95.0
-    ) 
+    builder.add_numeric_writable("VavDamperSpt", default_value=95.0)
     builder.add_numeric_writable("VavFlow", default_value=580.0)
     builder.add_numeric_writable("VavFlowSpt", default_value=970.0)
 

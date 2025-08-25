@@ -11,6 +11,8 @@ OUTPUT_DIR = "/mnt/c/Users/ben/Niagara4.11/JENEsys"
 # The LOG_FILE line can remain the same, it will be created in your current directory
 LOG_FILE = "/mnt/c/Users/ben/Niagara4.11/JENEsys/run_examples_log.txt"
 
+STOP_ON_ERROR = True
+
 
 def write_log(lines):
     """Helper function to write logs to the file."""
@@ -71,7 +73,8 @@ def main():
             # Key Change 3: Write to log and exit immediately
             print("\nWriting logs and exiting due to error.")
             write_log(log_lines)
-            # sys.exit(1)  # Exit with a non-zero status code to indicate failure
+            if STOP_ON_ERROR:
+                sys.exit(1)  # Exit with a non-zero status code to indicate failure
 
         except Exception as e:
             # This catches other errors, like the script not being found
@@ -80,7 +83,8 @@ def main():
             log_lines.append(err_msg)
             print("\nWriting logs and exiting due to critical exception.")
             write_log(log_lines)
-            # sys.exit(1)
+            if STOP_ON_ERROR:
+                sys.exit(1)  # Exit with a non-zero status code to indicate failure
 
     # This part is only reached if all scripts succeed
     print("\nAll scripts completed successfully.")

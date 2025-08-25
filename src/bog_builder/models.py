@@ -146,14 +146,9 @@ class ComponentDefinition(BaseModel):
 
     @field_validator("name")
     def name_is_valid(cls, v: str) -> str:
-        """
-        Validate that component names start with a letter or underscore and consist
-        only of alphanumeric characters and underscores.  Niagara 4 does not allow
-        names to begin with a number.
-        """
+        # ... (this validator remains the same)
         if not isinstance(v, str) or not v:
             raise ValueError("Component name must be a non‑empty string.")
-        # Names must start with a letter or underscore and may contain digits/underscores
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", v):
             suggestion = f"Calc_{re.sub(r'[^A-Za-z0-9_]', '_', v)}"
             raise ValueError(
@@ -164,9 +159,7 @@ class ComponentDefinition(BaseModel):
 
     @field_validator("comp_type")
     def comp_type_format(cls, v: str) -> str:
-        """
-        Validate that component types follow the 'palette:TypeName' format.
-        """
+        # ... (this validator remains the same)
         if not isinstance(v, str) or ":" not in v:
             raise ValueError(
                 f"Invalid component type '{v}'. Component types must be of the form 'palette:TypeName', "
@@ -176,6 +169,7 @@ class ComponentDefinition(BaseModel):
 
     @field_validator("properties")
     def properties_must_be_dict(cls, v):
+        # ... (this validator remains the same)
         if v is None:
             return {}
         if not isinstance(v, dict):
@@ -184,11 +178,62 @@ class ComponentDefinition(BaseModel):
 
     @field_validator("actions")
     def actions_must_be_dict(cls, v):
+        # ... (this validator remains the same)
         if v is None:
             return {}
         if not isinstance(v, dict):
             raise ValueError("The 'actions' field must be a dictionary.")
         return v
+
+    @model_validator(mode="after")
+    def validate_enum_properties(
+        cls, model: "ComponentDefinition"
+    ) -> "ComponentDefinition":
+        """
+        Applies strict validation for EnumWritable and EnumConst components.
+        """
+        props = model.properties
+
+        if model.comp_type == "control:EnumWritable":
+            if "facets" not in props:
+                raise ValueError(
+                    "EnumWritable requires a 'facets' property (e.g., 'range=E:{...}')."
+                )
+            if "fallback" not in props or "value" not in props.get("fallback", {}):
+                raise ValueError(
+                    "EnumWritable requires a 'fallback' property with a 'value' key holding the default index."
+                )
+
+            fallback_val = props["fallback"]["value"]
+            if "@" in str(fallback_val):
+                raise ValueError(
+                    f"EnumWritable fallback value must be a simple index (e.g., '3'), not a pre-formatted string ('{fallback_val}'). "
+                    "Use the add_enum_writable() helper."
+                )
+            try:
+                int(fallback_val)
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"EnumWritable fallback value must be a valid integer index, but got '{fallback_val}'."
+                ) from e
+
+        if model.comp_type == "kitControl:EnumConst":
+            if "facets" not in props:
+                raise ValueError(
+                    "kitControl:EnumConst requires a 'facets' property (e.g., 'range=E:{...}')."
+                )
+            if "value" not in props:
+                raise ValueError(
+                    "kitControl:EnumConst requires a 'value' property holding the pre-formatted DynamicEnum string (e.g., '3@{...}')."
+                )
+
+            val = props["value"]
+            if "@" not in str(val):
+                raise ValueError(
+                    f"kitControl:EnumConst 'value' property must be a pre-formatted DynamicEnum string containing '@' (e.g., '3@{{...}}'), but got '{val}'."
+                )
+
+        return model
 
 
 class LinkDefinition(BaseModel):

@@ -51,6 +51,7 @@ class BogFolderBuilder:
         self._links: List[Dict] = []
         self._next_handle = 1
         self._handle_map: Dict[str, str] = {}
+        self._enum_ranges: Dict[str, Dict[str, int]] = {}
         self._sub_folders: Dict[Tuple[str, ...], List[str]] = defaultdict(list)
         self._component_to_folder: Dict[str, Tuple[str, ...]] = {}
         self._current_folder_path: Tuple[str, ...] = (folder_name,)
@@ -125,6 +126,106 @@ class BogFolderBuilder:
     def get_current_path_str(self) -> str:
         """Returns the current folder path as a string separated by `/`."""
         return "/".join(self._current_folder_path)
+
+    # ------------------------------------------------------------------
+    # ENUM point handling
+    # ------------------------------------------------------------------
+    def define_enum_range(self, name: str, mapping: Dict[str, int]) -> None:
+        """
+        Registers a named enum range for reuse. This avoids having to
+        re-create facets strings for multiple components.
+
+        Parameters
+        ----------
+        name : str
+            A unique name for this enum definition (e.g., "Mode", "DamperState").
+        mapping : Dict[str, int]
+            A dictionary mapping enum tags to their integer ordinals.
+        """
+        if name in self._enum_ranges:
+            raise ValueError(f"An enum range named '{name}' has already been defined.")
+        if not isinstance(mapping, dict) or not all(
+            isinstance(k, str) and isinstance(v, int) for k, v in mapping.items()
+        ):
+            raise TypeError(
+                "Enum mapping must be a dictionary of string keys to integer values."
+            )
+        self._enum_ranges[name] = mapping
+
+    def add_enum_writable_by_name(
+        self, component_name: str, enum_name: str, default_tag: str
+    ) -> None:
+        """
+        Adds an EnumWritable using a pre-defined enum range.
+
+        Parameters
+        ----------
+        component_name : str
+            The name for the new EnumWritable component.
+        enum_name : str
+            The name of the enum range registered with define_enum_range().
+        default_tag : str
+            The string tag for the default value (e.g., "Startup").
+        """
+        if enum_name not in self._enum_ranges:
+            raise ValueError(
+                f"Enum range '{enum_name}' is not defined. Call define_enum_range() first."
+            )
+
+        mapping = self._enum_ranges[enum_name]
+        if default_tag not in mapping:
+            raise ValueError(
+                f"Default tag '{default_tag}' not found in enum range '{enum_name}'."
+            )
+
+        facets_str = (
+            "range=E:{" + ",".join(f"{k}={v}" for k, v in mapping.items()) + "}"
+        )
+        default_index = str(mapping[default_tag])
+
+        self.add_enum_writable(
+            component_name, facets=facets_str, default_value=default_index
+        )
+
+    def add_enum_const_by_name(
+        self, component_name: str, enum_name: str, value_tag: str
+    ) -> None:
+        """
+        Adds an EnumConst using a pre-defined enum range.
+
+        Parameters
+        ----------
+        component_name : str
+            The name for the new EnumConst component.
+        enum_name : str
+            The name of the enum range registered with define_enum_range().
+        value_tag : str
+            The string tag for the constant's value (e.g., "Startup").
+        """
+        if enum_name not in self._enum_ranges:
+            raise ValueError(
+                f"Enum range '{enum_name}' is not defined. Call define_enum_range() first."
+            )
+
+        mapping = self._enum_ranges[enum_name]
+        if value_tag not in mapping:
+            raise ValueError(
+                f"Value tag '{value_tag}' not found in enum range '{enum_name}'."
+            )
+
+        facets_str = (
+            "range=E:{" + ",".join(f"{k}={v}" for k, v in mapping.items()) + "}"
+        )
+
+        ord_ = mapping[value_tag]
+        range_part = "{" + ",".join(f"{k}={v}" for k, v in mapping.items()) + "}"
+        value_str = f"{ord_}@{range_part}"
+
+        self.add_component(
+            "kitControl:EnumConst",
+            component_name,
+            properties={"facets": facets_str, "value": value_str},
+        )
 
     # ------------------------------------------------------------------
     # Component creation
@@ -509,8 +610,13 @@ class BogFolderBuilder:
         Subfolders: always tiered.
         """
         folder_name = folder_path_tuple[-1]
-        self.log(f"--- Building folder: {'/'.join(folder_path_tuple)} ---", is_layout_log=True)
-        folder_element = ET.SubElement(parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"})
+        self.log(
+            f"--- Building folder: {'/'.join(folder_path_tuple)} ---",
+            is_layout_log=True,
+        )
+        folder_element = ET.SubElement(
+            parent_xml_element, "p", {"n": folder_name, "t": "b:Folder"}
+        )
 
         components_in_folder = {
             name: data
@@ -538,16 +644,21 @@ class BogFolderBuilder:
         self._add_component_xml_tags(folder_element, components_in_folder, comp_coords)
 
         links_targeting_this_folder = [
-            l for l in self._links
+            l
+            for l in self._links
             if self._component_to_folder.get(l["target_name"]) == folder_path_tuple
         ]
         self._add_link_xml_tags(folder_element, links_targeting_this_folder)
 
         # Recurse into subfolders
         for sub_folder_name in self._sub_folders.get(folder_path_tuple, []):
-            self.log(f"About to recurse into sub-folder: {sub_folder_name}", is_layout_log=True)
-            self._build_folder_contents(folder_element, folder_path_tuple + (sub_folder_name,))
-
+            self.log(
+                f"About to recurse into sub-folder: {sub_folder_name}",
+                is_layout_log=True,
+            )
+            self._build_folder_contents(
+                folder_element, folder_path_tuple + (sub_folder_name,)
+            )
 
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
@@ -563,8 +674,8 @@ class BogFolderBuilder:
             if data.get("type") == "folder":
                 continue
 
-            is_target = name in all_links_targets       
-            is_source = name in all_links_sources     
+            is_target = name in all_links_targets
+            is_source = name in all_links_sources
 
             if is_target and not is_source:
                 inputs.append(name)
@@ -576,13 +687,18 @@ class BogFolderBuilder:
         y = self.START_Y
         for name in sorted(outputs):
             coords[name] = (self.START_X, y)
-            self.log(f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True)
+            self.log(
+                f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True
+            )
             y += self.Y_INCREMENT
 
         folder_x = self.START_X + self.X_COLUMN_WIDTH
         for folder_name in sorted(sub_folders):
             coords[folder_name] = (folder_x, self.START_Y)
-            self.log(f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}", is_layout_log=True)
+            self.log(
+                f"Positioned FOLDER '{folder_name}' flat at {coords[folder_name]}",
+                is_layout_log=True,
+            )
 
         y = self.START_Y
         right_x = self.START_X + 2 * self.X_COLUMN_WIDTH
@@ -637,9 +753,7 @@ class BogFolderBuilder:
                 adj[source].append(target)
                 in_degree[target] += 1
         # Initialise queue with nodes that have no inbound edges
-        queue: deque[str] = deque(
-            [name for name, deg in in_degree.items() if deg == 0]
-        )
+        queue: deque[str] = deque([name for name, deg in in_degree.items() if deg == 0])
         levels: List[List[str]] = []
         visited: set[str] = set()
         while queue:
@@ -699,7 +813,20 @@ class BogFolderBuilder:
                 return True
             return "Numeric" in t
 
-        if t_type == "kitControl:NumericSelect" and target_slot == "select":
+        # --- NEW LOGIC BLOCK TO HANDLE ENUM -> NUMERIC CONVERSION FOR COMPARISON BLOCKS ---
+        if "Enum" in s_type and t_type in (
+            "kitControl:Equal",
+            "kitControl:NotEqual",
+            "kitControl:GreaterThan",
+            "kitControl:GreaterThanEqual",
+            "kitControl:LessThan",
+            "kitControl:LessThanEqual",
+        ):
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusEnumToStatusNumeric"
+        # --- END OF NEW LOGIC BLOCK ---
+
+        elif t_type == "kitControl:NumericSelect" and target_slot == "select":
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusNumericToStatusEnum"
         elif (
@@ -713,6 +840,7 @@ class BogFolderBuilder:
         elif t_type == "kitControl:Counter" and target_slot == "countIncrement":
             link_type = "b:ConversionLink"
             converter_type = "conv:StatusNumericToNumber"
+
         self._links.append(
             {
                 "source_name": source_name,
@@ -730,6 +858,36 @@ class BogFolderBuilder:
         components: Dict[str, Dict],
         coords: Dict[str, Tuple[int, int]],
     ) -> None:
+
+        def _write_facets_if_enum(element, enum_range):
+            # enum_range may be dict {"Occupied":0, ...} or already a "E:{...}" string
+            if isinstance(enum_range, dict):
+                pairs = ",".join(f"{k}={v}" for k, v in enum_range.items())
+                v = f"range=E:{{{pairs}}}"
+            else:
+                s = str(enum_range)
+                v = (
+                    s
+                    if s.startswith("range=E:{") and s.endswith("}")
+                    else f"range=E:{s if s.startswith('{') else '{'+s+'}'}"
+                )
+            ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": v})
+
+        def _encode_dynamic_enum(value_index, enum_range):
+            # enum_range may be dict or "{A=0,B=1}" string
+            if isinstance(enum_range, dict):
+                pairs = ",".join(f"{k}={v}" for k, v in enum_range.items())
+                range_str = f"{{{pairs}}}"
+            else:
+                s = str(enum_range)
+                # normalize: ensure single enclosing braces only
+                range_str = (
+                    s
+                    if (s.startswith("{") and s.endswith("}"))
+                    else "{" + s.strip("{}") + "}"
+                )
+            return f"{int(value_index)}@{range_str}"  # <-- no extra brace!
+
         """Adds the <p> tags for components to the XML tree."""
         for name, data in components.items():
             attrs = {"n": name, "t": data["type"], "h": data["handle"]}
@@ -796,45 +954,80 @@ class BogFolderBuilder:
                     fallback_slot, "p", {"n": "value", "v": str(fallback_val).lower()}
                 )
 
-            elif data["type"] == "control:EnumWritable":
-                props = data.get("properties", {})
-
-                # facets string: e.g. "range=E:{Occupied=0,Unoccupied=1,Startup=3,Shutdown=4}"
-                facets_str = props.get("facets")
-                if facets_str:
-                    ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": str(facets_str)})
-
-                # fallback: e.g. "3@{Occupied=0,Unoccupied=1,Startup=3,Shutdown=4}"
-                fb = props.get("fallback", {})
-                fb_val = fb.get("value")
-                if fb_val is not None:
-                    fb_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusEnum"})
-                    ET.SubElement(fb_slot, "p", {"n": "value", "v": str(fb_val)})
-
-                # allow writes from logic like other writables
-                ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
-
             elif data["type"] == "kitControl:NumericConst":
+                out = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
                 props = data.get("properties", {})
-                const_val = props.get("value", props.get("out", 0.0))
-                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
-                ET.SubElement(out_slot, "p", {"n": "value", "v": str(const_val)})
+                val = props.get("value")
+                if val is None:
+                    out_prop = props.get("out")
+                    if isinstance(out_prop, dict):
+                        val = out_prop.get("value", 0.0)
+                    elif out_prop is not None:
+                        val = out_prop
+                    else:
+                        val = 0.0
+                ET.SubElement(out, "p", {"n": "value", "v": str(val)})
 
             elif data["type"] == "kitControl:BooleanConst":
-                # Accept either {"value": True/False} or {"out": True/False}
-                props = data.get("properties", {})
-                raw = props.get("value", props.get("out", False))
-                val = str(bool(raw)).lower()
-                out_slot = ET.SubElement(
-                    element, "p", {"n": "out", "t": "b:StatusBoolean"}
+                out = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusBoolean"})
+                val = data["properties"].get(
+                    "value", data["properties"].get("out", {}).get("value", False)
                 )
-                ET.SubElement(out_slot, "p", {"n": "value", "v": val})
+                ET.SubElement(out, "p", {"n": "value", "v": str(bool(val)).lower()})
+
+            elif data["type"] == "control:EnumWritable":
+                # facets (range)
+                facets_str = data["properties"].get("facets")
+                if facets_str is not None:
+                    _write_facets_if_enum(element, facets_str)
+
+                # fallback value
+                fb = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusEnum"})
+
+                # Correctly get the default index from the 'value' key provided by add_enum_writable
+                fallback_props = data["properties"].get("fallback", {})
+                default_index = fallback_props.get("value", "0")
+
+                # Extract just the "{...}" part from the facets string for the encoder
+                range_only_str = "{}"
+                if facets_str and isinstance(facets_str, str) and ":" in facets_str:
+                    range_only_str = facets_str.split(":", 1)[-1]
+
+                fb_val = _encode_dynamic_enum(default_index, range_only_str)
+                ET.SubElement(fb, "p", {"n": "value", "v": fb_val})
 
             elif data["type"] == "kitControl:EnumConst":
-                props = data.get("properties", {})
-                enum_val = props.get("value", props.get("out", "0"))
-                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusEnum"})
-                ET.SubElement(out_slot, "p", {"n": "value", "v": str(enum_val)})
+                # facets required here too
+                enum_range = data["properties"].get("facets")
+                if enum_range is not None:
+                    _write_facets_if_enum(element, enum_range)
+                out = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusEnum"})
+                idx = data["properties"].get("index")
+                if idx is None and "value" in data["properties"]:
+                    # --- NEW ROBUST SANITIZATION LOGIC ---
+                    raw_str = str(data["properties"]["value"])
+                    # Split the string at the '@'
+                    parts = raw_str.split("@", 1)
+                    if len(parts) == 2:
+                        index_part = parts[0]
+                        # Aggressively strip all braces from the range part and add them back correctly
+                        range_part = "{" + parts[1].strip("{}") + "}"
+                        sanitized_value = f"{index_part}@{range_part}"
+                    else:
+                        # If format is unexpected, pass through, but this is the safe path
+                        sanitized_value = raw_str
+                    ET.SubElement(out, "p", {"n": "value", "v": sanitized_value})
+                    # --- END OF NEW LOGIC ---
+                else:
+                    # preferred: index + range → encoded value
+                    ET.SubElement(
+                        out,
+                        "p",
+                        {
+                            "n": "value",
+                            "v": _encode_dynamic_enum(idx or 0, enum_range or {}),
+                        },
+                    )
 
             elif data["type"] == "kitControl:BooleanSwitch":
                 # Not strictly required, but mirrors how we emit defaults for NumericSwitch
