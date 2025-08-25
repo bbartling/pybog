@@ -39,6 +39,7 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:And": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:Xor": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:Not": {"inputs": ["in"], "outputs": ["out"]},
+    "kitControl:Equal": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:NumericSwitch": {
         "inputs": ["inSwitch", "inTrue", "inFalse"],
         "outputs": ["out"],
@@ -65,6 +66,7 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "control:EnumWritable": {"outputs": ["out"]},
     "kitControl:NumericConst": {"inputs": [], "outputs": ["out"]},
     "kitControl:BooleanConst": {"inputs": [], "outputs": ["out"]},
+    "kitControl:EnumConst": {"inputs": [], "outputs": ["out"]},
     "kitControl:BooleanSwitch": {
         "inputs": ["inSwitch", "inTrue", "inFalse"],
         "outputs": ["out"],

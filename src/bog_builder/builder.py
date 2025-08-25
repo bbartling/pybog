@@ -795,11 +795,29 @@ class BogFolderBuilder:
                 ET.SubElement(
                     fallback_slot, "p", {"n": "value", "v": str(fallback_val).lower()}
                 )
+
+            elif data["type"] == "control:EnumWritable":
+                props = data.get("properties", {})
+
+                # facets string: e.g. "range=E:{Occupied=0,Unoccupied=1,Startup=3,Shutdown=4}"
+                facets_str = props.get("facets")
+                if facets_str:
+                    ET.SubElement(element, "p", {"n": "facets", "t": "b:Facets", "v": str(facets_str)})
+
+                # fallback: e.g. "3@{Occupied=0,Unoccupied=1,Startup=3,Shutdown=4}"
+                fb = props.get("fallback", {})
+                fb_val = fb.get("value")
+                if fb_val is not None:
+                    fb_slot = ET.SubElement(element, "p", {"n": "fallback", "t": "b:StatusEnum"})
+                    ET.SubElement(fb_slot, "p", {"n": "value", "v": str(fb_val)})
+
+                # allow writes from logic like other writables
+                ET.SubElement(element, "p", {"n": "in16", "f": "tsL"})
+
             elif data["type"] == "kitControl:NumericConst":
-                const_val = data["properties"].get("out", 0.0)
-                out_slot = ET.SubElement(
-                    element, "p", {"n": "out", "t": "b:StatusNumeric"}
-                )
+                props = data.get("properties", {})
+                const_val = props.get("value", props.get("out", 0.0))
+                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusNumeric"})
                 ET.SubElement(out_slot, "p", {"n": "value", "v": str(const_val)})
 
             elif data["type"] == "kitControl:BooleanConst":
@@ -811,6 +829,12 @@ class BogFolderBuilder:
                     element, "p", {"n": "out", "t": "b:StatusBoolean"}
                 )
                 ET.SubElement(out_slot, "p", {"n": "value", "v": val})
+
+            elif data["type"] == "kitControl:EnumConst":
+                props = data.get("properties", {})
+                enum_val = props.get("value", props.get("out", "0"))
+                out_slot = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusEnum"})
+                ET.SubElement(out_slot, "p", {"n": "value", "v": str(enum_val)})
 
             elif data["type"] == "kitControl:BooleanSwitch":
                 # Not strictly required, but mirrors how we emit defaults for NumericSwitch

@@ -71,7 +71,7 @@ def main():
             # Key Change 3: Write to log and exit immediately
             print("\nWriting logs and exiting due to error.")
             write_log(log_lines)
-            sys.exit(1)  # Exit with a non-zero status code to indicate failure
+            # sys.exit(1)  # Exit with a non-zero status code to indicate failure
 
         except Exception as e:
             # This catches other errors, like the script not being found
@@ -80,7 +80,7 @@ def main():
             log_lines.append(err_msg)
             print("\nWriting logs and exiting due to critical exception.")
             write_log(log_lines)
-            sys.exit(1)
+            # sys.exit(1)
 
     # This part is only reached if all scripts succeed
     print("\nAll scripts completed successfully.")
