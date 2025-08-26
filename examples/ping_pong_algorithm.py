@@ -5,10 +5,14 @@ This script demonstrates a G36-style trim-and-respond scaffold. A counter
 oscillates between a high and low limit, driven by a periodic pulse from a
 MultiVibrator.
 
-This version includes a top-level NumericWritable 'UPDATE_SECONDS' that is
+This version includes a top-level NumericWritable 'UpdateSeconds' that is
 used to configure the MultiVibrator's period when the .bog file is generated.
 The conversion from seconds to milliseconds is also shown on the wiresheet
 for documentation purposes.
+
+A TRUE G36 algorithm will combine compontents of rate_of_change_limiter.py and
+the ping_pong_algorithm example. Please reference both of these as they are
+thoroughly tested!
 """
 
 import os, argparse
@@ -16,7 +20,9 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ping-pong with a configurable MultiVibrator")
+    ap = argparse.ArgumentParser(
+        description="Ping-pong with a configurable MultiVibrator"
+    )
     ap.add_argument(
         "-o", "--output_dir", default="examples", help="Output directory for .bog"
     )
@@ -31,29 +37,22 @@ def main():
     b.add_numeric_writable("TopLimit", default_value=20.0)
     b.add_numeric_writable("LowLimit", default_value=-20.0)
     b.add_numeric_writable("Output")
-    
-    # NEW: Add a configurable update time in seconds.
-    # We define a variable to hold the default so we can reuse it below.
-    update_seconds_default = 2.0
-    b.add_numeric_writable("UPDATE_SECONDS", default_value=update_seconds_default)
 
+    UpdateSeconds_default = 2.0
+    b.add_numeric_writable("UpdateSeconds", default_value=UpdateSeconds_default)
 
     # ---- Logic subfolder ----
     b.start_sub_folder("Logic")
-
-    # NEW: The MultiVibrator's period is set using the default value from UPDATE_SECONDS.
-    # This value is static once the .bog is generated.
     b.add_component(
-        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": str(int(update_seconds_default * 1000))}
+        "kitControl:MultiVibrator",
+        "MultiVibrator",
+        properties={"period": str(int(UpdateSeconds_default * 1000))},
     )
-    
-    # NEW: Add math blocks to visually document the seconds-to-milliseconds conversion.
-    # NOTE: This is for documentation only and is not linked to the MultiVibrator's period.
-    b.add_component("kitControl:NumericConst", "Const_1000", properties={"value": 1000.0})
+    b.add_component(
+        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
+    )
     b.add_component("kitControl:Multiply", "Update_ms_Display")
-    b.add_numeric_writable("CalculatedPeriod_ms") # Add a writable to see the result
-
-    # The rest of the components are the same as before
+    b.add_numeric_writable("CalculatedPeriod_ms")
     b.add_component("kitControl:OneShot", "FireOneShot")
     b.add_component("kitControl:And", "And")
     b.add_component("kitControl:Counter", "Counter")
@@ -68,13 +67,12 @@ def main():
     b.end_sub_folder()
 
     # ---- Wiring ----
-    
-    # NEW: Wire the documentation logic for the timer period
-    b.add_link("UPDATE_SECONDS", "out", "Update_ms_Display", "inA")
+    b.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
     b.add_link("Const_1000", "out", "Update_ms_Display", "inB")
     b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-
-    # The rest of the wiring is the same
+    b.add_link(
+        "CalculatedPeriod_ms", "out", "MultiVibrator", "Period"
+    )  # <------ broken
     b.add_link("MultiVibrator", "out", "FireOneShot", "in")
     b.add_link("FireOneShot", "out", "And", "inA")
     b.add_link("Enabled", "out", "And", "inB")

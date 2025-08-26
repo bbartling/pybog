@@ -20,7 +20,7 @@ def iter_example_files(examples_dir: Path) -> Iterable[Path]:
         for filename in sorted(filenames):
             if filename.startswith("."):
                 continue
-            
+
             if not filename.endswith(".py"):
                 continue
 

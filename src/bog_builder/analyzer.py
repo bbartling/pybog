@@ -29,6 +29,7 @@ import xml.etree.ElementTree as ET
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")  # headless-friendly
     import matplotlib.pyplot as plt  # type: ignore
 except Exception:
@@ -36,6 +37,7 @@ except Exception:
 
 
 # ----------------------------- Analyzer -----------------------------
+
 
 class Analyzer:
     """
@@ -182,7 +184,9 @@ class Analyzer:
                 # Some files may miss one child; be defensive
                 def _getv(tag: str) -> str:
                     elem = link_element.find(f'p[@n="{tag}"]')
-                    return elem.get("v") if elem is not None and "v" in elem.attrib else ""
+                    return (
+                        elem.get("v") if elem is not None and "v" in elem.attrib else ""
+                    )
 
                 comp["links"].append(
                     {
@@ -290,6 +294,7 @@ class Analyzer:
 
 # ----------------------------- CLI entry -----------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Analyze Niagara .bog or .dist files; emit JSON; count/plot kitControl usage."
@@ -297,7 +302,10 @@ def main() -> None:
     parser.add_argument("file_path", help="Path to the .bog or .dist file.")
     parser.add_argument("-o", "--output_file", help="Write JSON analysis to this path.")
     parser.add_argument(
-        "-l", "--list_contents", action="store_true", help="List archive contents and exit."
+        "-l",
+        "--list_contents",
+        action="store_true",
+        help="List archive contents and exit.",
     )
     parser.add_argument(
         "-c", "--count", action="store_true", help="Print kitControl component counts."

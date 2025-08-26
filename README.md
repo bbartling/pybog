@@ -349,9 +349,7 @@ The graph is **not strictly hierarchical**: components can have links and refere
 * **Build a handle → name map.** Handles (e.g. `s="h:123"`) are common in link definitions. Build a dictionary so you can resolve these references.
 * **Be mindful of palettes.** The `type` attribute encodes the palette and block name (e.g. `kitControl:Add`). Grouping by palette helps narrow searches or generate statistics.
 
----
-
-## Analyzer Class
+### Analyzer Class
 
 The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
 

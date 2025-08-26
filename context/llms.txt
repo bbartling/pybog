@@ -9,6 +9,7 @@ find_max_value.py	.
 find_second_highest_of_6.py	.
 four_in_add_logic.py	.
 hot_water_reset_example.py	.
+hvac_g36_ahu_duct_static_reset.py	.
 hvac_vav_box_cooling_request_logic.py	.
 hvac_vav_box_pressure_request_logic.py	.
 manual_average_min_max.py	.
@@ -18,6 +19,7 @@ numeric_switch_test.py	.
 one_shot_bool_delay_test.py	.
 pid_example.py	.
 ping_pong_algorithm.py	.
+rate_of_change_limiter.py	.
 schedule_bool_example.py	.
 schedule_enum_example.py	.
 schedule_numeric_example.py	.

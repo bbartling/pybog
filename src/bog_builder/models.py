@@ -26,11 +26,13 @@ except ImportError as exc:
 
 COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:Add": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:Subtract": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Average": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Minimum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Maximum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Divide": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Subract": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:Multiply": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:GreaterThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:GreaterThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
@@ -52,14 +54,24 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         "inputs": ["in", "clock"],
         "outputs": ["out"],
     },
+    "kitControl:NumericLatch": {
+        "inputs": ["in", "clock"],
+        "outputs": ["out"],
+    },
     "kitControl:OneShot": {"inputs": ["in"], "outputs": ["out"]},
-    "kitControl:BooleanDelay": {"inputs": ["in"], "outputs": ["out"]},
-    "kitControl:NumericDelay": {"inputs": ["in"], "outputs": ["out"]},
+    "kitControl:BooleanDelay": {
+        "inputs": ["in", "onDelay", "offDelay"],
+        "outputs": ["out"],
+    },
+    "kitControl:NumericDelay": {
+        "inputs": ["in", "updateTime", "maxStepSize"],
+        "outputs": ["out"],
+    },
     "kitControl:Counter": {
         "inputs": ["countUp", "countDown", "countIncrement", "clear"],
         "outputs": ["out"],
     },
-    "kitControl:MultiVibrator": {"inputs": [], "outputs": ["out"]},
+    "kitControl:MultiVibrator": {"inputs": ["Period"], "outputs": ["out"]},
     "kitControl:SineWave": {"inputs": [], "outputs": ["out"]},
     "control:NumericWritable": {"outputs": ["out"]},
     "control:BooleanWritable": {"outputs": ["out"]},

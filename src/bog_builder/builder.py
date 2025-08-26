@@ -671,7 +671,7 @@ class BogFolderBuilder:
         coords: Dict[str, Tuple[int, int]] = {}
         inputs: List[str] = []
         outputs: List[str] = []
-        MAX_ITEMS_PER_COLUMN = 150 
+        MAX_ITEMS_PER_COLUMN = 150
 
         all_links_sources = {l["source_name"] for l in self._links}
         all_links_targets = {l["target_name"] for l in self._links}
@@ -699,16 +699,20 @@ class BogFolderBuilder:
                 x += self.X_COLUMN_WIDTH
                 y = self.START_Y
             coords[name] = (x, y)
-            self.log(f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True)
+            self.log(
+                f"Positioned OUTPUT '{name}' at {coords[name]}", is_layout_log=True
+            )
             y += self.Y_INCREMENT
-        
+
         num_output_cols = (len(outputs) - 1) // MAX_ITEMS_PER_COLUMN + 1
         folder_x = self.START_X + (num_output_cols * self.X_COLUMN_WIDTH)
 
         y = self.START_Y
         for name in sorted(sub_folders):
             coords[name] = (folder_x, y)
-            self.log(f"Positioned FOLDER '{name}' at {coords[name]}", is_layout_log=True)
+            self.log(
+                f"Positioned FOLDER '{name}' at {coords[name]}", is_layout_log=True
+            )
             y += self.Y_INCREMENT
 
         input_x_start = folder_x + self.X_COLUMN_WIDTH
@@ -828,7 +832,16 @@ class BogFolderBuilder:
                 return True
             return "Numeric" in t
 
-        if "Enum" in s_type and t_type in (
+        if (
+            "Numeric" in s_type
+            and t_type == "kitControl:MultiVibrator"
+            and target_slot.lower() == "period"
+        ):
+            link_type = "b:ConversionLink"
+            converter_type = "conv:StatusNumericToRelTime"
+            target_slot = "period"
+
+        elif "Enum" in s_type and t_type in (
             "kitControl:Equal",
             "kitControl:NotEqual",
             "kitControl:GreaterThan",
