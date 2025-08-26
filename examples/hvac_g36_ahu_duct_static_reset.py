@@ -1,253 +1,170 @@
 """
-hvac_g36_ahu_duct_static_reset_updated.py
+G36-Style Trim & Respond Algorithm (Corrected)
 
-Enhanced G36 Duct Static Pressure Trim & Respond builder with:
-1) UpdateMinutes dynamically wired to the MultiVibrator Period
-2) StartUpDelayMinutes converted to ms and (best-effort) wired to BooleanDelay OnDelay
-3) True slew-rate limiting using SPResMax as the max absolute change per update tick
-   (symmetric clamp for both TRIM and RESPOND)
+This script builds a wiresheet implementation of a "Trim & Respond" style
+algorithm, often used for duct static pressure reset as described in
+ASHRAE Guideline 36. The core of the logic is a value that "pings-pongs"
+or oscillates between a minimum (SPmin) and maximum (SPmax) limit.
 
-Notes:
-- In Niagara Workbench, some timer components do not accept live period updates over a link;
-  however, the link is provided for correctness/documentation and initial value is honored.
-- The symmetric clamp mirrors the "rate_of_change_limiter" pattern: the per-cycle adjustment
-  is limited to ±SPResMax then added to the previous latched setpoint.
+This version has been rewritten to use a kitControl:Counter block, inspired
+by the simpler ping_pong_algorithm. This approach is more direct and robust
+for this type of oscillating logic. It uses a single 'Step' value for both
+incrementing and decrementing. This version correctly uses the 'preset'
+action to initialize the counter from SP0.
 """
 
-from __future__ import annotations
-import argparse
-import os
-import sys
-
-# Append project src directory to path for bog_builder import
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+import os, argparse
 from bog_builder import BogFolderBuilder
 
 
-def build_g36_graph(b: BogFolderBuilder) -> None:
-    """Builds the G36 Trim & Respond logic graph (enhanced)."""
+def main():
+    ap = argparse.ArgumentParser(description="Build a G36-style Trim & Respond .bog file.")
+    ap.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for .bog"
+    )
+    args = ap.parse_args()
 
-    # ==========================================================================
-    # 1) TOP-LEVEL I/O AND CONFIGURATION
-    # ==========================================================================
-    b.add_boolean_writable("FanRunCmd", default_value=False)
-    b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
-    b.add_numeric_writable(
-        "DischargeAirPressureSp_Out",
-        default_value=1.25,
-        precision=2,
-        units="u:inchesOfWater",
-    )
+    b = BogFolderBuilder("G36_TrimAndRespond_PingPong", debug=True)
 
-    # Configuration setpoints
-    sp0_default = 1.25
-    b.add_numeric_writable("SP0", default_value=sp0_default, units="u:inchesOfWater")
-    b.add_numeric_writable(
-        "SPmin", default_value=0.40, precision=2, units="u:inchesOfWater"
-    )
-    b.add_numeric_writable(
-        "SPmax", default_value=1.25, precision=2, units="u:inchesOfWater"
-    )
+    # ---- Top-level I/O and Configuration ----
+    b.add_boolean_writable("ManualReset", default_value=False)
+    b.add_boolean_writable("Enabled", default_value=True)
+    b.add_boolean_writable("Fan_Status", default_value=False)
+    b.add_numeric_writable("SP0", default_value=1.0, precision=2)
+    b.add_numeric_writable("SPmin", default_value=0.40, precision=2)
+    b.add_numeric_writable("SPmax", default_value=1.25, precision=2)
+    b.add_numeric_writable("Step", default_value=0.04, precision=2)
+    b.add_numeric_writable("Output")
+    
+    UpdateMinutes_default = 0.5
+    b.add_numeric_writable("UpdateMinutes", default_value=UpdateMinutes_default)
+    
+    StartUpDelayMinutes_default = 0.5
+    b.add_numeric_writable("StartUpDelayMinutes", default_value=StartUpDelayMinutes_default)
 
-    startup_delay_default_min = 0.5
-    b.add_numeric_writable(
-        "StartUpDelayMinutes", default_value=startup_delay_default_min
-    )
 
-    update_cadence_default_min = 0.5
-    b.add_numeric_writable("UpdateMinutes", default_value=update_cadence_default_min)
-
-    b.add_numeric_writable("Ignore", default_value=1.0, precision=0)
-    b.add_numeric_writable(
-        "SPtrim", default_value=-0.02, precision=2, units="u:inchesOfWater"
-    )
-    b.add_numeric_writable(
-        "SPres", default_value=0.04, precision=2, units="u:inchesOfWater"
-    )
-    # SPResMax acts as a *rate-of-change limit* per update interval (both directions)
-    b.add_numeric_writable(
-        "SPResMax", default_value=0.08, precision=2, units="u:inchesOfWater"
-    )
-
-    # ==========================================================================
-    # 2) STATE MANAGEMENT + STARTUP DELAY
-    # ==========================================================================
+    # ---- Logic subfolders ----
     b.start_sub_folder("StateManagement")
-
-    # Latch rising edge of fan run to kick off startup sequencing
-    b.add_component("kitControl:BooleanLatch", "FanRunLatch")
-    b.add_component("kitControl:Not", "Not_FanRun")
-    b.add_link("FanRunCmd", "out", "FanRunLatch", "clock")
-    b.add_link("FanRunCmd", "out", "Not_FanRun", "in")
-    b.add_link("Not_FanRun", "out", "FanRunLatch", "in")
-
-    # BooleanDelay for startup (initial onDelay from default minutes)
-    startup_delay_ms = str(int(startup_delay_default_min * 60000))
-    b.add_component(
-        "kitControl:BooleanDelay",
-        "StartupDelayTimer",
-        properties={"onDelay": startup_delay_ms},
-    )
-    b.add_link("FanRunLatch", "out", "StartupDelayTimer", "in")
-
-    # Show StartUpDelayMinutes converted to ms and best-effort wire to OnDelay
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000_A", properties={"value": 60000.0}
-    )
-    b.add_component("kitControl:Multiply", "StartupDelay_ms_Display")
-    b.add_numeric_writable("CalculatedStartupDelay_ms")
-    b.add_link("StartUpDelayMinutes", "out", "StartupDelay_ms_Display", "inA")
-    b.add_link("Const_60000_A", "out", "StartupDelay_ms_Display", "inB")
-    b.add_link("StartupDelay_ms_Display", "out", "CalculatedStartupDelay_ms", "in16")
-    # Some Niagara builds may not allow dynamic linking into config slots, but we link for clarity
-    b.add_link("CalculatedStartupDelay_ms", "out", "StartupDelayTimer", "onDelay")
-
-    # Enable core logic only when fan is running AND startup delay is satisfied
+    # Detect rising edge of Fan_Status to start the timer
+    b.add_component("kitControl:BooleanLatch", "FanOnLatch")
+    b.add_component("kitControl:Not", "NotFanStatus")
+    # Startup delay timer (onDelay is now wired dynamically)
+    b.add_component("kitControl:BooleanDelay", "StartupDelayTimer")
+    # Components to convert minutes to milliseconds for the delay
+    b.add_component("kitControl:NumericConst", "Const_60000", properties={"value": 60000.0})
+    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_numeric_writable("CalculatedDelay_ms")
+    # The main logic is enabled only after the fan is on AND the startup delay is met
     b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_link("FanRunCmd", "out", "RunLogicEnable", "inA")
+    b.end_sub_folder()
+
+    b.start_sub_folder("Logic")
+    
+    # Timer components
+    b.add_component(
+        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": str(int(UpdateMinutes_default * 60 * 1000))}
+    )
+    b.add_component("kitControl:NumericConst", "Const_60000_Update", properties={"value": 60000.0})
+    b.add_component("kitControl:Multiply", "Update_ms_Display")
+    b.add_numeric_writable("CalculatedPeriod_ms")
+    b.add_component("kitControl:OneShot", "FireOneShot")
+    b.add_component("kitControl:And", "RunPermission")
+    b.add_component("kitControl:And", "PulseGate")
+
+    # Core Counter Logic
+    b.add_counter("Counter") # Initial value is now handled by preset logic
+    b.add_component("kitControl:GreaterThanEqual", "Hit_SPmax")
+    b.add_component("kitControl:LessThanEqual", "Hit_SPmin")
+    b.add_component("kitControl:Or", "Hit_Any_Limit")
+    b.add_component("kitControl:BooleanLatch", "DirectionLatch")
+    b.add_boolean_switch("CountUp_Switch")
+    b.add_boolean_switch("CountDown_Switch")
+    
+    # Reset Logic
+    b.add_component("kitControl:Not", "FanIsOff")
+    b.add_component("kitControl:Or", "ResetTrigger")
+    b.add_component("kitControl:OneShot", "ResetOneShot")
+    
+    # Final Output Selection
+    b.add_numeric_switch("FinalOutput_Switch")
+
+    b.end_sub_folder()
+
+    # ---- Wiring ----
+    
+    # State Management Wiring
+    b.add_link("Fan_Status", "out", "NotFanStatus", "in")
+    b.add_link("Fan_Status", "out", "FanOnLatch", "clock")
+    b.add_link("NotFanStatus", "out", "FanOnLatch", "in") 
+    b.add_link("FanOnLatch", "out", "StartupDelayTimer", "in")
+    
+    # Dynamic Startup Delay Calculation
+    b.add_link("StartUpDelayMinutes", "out", "Delay_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
+    b.add_link("Delay_ms_Calc", "out", "CalculatedDelay_ms", "in16")
+    b.add_link(
+        "CalculatedDelay_ms", "out", "StartupDelayTimer", "onDelay", 
+        link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime"
+    )
+
+    b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
     b.add_link("StartupDelayTimer", "out", "RunLogicEnable", "inB")
-    b.end_sub_folder()
 
-    # ==========================================================================
-    # 3) PERIODIC UPDATE TIMER (cadence)
-    # ==========================================================================
-    b.start_sub_folder("UpdateTimer")
+    # Timer Configuration and Pulse Generation
+    b.add_link("UpdateMinutes", "out", "Update_ms_Display", "inA")
+    b.add_link("Const_60000_Update", "out", "Update_ms_Display", "inB")
+    b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
+    b.add_link("CalculatedPeriod_ms", "out", "MultiVibrator", "Period")
+    b.add_link("MultiVibrator", "out", "FireOneShot", "in")
+    
+    # Gate the pulse with Enabled and the main RunLogicEnable signal
+    b.add_link("Enabled", "out", "RunPermission", "inA")
+    b.add_link("RunLogicEnable", "out", "RunPermission", "inB")
+    b.add_link("FireOneShot", "out", "PulseGate", "inA")
+    b.add_link("RunPermission", "out", "PulseGate", "inB")
 
-    # MultiVibrator with initial period from default minutes; pulses are one-shot'd
-    update_cadence_ms = str(int(update_cadence_default_min * 60000))
-    b.add_component(
-        "kitControl:MultiVibrator",
-        "UpdatePulse",
-        properties={"period": update_cadence_ms},
-    )
-    b.add_component("kitControl:OneShot", "UpdateTrigger")
-    b.add_link("UpdatePulse", "out", "UpdateTrigger", "in")
+    # Limit Detection (driven by the Counter's output)
+    b.add_link("Counter", "out", "Hit_SPmax", "inA")
+    b.add_link("SPmax", "out", "Hit_SPmax", "inB")
+    b.add_link("Counter", "out", "Hit_SPmin", "inA")
+    b.add_link("SPmin", "out", "Hit_SPmin", "inB")
 
-    # Show UpdateMinutes converted to ms and wire to the MultiVibrator Period
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000_B", properties={"value": 60000.0}
-    )
-    b.add_component("kitControl:Multiply", "UpdateCadence_ms_Display")
-    b.add_numeric_writable("CalculatedUpdateCadence_ms")
-    b.add_link("UpdateMinutes", "out", "UpdateCadence_ms_Display", "inA")
-    b.add_link("Const_60000_B", "out", "UpdateCadence_ms_Display", "inB")
-    b.add_link("UpdateCadence_ms_Display", "out", "CalculatedUpdateCadence_ms", "in16")
-    b.add_link("CalculatedUpdateCadence_ms", "out", "UpdatePulse", "Period")
+    # Direction Latching Logic
+    b.add_link("Hit_SPmax", "out", "Hit_Any_Limit", "inA")
+    b.add_link("Hit_SPmin", "out", "Hit_Any_Limit", "inB")
+    b.add_link("Hit_Any_Limit", "out", "DirectionLatch", "clock")
+    b.add_link("Hit_SPmax", "out", "DirectionLatch", "in")
 
-    b.end_sub_folder()
+    # Routing the pulse to CountUp or CountDown
+    b.add_link("DirectionLatch", "out", "CountUp_Switch", "inSwitch")
+    b.add_link("DirectionLatch", "out", "CountDown_Switch", "inSwitch")
+    b.add_link("PulseGate", "out", "CountUp_Switch", "inFalse") # Count up when latch is false
+    b.add_link("PulseGate", "out", "CountDown_Switch", "inTrue") # Count down when latch is true
 
-    # ==========================================================================
-    # 4) TRIM/RESPOND WITH RATE LIMIT (per UpdateTrigger)
-    # ==========================================================================
-    b.start_sub_folder("TrimRespondLogic")
+    # Counter Wiring
+    b.add_link("Step", "out", "Counter", "countIncrement")
+    b.add_link("CountUp_Switch", "out", "Counter", "countUp")
+    b.add_link("CountDown_Switch", "out", "Counter", "countDown")
+    
+    # Reset Logic using Preset
+    b.add_link("Fan_Status", "out", "FanIsOff", "in")
+    b.add_link("ManualReset", "out", "ResetTrigger", "inA")
+    b.add_link("FanIsOff", "out", "ResetTrigger", "inB")
+    b.add_link("ResetTrigger", "out", "ResetOneShot", "in")
+    b.add_link("ResetOneShot", "out", "Counter", "presetValue") # Use preset action
+    b.add_link("SP0", "out", "Counter", "presetValue") # Link SP0 to presetValue
+    
+    # Final Output Selection
+    b.add_link("RunLogicEnable", "out", "FinalOutput_Switch", "inSwitch")
+    b.add_link("Counter", "out", "FinalOutput_Switch", "inTrue") # If running, use the counter value
+    b.add_link("SP0", "out", "FinalOutput_Switch", "inFalse") # If off or in delay, use SP0
+    b.add_link("FinalOutput_Switch", "out", "Output", "in16")
 
-    # Memory: current effective setpoint; seed with SP0 to avoid big first jump
-    b.add_component(
-        "kitControl:NumericLatch",
-        "CurrentSp_Latch",
-        properties={"out": {"value": sp0_default}},
-    )
-
-    # Are we in a RESPOND condition?
-    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
-    b.add_link("TotalRequests", "out", "IsRespondCondition", "inA")
-    b.add_link("Ignore", "out", "IsRespondCondition", "inB")
-
-    # RESPOND amount = SPres * max(0, TotalRequests - Ignore)
-    b.add_component("kitControl:Subtract", "ExcessRequests")
-    b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
-    b.add_link("Ignore", "out", "ExcessRequests", "inB")
-
-    b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
-    b.add_link("SPres", "out", "ProportionalResponse", "inB")
-
-    # Select TRIM vs RESPOND raw adjustment
-    b.add_numeric_switch("DesiredAdjustment_Switch")
-    b.add_link("IsRespondCondition", "out", "DesiredAdjustment_Switch", "inSwitch")
-    b.add_link("ProportionalResponse", "out", "DesiredAdjustment_Switch", "inTrue")
-    b.add_link("SPtrim", "out", "DesiredAdjustment_Switch", "inFalse")
-
-    # --- SLEW-RATE LIMIT: clamp desired adjustment to ±SPResMax per update tick
-    b.add_component(
-        "kitControl:NumericConst", "Const_Neg_1", properties={"value": -1.0}
-    )
-    b.add_component("kitControl:Multiply", "Neg_SPResMax")
-    b.add_component("kitControl:Maximum", "ClampLow")
-    b.add_component("kitControl:Minimum", "ClampHigh")
-
-    b.add_link("SPResMax", "out", "Neg_SPResMax", "inA")
-    b.add_link("Const_Neg_1", "out", "Neg_SPResMax", "inB")
-    b.add_link("DesiredAdjustment_Switch", "out", "ClampLow", "inA")
-    b.add_link("Neg_SPResMax", "out", "ClampLow", "inB")
-    b.add_link("ClampLow", "out", "ClampHigh", "inA")
-    b.add_link("SPResMax", "out", "ClampHigh", "inB")
-
-    # New (unclamped) setpoint uses the rate-limited adjustment
-    b.add_component("kitControl:Add", "NewSetpoint_Unclamped")
-    b.add_link("CurrentSp_Latch", "out", "NewSetpoint_Unclamped", "inA")
-    b.add_link("ClampHigh", "out", "NewSetpoint_Unclamped", "inB")
-
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 5) OUTPUT CLAMPING + LATCHED UPDATE
-    # ==========================================================================
-    b.start_sub_folder("OutputLogic")
-
-    # Clamp to [SPmin, SPmax]
-    b.add_component("kitControl:Minimum", "Clamp_Hi")
-    b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
-    b.add_link("SPmax", "out", "Clamp_Hi", "inB")
-
-    b.add_component("kitControl:Maximum", "Clamp_Lo")
-    b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
-    b.add_link("SPmin", "out", "Clamp_Lo", "inB")
-
-    b.add_numeric_writable("CalculatedSp")
-    b.add_link("Clamp_Lo", "out", "CalculatedSp", "in16")
-
-    # Latch updates only on UpdateTrigger AND RunLogicEnable
-    b.add_component("kitControl:And", "UpdateLatch_Clock")
-    b.add_link("RunLogicEnable", "out", "UpdateLatch_Clock", "inA")
-    b.add_link("UpdateTrigger", "out", "UpdateLatch_Clock", "inB")
-    b.add_link("CalculatedSp", "out", "CurrentSp_Latch", "in")
-    b.add_link("UpdateLatch_Clock", "out", "CurrentSp_Latch", "clock")
-
-    # Final mux: when not running / during startup, hold SP0
-    b.add_numeric_switch("FinalSp_Switch")
-    b.add_link("RunLogicEnable", "out", "FinalSp_Switch", "inSwitch")
-    b.add_link("CurrentSp_Latch", "out", "FinalSp_Switch", "inTrue")
-    b.add_link("SP0", "out", "FinalSp_Switch", "inFalse")
-
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 6) FINAL WIRING
-    # ==========================================================================
-    b.add_link("FinalSp_Switch", "out", "DischargeAirPressureSp_Out", "in16")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build a .bog for G36 Trim & Respond (enhanced)."
-    )
-    parser.add_argument(
-        "-o",
-        "--output_dir",
-        default="examples",
-        help="Directory to write the .bog file.",
-    )
-    args = parser.parse_args()
-
-    builder = BogFolderBuilder("G36_AHU_Duct_Static_Reset")
-    build_g36_graph(builder)
-
-    output_filename = "hvac_g36_ahu_duct_static_reset.bog"
+    # ---- Save ----
     os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, output_filename)
-    builder.save(out_path)
-    print(f"Created Niagara .bog at: {os.path.abspath(out_path)}")
+    out = os.path.join(args.output_dir, "g36_trim_respond_ping_pong.bog")
+    b.save(out)
+    print(f"Created Niagara .bog at: {os.path.abspath(out)}")
 
 
 if __name__ == "__main__":

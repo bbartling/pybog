@@ -379,7 +379,6 @@ class BogFolderBuilder:
         self,
         name: str,
         count_increment: float = 1.0,
-        initial_value: float = 0.0,
         precision: int | None = None,
         properties: dict | None = None,
     ) -> None:
@@ -391,8 +390,6 @@ class BogFolderBuilder:
             The component name.
         count_increment : float, optional
             The amount by which the counter increments on each tick.
-        initial_value : float, optional
-            The initial value of the counter when created.
         precision : int or None, optional
             Optional precision for display; if provided, it is rounded to an
             integer.
@@ -402,7 +399,6 @@ class BogFolderBuilder:
         """
         props = dict(properties or {})
         props.setdefault("countIncrement", count_increment)
-        props.setdefault("initialValue", initial_value)
         if precision is not None:
             props["precision"] = int(precision)
         self.add_component("kitControl:Counter", name, properties=props)
@@ -1150,7 +1146,27 @@ class BogFolderBuilder:
                     {"n": "period", "t": "b:RelTime", "v": str(per)},
                 )
             elif data["type"] == "kitControl:OneShot":
+                # Add the standard 'in' slot for the trigger
                 ET.SubElement(element, "p", {"n": "in", "f": "sL"})
+
+                # Get properties
+                props = data.get("properties", {})
+                
+                # Check if a 'time' property was explicitly provided
+                if 'time' in props:
+                    time = props.get("time")
+
+                    # Handle cases where properties might be passed in a nested dict
+                    if isinstance(time, dict):
+                        time = time.get("value")
+
+                    # Only add the element if a time value was actually found
+                    if time is not None:
+                         ET.SubElement(
+                            element,
+                            "p",
+                            {"n": "time", "t": "b:RelTime", "v": str(time)},
+                        )
             elif data["type"] == "kitControl:Counter":
                 props = data.get("properties", {})
                 out_slot = ET.SubElement(

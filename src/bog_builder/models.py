@@ -68,7 +68,7 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         "outputs": ["out"],
     },
     "kitControl:Counter": {
-        "inputs": ["countUp", "countDown", "countIncrement", "clear"],
+        "inputs": ["countUp", "countDown", "countIncrement", "clear", "presetValue"],
         "outputs": ["out"],
     },
     "kitControl:MultiVibrator": {"inputs": ["Period"], "outputs": ["out"]},
