@@ -336,56 +336,60 @@ This ensures the agent has direct access to all available example scripts, eithe
 
 ## Traversing Baja Object Graphs
 
-TODO RESEARCH:
+Niagara represents the contents of a station as a directed graph of objects and properties.
+When working with the raw XML stored inside `.bog` and `.dist` archives you are effectively traversing this graph.
 
-Niagara represents the contents of a station as a directed graph of
-objects and properties.  When working with the raw XML stored inside
-``.bog`` and ``.dist`` archives you are effectively traversing this
-graph.  The graph is not strictly hierarchical: components can have
-links and references to other components across folders, and cycles
-may exist in more complex projects.  The following best practices
-apply when traversing Baja object graphs programmatically:
+The graph is **not strictly hierarchical**: components can have links and references to other components across folders, and cycles may exist in more complex projects.
 
-* **Parse once, traverse many.**  Extract the ``file.xml`` contents
-  into an ``xml.etree.ElementTree`` and hold onto the root element.
-  Re‑parsing the XML repeatedly is expensive.
-* **Use breadth‑first or depth‑first search with a visited set.**
-  Each component element has a unique handle (the ``h`` attribute).
-  Keep a set of visited handles to avoid infinite loops when
-  following links and references.
-* **Follow both containment and link relationships.**  Components are
-  nested via ``<p h=...>`` elements, but logical connections are
-  represented via ``b:Link`` child elements.  To reconstruct the
-  full dependency graph you must consider both.
-* **Build a handle→name map.**  It is common to refer to components
-  by their handle in link definitions (e.g. ``s="h:123"``).  Create
-  a dictionary mapping ``h:<handle>`` strings to component names so
-  you can resolve these references during traversal.
-* **Be mindful of palettes.**  The ``type`` attribute on each
-  component encodes the palette and the block name (e.g.
-  ``kitControl:Add``).  Grouping components by palette can help
-  narrow your search or generate statistics.
+### Best Practices
 
-The ``Analyzer`` class in ``bog_builder.analyzer`` encapsulates these
-patterns.  It parses a station or BOG file, extracts a flat list of
-components along with their properties and links, and can build a
-handle map for you.  Beyond basic analysis, it includes helpers to
-count how many ``kitControl`` components of each type are used and
-generate visualisations of this data.  For example, to analyse a
-``.dist`` file and produce bar and pie charts summarising the
-kitControl blocks it contains:
+* **Parse once, traverse many.** Extract the `file.xml` contents into an `xml.etree.ElementTree` and hold onto the root element. Re-parsing repeatedly is expensive.
+* **Use breadth-first or depth-first search with a visited set.** Each component element has a unique handle (`h` attribute). Track visited handles to avoid infinite loops.
+* **Follow both containment and link relationships.** Components are nested via `<p h=...>` elements, but logical connections are represented with `b:Link` child elements.
+* **Build a handle → name map.** Handles (e.g. `s="h:123"`) are common in link definitions. Build a dictionary so you can resolve these references.
+* **Be mindful of palettes.** The `type` attribute encodes the palette and block name (e.g. `kitControl:Add`). Grouping by palette helps narrow searches or generate statistics.
+
+---
+
+## Analyzer Class
+
+The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
+
+* Parses a `.bog` or `.dist` archive and extracts a **flat JSON structure** of components, properties, and links.
+* Builds a **handle map** so you can resolve references by handle.
+* Provides helpers to **count kitControl blocks** and generate bar/pie charts.
+
+### Example Usage
+
+Analyse a `.dist` file, export JSON, and produce charts:
 
 ```bash
 python -m bog_builder.analyzer "/path/to/file.dist" \
   -o "/path/to/output.json" \
   --plots "/path/to/outputdir"
-
 ```
 
-This command writes JSON analysis to stdout, prints a sorted list of
-kitControl counts, and saves two images into ``analysis/plots``: one
-bar chart and one pie chart.  These charts can provide insight into
-which Niagara control blocks are most common in a given station.
+This will:
+
+* Save the JSON analysis into `output.json`.
+* Generate two PNGs in the `outputdir` folder:
+
+  * `kitcontrol_counts_bar.png`
+  * `kitcontrol_counts_pie.png`
+
+---
+
+## Example Output
+
+**Bar Chart (counts by block type)**
+![kitControl Bar](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_bar.png)
+
+**Pie Chart (distribution of block usage)**
+![kitControl Pie](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_pie.png)
+
+---
+
+👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
 
 ---
 
