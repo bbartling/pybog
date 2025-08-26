@@ -376,7 +376,10 @@ generate visualisations of this data.  For example, to analyse a
 kitControl blocks it contains:
 
 ```bash
-python -m bog_builder.analyzer path/to/station.dist --count --plots analysis/plots
+python -m bog_builder.analyzer "/path/to/file.dist" \
+  -o "/path/to/output.json" \
+  --plots "/path/to/outputdir"
+
 ```
 
 This command writes JSON analysis to stdout, prints a sorted list of

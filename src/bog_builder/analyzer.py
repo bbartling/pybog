@@ -1,15 +1,17 @@
-"""Tools for analysing Niagara .bog and .dist archives.
+# src/bog_builder/analyzer.py
+"""
+Tools for analysing Niagara .bog and .dist archives.
 
-This module provides an ``Analyzer`` class that can extract the
-component graph from Niagara BOG and DIST files, summarise the
-components into a JSON structure, and produce high‑level statistics
-about the usage of specific palettes such as ``kitControl``.  It also
-includes optional plotting helpers to visualise these statistics.
+- JSON analysis with components + handle_map (old tool behavior).
+- Optional kitControl counts and bar/pie charts (new behavior).
+- Can list archive contents.
+- Robust .bog/.dist parsing (handles file.xml or baja.bog.xml).
 
-The implementation is based on an original research tool.  It has
-been refactored and expanded to support additional use cases such as
-counting kitControl blocks and generating bar/pie charts showing
-how many of each block type are present in a given file.
+Usage examples:
+  python -m bog_builder.analyzer path/to/file.bog -o analysis.json
+  python -m bog_builder.analyzer path/to/station.dist --count
+  python -m bog_builder.analyzer path/to/file.bog --plots out/plots
+  python -m bog_builder.analyzer path/to/file.bog -l
 """
 
 from __future__ import annotations
@@ -23,43 +25,37 @@ import re
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
-
 import xml.etree.ElementTree as ET
 
 try:
     import matplotlib
-
-    matplotlib.use("Agg")  # Use a non‑interactive backend for headless environments
+    matplotlib.use("Agg")  # headless-friendly
     import matplotlib.pyplot as plt  # type: ignore
 except Exception:
-    plt = None  # Charting will be unavailable if matplotlib cannot be imported
+    plt = None  # plotting optional
 
+
+# ----------------------------- Analyzer -----------------------------
 
 class Analyzer:
-    """Parse and analyse Niagara archive files.
-
-    The class accepts a path to either a ``.bog`` or ``.dist`` file and
-    extracts the underlying ``file.xml``.  It then walks the element
-    tree to build a JSON representation of components, their types,
-    properties and links.  Convenience methods are provided to count
-    components by palette and to produce visualisations of these counts.
+    """
+    Parse and analyse Niagara .bog or .dist files and produce:
+      - JSON tree (components, links, properties, handle_map)
+      - kitControl component counts
+      - optional plots (bar/pie) of kitControl usage
     """
 
     def __init__(self, file_path: str | Path, debug: bool = False) -> None:
         self.file_path: str = str(file_path)
-        self.debug = debug
+        self.debug: bool = debug
         self.xml_root: ET.Element | None = None
-        self.analysis_title = "Niagara Analysis"
+        self.analysis_title: str = "Niagara Analysis"
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _get_value_from_node(self, node: ET.Element) -> str | None:
-        """Return the value for a property node.
+    # ------------------------- internal helpers -------------------------
 
-        The value may be stored in the ``v`` attribute or as text content.
-        If neither is present ``None`` is returned.
-        """
+    @staticmethod
+    def _get_value_from_node(node: ET.Element) -> str | None:
+        """Value may be in 'v' attr or node text."""
         if "v" in node.attrib:
             return node.attrib["v"]
         text = node.text
@@ -68,24 +64,20 @@ class Analyzer:
         return None
 
     def list_archive_contents(self) -> List[str]:
-        """Return the list of files contained in the archive without processing it."""
+        """List raw files in the archive."""
         if not os.path.exists(self.file_path):
-            raise FileNotFoundError(
-                f"The specified file does not exist: {self.file_path}"
-            )
+            raise FileNotFoundError(f"File not found: {self.file_path}")
         if not zipfile.is_zipfile(self.file_path):
-            raise ValueError(f"File is not a valid archive: {self.file_path}")
-        with zipfile.ZipFile(self.file_path, "r") as archive:
-            return archive.namelist()
+            raise ValueError(f"Not a valid ZIP archive: {self.file_path}")
+        with zipfile.ZipFile(self.file_path, "r") as zf:
+            return zf.namelist()
 
     def _process_file(self) -> None:
-        """Load and parse the file.xml from a .bog or .dist archive."""
         if self.xml_root is not None:
             return
         if not os.path.exists(self.file_path):
-            raise FileNotFoundError(
-                f"The specified file does not exist: {self.file_path}"
-            )
+            raise FileNotFoundError(f"File not found: {self.file_path}")
+
         if self.file_path.endswith(".bog"):
             self.analysis_title = "Niagara BOG File Analysis"
             self._parse_bog_file()
@@ -93,35 +85,48 @@ class Analyzer:
             self.analysis_title = "Niagara Station Analysis"
             self._parse_dist_file()
         else:
-            raise ValueError(
-                "Unsupported file type. Please provide a .bog or .dist file."
-            )
+            raise ValueError("Unsupported file type (use .bog or .dist).")
 
-    def _get_xml_content_from_bytes(self, xml_bytes: bytes) -> str:
-        """Decode raw XML bytes, trying UTF-8 first and falling back to Latin-1."""
+    @staticmethod
+    def _decode_bytes(xml_bytes: bytes) -> str:
         try:
             return xml_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
             return xml_bytes.decode("latin-1")
 
+    @staticmethod
+    def _find_xml_member(members: Iterable[str]) -> str | None:
+        """
+        Return the likely XML entry name inside a .bog:
+        prefer 'file.xml', otherwise 'baja.bog.xml', otherwise first .xml.
+        """
+        names = list(members)
+        for preferred in ("file.xml", "baja.bog.xml"):
+            if preferred in names:
+                return preferred
+        for n in names:
+            if n.lower().endswith(".xml"):
+                return n
+        return None
+
     def _parse_bog_file(self) -> None:
-        """Extract file.xml from a .bog archive and parse it into an ElementTree."""
         try:
             with zipfile.ZipFile(self.file_path, "r") as bog_zip:
-                xml_bytes = bog_zip.read("file.xml")
-                xml_content = self._get_xml_content_from_bytes(xml_bytes)
+                xml_entry = self._find_xml_member(bog_zip.namelist())
+                if not xml_entry:
+                    raise ValueError("Could not locate an XML entry in the .bog.")
+                xml_bytes = bog_zip.read(xml_entry)
+                xml_content = self._decode_bytes(xml_bytes)
                 self.xml_root = ET.fromstring(xml_content)
+                if self.debug:
+                    print(f"[Analyzer] Parsed {xml_entry} from .bog")
         except zipfile.BadZipFile:
-            raise ValueError(f"File is not a valid .bog (ZIP) file: {self.file_path}")
-        except KeyError:
-            raise ValueError("The .bog file does not contain a 'file.xml' entry.")
+            raise ValueError(f"Invalid .bog (ZIP) file: {self.file_path}")
 
     def _parse_dist_file(self) -> None:
-        """Extract the embedded config.bog from a .dist archive and parse its file.xml."""
         if not zipfile.is_zipfile(self.file_path):
-            raise ValueError(
-                f"File is not a valid .dist (ZIP) file or may be corrupted: {self.file_path}"
-            )
+            raise ValueError(f"Invalid .dist (ZIP) file: {self.file_path}")
+
         pattern = re.compile(
             r"niagara_user_home/stations/[^/]+/config\.bog$", re.IGNORECASE
         )
@@ -132,235 +137,213 @@ class Analyzer:
                     config_bog_path = path
                     break
             if not config_bog_path:
-                raise FileNotFoundError(
-                    "Could not find a main config.bog inside the .dist archive."
-                )
+                raise FileNotFoundError("config.bog not found inside .dist")
+
             with dist_zip.open(config_bog_path) as config_bog_file:
                 config_bog_data = config_bog_file.read()
+
         with zipfile.ZipFile(io.BytesIO(config_bog_data), "r") as config_bog_zip:
-            if "file.xml" not in config_bog_zip.namelist():
-                raise FileNotFoundError("file.xml not found inside config.bog.")
-            xml_bytes = config_bog_zip.read("file.xml")
-            xml_content = self._get_xml_content_from_bytes(xml_bytes)
+            xml_entry = self._find_xml_member(config_bog_zip.namelist())
+            if not xml_entry:
+                raise FileNotFoundError("No XML entry inside config.bog")
+            xml_content = self._decode_bytes(config_bog_zip.read(xml_entry))
             self.xml_root = ET.fromstring(xml_content)
+            if self.debug:
+                print(f"[Analyzer] Parsed {xml_entry} from config.bog")
+
         self.analysis_title = "Niagara Station Analysis (config.bog)"
 
     def _extract_all_components(
         self, start_element: ET.Element
     ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
-        """Walk the XML tree and extract all component definitions.
-
-        Each component is represented as a dictionary with keys:
-        ``name``, ``type``, ``links`` and ``properties``.  Links are
-        extracted as a list of dictionaries containing source ord, source
-        slot and target slot.  A mapping from handle identifiers to
-        component names is also returned.
+        """
+        Extract all <p h="..."> components, their links, and basic properties.
+        Returns (components, handle_to_name_map).
         """
         components: List[Dict[str, Any]] = []
         handle_to_name_map: Dict[str, str] = {}
+
         for comp_element in start_element.findall(".//p[@h]"):
             comp_name = comp_element.get("n")
             comp_handle = comp_element.get("h")
-            if comp_name and comp_handle:
-                handle_to_name_map[f"h:{comp_handle}"] = comp_name
-                component: Dict[str, Any] = {
-                    "name": comp_name,
-                    "type": comp_element.get("t"),
-                    "links": [],
-                    "properties": {},
-                }
-                for link_element in comp_element.findall('.//p[@t="b:Link"]'):
-                    link_data = {
-                        "source_ord": link_element.find('p[@n="sourceOrd"]').get("v"),
-                        "source_slot": link_element.find('p[@n="sourceSlotName"]').get(
-                            "v"
-                        ),
-                        "target_slot": link_element.find('p[@n="targetSlotName"]').get(
-                            "v"
-                        ),
+            if not (comp_name and comp_handle):
+                continue
+
+            handle_to_name_map[f"h:{comp_handle}"] = comp_name
+            comp: Dict[str, Any] = {
+                "name": comp_name,
+                "type": comp_element.get("t"),
+                "links": [],
+                "properties": {},
+            }
+
+            # Links (standard b:Link)
+            for link_element in comp_element.findall('.//p[@t="b:Link"]'):
+                # Some files may miss one child; be defensive
+                def _getv(tag: str) -> str:
+                    elem = link_element.find(f'p[@n="{tag}"]')
+                    return elem.get("v") if elem is not None and "v" in elem.attrib else ""
+
+                comp["links"].append(
+                    {
+                        "source_ord": _getv("sourceOrd"),
+                        "source_slot": _getv("sourceSlotName"),
+                        "target_slot": _getv("targetSlotName"),
                     }
-                    component["links"].append(link_data)
-                for prop in comp_element.findall("p"):
-                    prop_name = prop.attrib.get("n")
-                    if not prop_name:
-                        continue
-                    prop_val = self._get_value_from_node(prop)
-                    component["properties"][prop_name] = prop_val
-                components.append(component)
+                )
+
+            # Shallow property snapshot (n/v or text)
+            for prop in comp_element.findall("p"):
+                prop_name = prop.attrib.get("n")
+                if not prop_name:
+                    continue
+                prop_val = self._get_value_from_node(prop)
+                comp["properties"][prop_name] = prop_val
+
+            components.append(comp)
+
         return components, handle_to_name_map
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-    def generate_analysis_data(self) -> Dict[str, Any] | None:
-        """Return a structured representation of the archive contents.
+    # ----------------------------- public API -----------------------------
 
-        The returned dictionary has keys ``title``, ``source``, ``components``
-        and ``handle_map``.  Use this method if you need to inspect
-        individual components or serialise the entire analysis to JSON.
-        """
+    def generate_analysis_data(self) -> Dict[str, Any] | None:
+        """Return dict with title, source, components, handle_map."""
         self._process_file()
         if self.xml_root is None:
             return None
-        components, handle_map = self._extract_all_components(self.xml_root)
+        comps, handles = self._extract_all_components(self.xml_root)
         return {
             "title": self.analysis_title,
             "source": os.path.basename(self.file_path),
-            "components": components,
-            "handle_map": handle_map,
+            "components": comps,
+            "handle_map": handles,
         }
 
     def save_analysis_to_file(
         self, analysis_data: Dict[str, Any], output_file: str | Path
     ) -> None:
-        """Persist the analysis data to disk as JSON."""
         out_path = Path(output_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(analysis_data, f, indent=2)
         if self.debug:
-            print(f"Analysis saved to {out_path}")
+            print(f"[Analyzer] JSON saved to {out_path}")
 
-    # ------------------------------------------------------------------
-    # Statistics and plotting
-    # ------------------------------------------------------------------
+    # ---------------------- stats & plotting helpers ----------------------
+
     def count_kitcontrol_components(self) -> Dict[str, int]:
-        """Return a case‑sensitive count of ``kitControl`` component types.
-
-        Components whose ``type`` attribute begins with ``"kitControl:"``
-        are grouped by their type name (the portion after the colon).
-        For example ``"kitControl:Add"`` contributes to the ``"Add"``
-        bucket.  The counts are returned as a normal dict sorted by
-        descending frequency for convenience.
-        """
+        """Count kitControl:* types (bucketed by the type after the colon)."""
         analysis = self.generate_analysis_data()
         if not analysis:
             return {}
         counts = collections.Counter()
         for comp in analysis["components"]:
-            comp_type = comp.get("type")
-            if not comp_type:
-                continue
-            if not comp_type.startswith("kitControl:"):
-                continue
-            _, type_name = comp_type.split(":", 1)
-            counts[type_name] += 1
+            t = comp.get("type") or ""
+            if t.startswith("kitControl:"):
+                _, name = t.split(":", 1)
+                counts[name] += 1
         return dict(counts.most_common())
 
     def plot_kitcontrol_counts(self, output_dir: str | Path) -> List[str]:
-        """Generate bar and pie charts of kitControl usage.
-
-        Two PNG files will be written into the provided ``output_dir``:
-        ``kitcontrol_counts_bar.png`` and ``kitcontrol_counts_pie.png``.
-        The function returns a list of the file paths created.  If
-        matplotlib is not installed ``ValueError`` is raised.
-        """
+        """Write bar and pie charts to output_dir; return list of file paths."""
         if plt is None:
             raise ValueError("matplotlib is required for plotting but is not available")
         counts = self.count_kitcontrol_components()
         if not counts:
             raise ValueError("No kitControl components found to plot")
+
         names = list(counts.keys())
         values = list(counts.values())
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        created_files: List[str] = []
 
-        # Bar chart
-        fig_bar, ax_bar = plt.subplots(figsize=(max(6, len(names) * 0.4), 4))
-        ax_bar.bar(range(len(names)), values, color="skyblue")
-        ax_bar.set_title("kitControl Component Usage (Bar)")
-        ax_bar.set_xlabel("Component Type")
-        ax_bar.set_ylabel("Count")
-        # Set ticks and labels separately to avoid FixedFormatter warnings
-        ax_bar.set_xticks(range(len(names)))
-        ax_bar.set_xticklabels(names, rotation=45, ha="right")
-        fig_bar.tight_layout()
-        bar_file = output_path / "kitcontrol_counts_bar.png"
-        fig_bar.savefig(bar_file)
-        created_files.append(str(bar_file))
-        plt.close(fig_bar)
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Pie chart
-        fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
-        ax_pie.pie(values, labels=names, autopct="%1.1f%%", startangle=90)
-        ax_pie.set_title("kitControl Component Usage (Pie)")
-        pie_file = output_path / "kitcontrol_counts_pie.png"
-        fig_pie.savefig(pie_file)
-        created_files.append(str(pie_file))
-        plt.close(fig_pie)
+        created: List[str] = []
+
+        # Bar
+        fig_b, ax_b = plt.subplots(figsize=(max(6, len(names) * 0.45), 4))
+        ax_b.bar(range(len(names)), values)
+        ax_b.set_title("kitControl Component Usage (Bar)")
+        ax_b.set_xlabel("Component Type")
+        ax_b.set_ylabel("Count")
+        ax_b.set_xticks(range(len(names)))
+        ax_b.set_xticklabels(names, rotation=45, ha="right")
+        fig_b.tight_layout()
+        f_bar = out_dir / "kitcontrol_counts_bar.png"
+        fig_b.savefig(f_bar)
+        plt.close(fig_b)
+        created.append(str(f_bar))
+
+        # Pie
+        fig_p, ax_p = plt.subplots(figsize=(5, 5))
+        ax_p.pie(values, labels=names, autopct="%1.1f%%", startangle=90)
+        ax_p.set_title("kitControl Component Usage (Pie)")
+        f_pie = out_dir / "kitcontrol_counts_pie.png"
+        fig_p.savefig(f_pie)
+        plt.close(fig_p)
+        created.append(str(f_pie))
 
         if self.debug:
-            print(f"Created plots: {created_files}")
-        return created_files
+            print(f"[Analyzer] Created plots: {created}")
+        return created
 
 
-# ----------------------------------------------------------------------
-# CLI entry point
-# ----------------------------------------------------------------------
+# ----------------------------- CLI entry -----------------------------
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Analyze Niagara .bog or .dist files and optionally plot kitControl usage statistics."
+        description="Analyze Niagara .bog or .dist files; emit JSON; count/plot kitControl usage."
     )
-    parser.add_argument("file_path", help="Path to the .bog or .dist file to analyse.")
+    parser.add_argument("file_path", help="Path to the .bog or .dist file.")
+    parser.add_argument("-o", "--output_file", help="Write JSON analysis to this path.")
     parser.add_argument(
-        "-o", "--output_file", help="Path to save the JSON analysis file."
-    )
-    parser.add_argument(
-        "-l",
-        "--list_contents",
-        action="store_true",
-        help="List contents of the archive and exit.",
+        "-l", "--list_contents", action="store_true", help="List archive contents and exit."
     )
     parser.add_argument(
-        "-c",
-        "--count",
-        action="store_true",
-        help="Print a count of kitControl component types.",
+        "-c", "--count", action="store_true", help="Print kitControl component counts."
     )
     parser.add_argument(
-        "-p",
-        "--plots",
-        help="Directory where bar and pie charts of kitControl usage should be saved.",
+        "-p", "--plots", help="Directory to write bar/pie charts of kitControl usage."
     )
     parser.add_argument(
-        "-d",
-        "--debug",
-        action="store_true",
-        help="Enable debug logging during analysis.",
+        "-d", "--debug", action="store_true", help="Enable debug prints."
     )
     args = parser.parse_args()
 
     analyzer = Analyzer(args.file_path, debug=args.debug)
+
     if args.list_contents:
-        for name in analyzer.list_archive_contents():
-            print(name)
+        for n in analyzer.list_archive_contents():
+            print(n)
         return
-    # Always generate analysis data
-    analysis_data = analyzer.generate_analysis_data()
-    if analysis_data is None:
+
+    analysis = analyzer.generate_analysis_data()
+    if analysis is None:
         print("No analysis data generated.")
         return
+
     if args.output_file:
-        analyzer.save_analysis_to_file(analysis_data, args.output_file)
+        analyzer.save_analysis_to_file(analysis, args.output_file)
     else:
-        # If an output file is not specified and no other action requested, print to stdout
+        # If no JSON path and no other actions, print JSON to stdout
         if not (args.count or args.plots):
-            print(json.dumps(analysis_data, indent=2))
+            print(json.dumps(analysis, indent=2))
+
     if args.count:
         counts = analyzer.count_kitcontrol_components()
         if counts:
             print("kitControl component counts:")
-            for comp_type, count in counts.items():
-                print(f"{comp_type}: {count}")
+            for k, v in counts.items():
+                print(f"{k}: {v}")
         else:
             print("No kitControl components found.")
+
     if args.plots:
         try:
             files = analyzer.plot_kitcontrol_counts(args.plots)
             print("Generated plot files:")
-            for f in files:
-                print(f"- {f}")
+            for p in files:
+                print(f"- {p}")
         except Exception as exc:
             print(f"Failed to generate plots: {exc}")
 
