@@ -1,105 +1,160 @@
 """
-Ping-Pong Counter Algorithm (Configurable Timer)
+Custom Ping-Pong Algorithm (G36 Style)
 
-This script demonstrates a G36-style trim-and-respond scaffold. A counter
-oscillates between a high and low limit, driven by a periodic pulse from a
-MultiVibrator.
+This script implements a robust "ping-pong" or oscillating counter using
+fundamental logic blocks, avoiding the kitControl:Counter component. This
+is a reliable pattern for creating custom accumulators and control logic.
 
-This version includes a top-level NumericWritable 'UpdateSeconds' that is
-used to configure the MultiVibrator's period when the .bog file is generated.
-The conversion from seconds to milliseconds is also shown on the wiresheet
-for documentation purposes.
+Its also the fundamnental building blocks to G36 T&R algorithms on real hvac.
 
-A TRUE G36 algorithm will combine compontents of rate_of_change_limiter.py and
-the ping_pong_algorithm example. Please reference both of these as they are
-thoroughly tested!
+Algorithm Overview:
+1.  When 'Enable' goes true, a startup delay begins.
+2.  During this delay, the output is held at the 'InitialValue'.
+3.  After the delay, the main logic is enabled.
+4.  A periodic timer pulses every 'UpdateIntervalSeconds'.
+5.  On each pulse, the logic adds or subtracts the 'Step' value from the
+    current output. The direction is determined by a BooleanLatch.
+6.  When the output hits the 'UpperLimit' or 'LowerLimit', the
+    BooleanLatch flips, reversing the counting direction.
+7.  The core of the logic is a NumericLatch which acts as the memory,
+    storing the accumulated value between pulses.
 """
 
-import os, argparse
+import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Ping-pong with a configurable MultiVibrator"
+    p = argparse.ArgumentParser(
+        description="Custom ping-pong counter using a NumericLatch."
     )
-    ap.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for .bog"
-    )
-    args = ap.parse_args()
+    p.add_argument("-o", "--output_dir", default="examples")
+    args = p.parse_args()
 
-    b = BogFolderBuilder("PingPongAlgorithm", debug=True)
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # ---- Top-level I/O and Configuration ----
-    b.add_boolean_writable("ManualReset", default_value=False)
-    b.add_boolean_writable("Enabled", default_value=True)
-    b.add_numeric_writable("Step", default_value=1.05)
-    b.add_numeric_writable("TopLimit", default_value=20.0)
-    b.add_numeric_writable("LowLimit", default_value=-20.0)
-    b.add_numeric_writable("Output")
+    b = BogFolderBuilder("PingPongAlgorithm")
 
-    UpdateSeconds_default = 2.0
-    b.add_numeric_writable("UpdateSeconds", default_value=UpdateSeconds_default)
+    # --- Top-level I/O and Configuration ---
+    b.add_boolean_writable("Enable", default_value=False)
+    b.add_numeric_writable("InitialValue", default_value=1.0, precision=2)
+    b.add_numeric_writable("UpperLimit", default_value=5.0, precision=2)
+    b.add_numeric_writable("LowerLimit", default_value=-5.0, precision=2)
+    b.add_numeric_writable("Step", default_value=0.25, precision=2)
+    b.add_numeric_writable("UpdateIntervalSeconds", default_value=1.0)
+    b.add_numeric_writable("StartupDelaySeconds", default_value=5.0)
+    b.add_numeric_writable("OutputViewer", 0.0, precision=2)
 
-    # ---- Logic subfolder ----
+    # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component(
-        "kitControl:MultiVibrator",
-        "MultiVibrator",
-        properties={"period": str(int(UpdateSeconds_default * 1000))},
-    )
+
+    # State Management (Startup Delay)
+    b.add_component("kitControl:BooleanDelay", "StartupDelay")
+    b.add_component("kitControl:And", "RunLogicEnable")
     b.add_component(
         "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
     )
-    b.add_component("kitControl:Multiply", "Update_ms_Display")
-    b.add_numeric_writable("CalculatedPeriod_ms")
-    b.add_component("kitControl:OneShot", "FireOneShot")
-    b.add_component("kitControl:And", "And")
-    b.add_component("kitControl:Counter", "Counter")
-    b.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
-    b.add_component("kitControl:LessThanEqual", "LessThanEq")
-    b.add_component("kitControl:Or", "Or1")
-    b.add_component("kitControl:BooleanLatch", "BooleanLatch")
-    b.add_boolean_switch("CountDown")
-    b.add_boolean_switch("CountUp")
-    b.add_component("kitControl:OneShot", "ResetOneShot")
+    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+
+    # Update Timer
+    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    b.add_component("kitControl:Multiply", "Update_ms_Calc")
+    b.add_component("kitControl:OneShot", "UpdatePulse")
+    b.add_component("kitControl:And", "PulseGate")
+
+    # Custom Counter Core
+    b.add_component("kitControl:NumericLatch", "ValueLatch")
+    b.add_component("kitControl:Add", "AddStep")
+    b.add_component("kitControl:Subtract", "SubtractStep")
+    b.add_numeric_switch("DirectionSwitch")
+    b.add_numeric_switch("FinalOutputSwitch")
+
+    # Direction Control Logic
+    b.add_component("kitControl:GreaterThanEqual", "HitUpperLimit")
+    b.add_component("kitControl:LessThanEqual", "HitLowerLimit")
+    b.add_component("kitControl:Or", "HitAnyLimit")
+    b.add_component("kitControl:BooleanLatch", "DirectionLatch")
 
     b.end_sub_folder()
 
-    # ---- Wiring ----
-    b.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
-    b.add_link("Const_1000", "out", "Update_ms_Display", "inB")
-    b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-    b.add_link(
-        "CalculatedPeriod_ms", "out", "MultiVibrator", "Period"
-    )  # <------ broken
-    b.add_link("MultiVibrator", "out", "FireOneShot", "in")
-    b.add_link("FireOneShot", "out", "And", "inA")
-    b.add_link("Enabled", "out", "And", "inB")
-    b.add_link("Step", "out", "Counter", "countIncrement")
-    b.add_link("ManualReset", "out", "ResetOneShot", "in")
-    b.add_link("ResetOneShot", "out", "Counter", "clear")
-    b.add_link("Counter", "out", "Output", "in16")
-    b.add_link("Counter", "out", "GreaterThanEq", "inA")
-    b.add_link("TopLimit", "out", "GreaterThanEq", "inB")
-    b.add_link("Counter", "out", "LessThanEq", "inA")
-    b.add_link("LowLimit", "out", "LessThanEq", "inB")
-    b.add_link("GreaterThanEq", "out", "Or1", "inA")
-    b.add_link("LessThanEq", "out", "Or1", "inB")
-    b.add_link("Or1", "out", "BooleanLatch", "clock")
-    b.add_link("GreaterThanEq", "out", "BooleanLatch", "in")
-    b.add_link("BooleanLatch", "out", "CountDown", "inSwitch")
-    b.add_link("BooleanLatch", "out", "CountUp", "inSwitch")
-    b.add_link("And", "out", "CountDown", "inTrue")
-    b.add_link("And", "out", "CountUp", "inFalse")
-    b.add_link("CountDown", "out", "Counter", "countDown")
-    b.add_link("CountUp", "out", "Counter", "countUp")
+    # --- Wiring ---
 
-    # ---- Save ----
+    # State Management & Startup Delay
+    b.add_link("Enable", "out", "StartupDelay", "in")
+    b.add_link("StartupDelaySeconds", "out", "Delay_ms_Calc", "inA")
+    b.add_link("Const_1000", "out", "Delay_ms_Calc", "inB")
+    b.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+    b.add_link("Enable", "out", "RunLogicEnable", "inA")
+    b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
+
+    # Timer
+    b.add_link("UpdateIntervalSeconds", "out", "Update_ms_Calc", "inA")
+    b.add_link("Const_1000", "out", "Update_ms_Calc", "inB")
+    b.add_link(
+        "Update_ms_Calc",
+        "out",
+        "UpdateTimer",
+        "Period",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+    b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
+    b.add_link("UpdatePulse", "out", "PulseGate", "inA")
+    b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
+
+    # Limit Detection (feedback from final output)
+    b.add_link("FinalOutputSwitch", "out", "HitUpperLimit", "inA")
+    b.add_link("UpperLimit", "out", "HitUpperLimit", "inB")
+    b.add_link("FinalOutputSwitch", "out", "HitLowerLimit", "inA")
+    b.add_link("LowerLimit", "out", "HitLowerLimit", "inB")
+
+    # Direction Latching
+    b.add_link("HitUpperLimit", "out", "HitAnyLimit", "inA")
+    b.add_link("HitLowerLimit", "out", "HitAnyLimit", "inB")
+    b.add_link("HitAnyLimit", "out", "DirectionLatch", "clock")
+    b.add_link(
+        "HitUpperLimit", "out", "DirectionLatch", "in"
+    )  # Count down when we hit the top
+
+    # Calculation Logic
+    b.add_link("FinalOutputSwitch", "out", "AddStep", "inA")
+    b.add_link("Step", "out", "AddStep", "inB")
+    b.add_link("FinalOutputSwitch", "out", "SubtractStep", "inA")
+    b.add_link("Step", "out", "SubtractStep", "inB")
+
+    # Direction Selection
+    b.add_link("DirectionLatch", "out", "DirectionSwitch", "inSwitch")
+    b.add_link(
+        "SubtractStep", "out", "DirectionSwitch", "inTrue"
+    )  # If latch is true (hit top), subtract
+    b.add_link(
+        "AddStep", "out", "DirectionSwitch", "inFalse"
+    )  # If latch is false (hit bottom), add
+
+    # Latching the new value
+    b.add_link("DirectionSwitch", "out", "ValueLatch", "in")
+    b.add_link("PulseGate", "out", "ValueLatch", "clock")
+
+    # Final Output Selection
+    b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
+    b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
+    b.add_link("InitialValue", "out", "FinalOutputSwitch", "inFalse")
+
+    # Wire to Viewer
+    b.add_link("FinalOutputSwitch", "out", "OutputViewer", "in16")
+
+    # Save
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "ping_pong_configurable_timer.bog")
-    b.save(out)
-    print(f"Created Niagara .bog at: {os.path.abspath(out)}")
+    b.save(output_path)
 
 
 if __name__ == "__main__":

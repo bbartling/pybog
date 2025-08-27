@@ -416,20 +416,66 @@ class BogFolderBuilder:
         link_type: str = "b:Link",
         converter_type: str | None = None,
     ) -> None:
-        """Adds a validated link between two components.
+        """Adds a validated link between two components."""
 
-        This method checks that the source and target components exist, validates
-        the format of the link via a Pydantic model, and ensures that slot names
-        match the expected inputs/outputs for the respective component types when
-        a slot map is available.  If the link crosses a folder boundary, a flag
-        is stored on the link record for annotation.
+        s_type = self._components.get(source_comp_name, {}).get("type", "")
+        t_type = self._components.get(target_comp_name, {}).get("type", "")
 
-        Raises
-        ------
-        ValueError
-            If the link definition or slot names are invalid, or if either
-            component cannot be found.
-        """
+        # --- START OF CORRECTED LOGIC ---
+        # A more robust list of component types that output a numeric value.
+        numeric_source_types = [
+            "control:NumericWritable",
+            "kitControl:NumericConst",
+            "kitControl:Add",
+            "kitControl:Subtract",
+            "kitControl:Multiply",
+            "kitControl:Divide",
+            "kitControl:Average",
+            "kitControl:Minimum",
+            "kitControl:Maximum",
+            "kitControl:SineWave",
+            "kitControl:Counter",
+            "kitControl:NumericLatch",
+            "kitControl:NumericSwitch",
+            "kitControl:NumericSelect",
+        ]
+
+        # Check if the source type is in our list of numeric producers.
+        if (
+            s_type in numeric_source_types
+            and t_type == "kitControl:MultiVibrator"
+            and target_slot.lower() == "period"
+        ):
+            if self.debug:
+                print(
+                    "[BOG BUILDER DEBUG] Applying special dual-link for MultiVibrator period."
+                )
+
+            # 1. Add the standard b:Link to the uppercase 'Period' slot
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": "Period",  # Uppercase
+                    "link_type": "b:Link",
+                    "converter_type": None,
+                }
+            )
+            # 2. Add the b:ConversionLink to the lowercase 'period' property
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": "period",  # Lowercase
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToRelTime",
+                }
+            )
+            return  # Exit after handling the special case
+        # --- END OF CORRECTED LOGIC ---
+
         try:
             link_def = LinkDefinition(
                 source_name=source_comp_name,
@@ -447,8 +493,7 @@ class BogFolderBuilder:
             raise ValueError(
                 f"Target component '{link_def.target_name}' not found. Make sure it is created before linking."
             )
-        s_type = self._components[link_def.source_name]["type"]
-        t_type = self._components[link_def.target_name]["type"]
+
         s_slots = COMPONENT_SLOT_MAP.get(s_type)
         t_slots = COMPONENT_SLOT_MAP.get(t_type)
         if s_slots and link_def.source_slot not in s_slots.get("outputs", []):
@@ -459,7 +504,6 @@ class BogFolderBuilder:
         if t_slots:
             if "inputs" in t_slots:
                 valid_inputs = t_slots.get("inputs", [])
-                # If no valid inputs are specified, don't perform validation
                 if valid_inputs and link_def.target_slot not in valid_inputs:
                     raise ValueError(
                         f"Invalid target slot '{link_def.target_slot}' for component '{link_def.target_name}' of type '{t_type}'. "
@@ -469,17 +513,19 @@ class BogFolderBuilder:
             self._component_to_folder[link_def.source_name]
             == self._component_to_folder[link_def.target_name]
         )
-        self._add_direct_link(
-            link_def.source_name,
-            link_def.source_slot,
-            link_def.target_name,
-            link_def.target_slot,
-        )
-        if link_type != "b:Link" or converter_type is not None:
-            self._links[-1]["link_type"] = link_type
-            self._links[-1]["converter_type"] = converter_type
+
+        link_data = {
+            "source_name": source_comp_name,
+            "source_slot": source_slot,
+            "target_name": target_comp_name,
+            "target_slot": target_slot,
+            "link_type": link_type,
+            "converter_type": converter_type,
+        }
         if not same_folder:
-            self._links[-1]["cross_folder"] = True
+            link_data["cross_folder"] = True
+
+        self._links.append(link_data)
 
     # ------------------------------------------------------------------
     # Reduction blocks
@@ -833,9 +879,27 @@ class BogFolderBuilder:
             and t_type == "kitControl:MultiVibrator"
             and target_slot.lower() == "period"
         ):
-            link_type = "b:ConversionLink"
-            converter_type = "conv:StatusNumericToRelTime"
-            target_slot = "period"
+            self._links.append(
+                {
+                    "source_name": source_name,
+                    "source_slot": source_slot,
+                    "target_name": target_name,
+                    "target_slot": "period",  # Lowercase target
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToRelTime",
+                }
+            )
+            self._links.append(
+                {
+                    "source_name": source_name,
+                    "source_slot": source_slot,
+                    "target_name": target_name,
+                    "target_slot": "Period",  # Uppercase target
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToRelTime",
+                }
+            )
+            return
 
         elif "Enum" in s_type and t_type in (
             "kitControl:Equal",
@@ -1143,7 +1207,7 @@ class BogFolderBuilder:
                 ET.SubElement(
                     element,
                     "p",
-                    {"n": "period", "t": "b:RelTime", "v": str(per)},
+                    {"n": "period", "f": "L", "t": "b:RelTime", "v": str(per)},
                 )
             elif data["type"] == "kitControl:OneShot":
                 # Add the standard 'in' slot for the trigger
@@ -1151,9 +1215,9 @@ class BogFolderBuilder:
 
                 # Get properties
                 props = data.get("properties", {})
-                
+
                 # Check if a 'time' property was explicitly provided
-                if 'time' in props:
+                if "time" in props:
                     time = props.get("time")
 
                     # Handle cases where properties might be passed in a nested dict
@@ -1162,38 +1226,46 @@ class BogFolderBuilder:
 
                     # Only add the element if a time value was actually found
                     if time is not None:
-                         ET.SubElement(
+                        ET.SubElement(
                             element,
                             "p",
                             {"n": "time", "t": "b:RelTime", "v": str(time)},
                         )
             elif data["type"] == "kitControl:Counter":
                 props = data.get("properties", {})
+
+                # Create the 'out' slot
                 out_slot = ET.SubElement(
                     element, "p", {"n": "out", "f": "s", "t": "b:StatusNumeric"}
                 )
-                init_out = props.get("outValue")
-                if init_out is not None:
-                    prec = props.get("precision")
-                    if prec is not None:
-                        try:
-                            init_out = round(float(init_out), int(prec))
-                        except Exception:
-                            pass
-                    ET.SubElement(out_slot, "p", {"n": "value", "v": str(init_out)})
-                precision = props.get("precision")
-                if precision is not None:
+                if props.get("outValue") is not None:
                     ET.SubElement(
-                        out_slot, "p", {"n": "precision", "v": str(int(precision))}
+                        out_slot, "p", {"n": "value", "v": str(props.get("outValue"))}
                     )
+
+                # Define all the input slots and actions for the Counter
                 ET.SubElement(
                     element, "p", {"n": "countUp", "f": "sL", "t": "b:StatusBoolean"}
                 )
                 ET.SubElement(
                     element, "p", {"n": "countDown", "f": "sL", "t": "b:StatusBoolean"}
                 )
-                inc = props.get("countIncrement")
-                if inc is not None:
+
+                # CORRECTED: Create presetValue as a complex property with a nested value
+                preset_val_slot = ET.SubElement(
+                    element,
+                    "p",
+                    {"n": "presetValue", "f": "sL", "t": "b:StatusNumeric"},
+                )
+                ET.SubElement(
+                    preset_val_slot, "p", {"n": "value", "v": "0.0"}
+                )  # Default nested value
+
+                ET.SubElement(element, "a", {"n": "clear", "f": "aL"})
+                ET.SubElement(element, "a", {"n": "preset", "f": "aL"})
+
+                # Handle static properties like countIncrement and initialValue
+                if props.get("countIncrement") is not None:
                     ET.SubElement(
                         element,
                         "p",
@@ -1201,11 +1273,10 @@ class BogFolderBuilder:
                             "n": "countIncrement",
                             "f": "L",
                             "t": "b:Float",
-                            "v": str(inc),
+                            "v": str(props.get("countIncrement")),
                         },
                     )
-                init_val = props.get("initialValue")
-                if init_val is not None:
+                if props.get("initialValue") is not None:
                     ET.SubElement(
                         element,
                         "p",
@@ -1213,10 +1284,9 @@ class BogFolderBuilder:
                             "n": "initialValue",
                             "f": "L",
                             "t": "b:Float",
-                            "v": str(init_val),
+                            "v": str(props.get("initialValue")),
                         },
                     )
-                ET.SubElement(element, "a", {"n": "clear", "f": "aL"})
             elif data["type"] == "kitControl:BooleanLatch":
                 ET.SubElement(element, "p", {"n": "clock", "f": "tsoL"})
                 in_slot = ET.SubElement(
