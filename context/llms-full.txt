@@ -565,65 +565,6 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: counter_smoke_test.py ===
-DIR: .
-=== CODE START ===
-"""
-A minimal "smoke test" for the Counter component. This script sets up a
-basic, self-resetting counter. A MultiVibrator provides a regular pulse
-which increments the counter. After each pulse, a BooleanDelay is triggered,
-which then clears the counter after a 3-second delay. This is useful for
-verifying the basic functionality of the Counter and Delay blocks.
-"""
-
-import sys, os, argparse
-
-from bog_builder import BogFolderBuilder
-
-
-def main():
-    p = argparse.ArgumentParser(description="Minimal Counter smoke test (.bog).")
-    p.add_argument("-o", "--output_dir", default="examples")
-    p.add_argument("-n", "--name", default="CounterSmoke")
-    p.add_argument("-s", "--subfolder", default="Logic")
-    args = p.parse_args()
-
-    b = BogFolderBuilder(args.name)
-
-    # Display and knobs
-    b.add_numeric_writable("CounterViewer", 0.0, precision=0)  # just to see the count
-    b.add_component("kitControl:NumericConst", "Inc", properties={"out": 1.0})
-
-    # Logic
-    b.start_sub_folder(args.subfolder)
-    b.add_multi_vibrator("Pulse", period_ms="2000")
-    b.add_component("kitControl:OneShot", "PulseEdge")
-    b.add_component(
-        "kitControl:BooleanDelay",
-        "Delay",
-        properties={"onDelay": "3000", "offDelay": "0"},
-    )
-    b.add_counter("C", count_increment=1.0, initial_value=0.0)
-
-    # Wire it
-    b.add_link("Pulse", "out", "PulseEdge", "in")  # periodic rising edge
-    b.add_link("PulseEdge", "out", "C", "countUp")  # increment counter
-    b.add_link("Inc", "out", "C", "countIncrement")  # 1 per pulse
-    b.add_link("C", "out", "CounterViewer", "in10")  # visualize (pick your slot)
-    b.add_link("PulseEdge", "out", "Delay", "in")  # start a clear delay after a tick
-    b.add_link("Delay", "out", "C", "clear")  # clear action after delay
-    b.end_sub_folder()
-
-    os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "counter_smoke_test.bog")
-    b.save(out)
-    print(f"Created {out}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: find_max_value.py ===
 DIR: .
 === CODE START ===
@@ -1030,343 +971,211 @@ if __name__ == "__main__":
 DIR: .
 === CODE START ===
 """
-hvac_g36_ahu_duct_static_reset.py
+G36 Duct Static Pressure Trim & Respond Algorithm (with SPResMax)
 
-This script builds a wiresheet implementation of the ASHRAE Guideline 36
-Duct Static Pressure Trim & Respond algorithm, based on the provided Java
-program object.
+This script builds a robust wiresheet implementation of the ASHRAE G36
+Trim & Respond algorithm, now including the SPResMax cap. This version
+uses a custom counter built from fundamental logic blocks for explicit control.
 
-Algorithm Overview:
--------------------
-1.  **Fan Off State:** When the fan is off, the Duct Static Pressure Setpoint
-    (DAP-SP) is driven to a defined initial value (SP0).
-2.  **Startup State:** When the fan turns on, the DAP-SP is held at SP0 for a
-    configurable startup delay (StartUpDelayMinutes).
-3.  **Run State (Trim & Respond):** After the startup delay, the core logic runs
-    on a periodic timer (UpdateMinutes).
-    - If the number of VAV damper requests (TotalRequests) is below a threshold
-      (Ignore), the DAP-SP is trimmed down by a small amount (SPtrim).
-    - If the number of requests is above the threshold, the DAP-SP is responded
-      up by an amount proportional to the number of excess requests (SPres),
-      capped at a maximum response (SPResMax).
-4.  **Clamping:** The final DAP-SP is always clamped between a minimum (SPmin)
-    and maximum (SPmax) value.
+Algorithm Overview (matching the Java logic):
+1.  When Fan_Status is false, the output is driven to SP0.
+2.  When Fan_Status becomes true, a StartupDelay holds the output at SP0.
+3.  After the delay, the main logic runs on a periodic timer.
+4.  On each timer pulse, the logic checks TotalRequests:
+    - If <= Ignore, trim down by SPtrim.
+    - If > Ignore, respond up by SPres * (Requests - Ignore), but
+      the response amount is capped at a maximum of SPResMax.
+5.  The final setpoint is clamped between SPmin and SPmax. During the
+    startup delay, the effective minimum is held at SP0.
+6.  A ManualReset or loss of Fan_Status resets the output to SP0.
 """
 
-from __future__ import annotations
-import argparse
-import os
-import sys
-
-# Append project src directory to path for bog_builder import
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-from bog_builder import BogFolderBuilder
-
-
-def build_graph(b: BogFolderBuilder) -> None:
-    """Builds the G36 Trim & Respond logic graph."""
-
-    # ==========================================================================
-    # 1. TOP-LEVEL I/O AND CONFIGURATION SETPOINTS
-    # These are the primary inputs, outputs, and configuration knobs for the algorithm.
-    # ==========================================================================
-    b.add_boolean_writable("FanRunCmd", default_value=False)
-    b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
-    b.add_numeric_writable("DischargeAirPressureSp_Out", default_value=1.25)
-
-    # Configuration Setpoints (now at the top level for easier access)
-    b.add_numeric_writable("SP0", default_value=1.25, units="u:inchesOfWater")
-    b.add_numeric_writable("SPmin", default_value=0.40, units="u:inchesOfWater")
-    b.add_numeric_writable("SPmax", default_value=1.75, units="u:inchesOfWater")
-    b.add_numeric_writable("StartUpDelayMinutes", default_value=10.0)
-    b.add_numeric_writable("UpdateMinutes", default_value=2.0)
-    b.add_numeric_writable("Ignore", default_value=6.0, precision=0)
-    b.add_numeric_writable("SPtrim", default_value=-0.02, units="u:inchesOfWater")
-    b.add_numeric_writable("SPres", default_value=0.04, units="u:inchesOfWater")
-    b.add_numeric_writable("SPResMax", default_value=0.08, units="u:inchesOfWater")
-
-    # ==========================================================================
-    # 2. STATE MANAGEMENT LOGIC
-    # Determines the current operating state. The output 'RunLogicEnable' is
-    # true only when the fan is on and the startup delay is met.
-    # ==========================================================================
-    b.start_sub_folder("StateManagement")
-
-    # Detect the rising edge of the FanRunCmd to trigger the startup timer
-    b.add_component("kitControl:BooleanLatch", "FanRunLatch")
-    b.add_component("kitControl:Not", "Not_FanRun")
-    b.add_link("FanRunCmd", "out", "FanRunLatch", "clock")
-    b.add_link("FanRunCmd", "out", "Not_FanRun", "in")
-    b.add_link("Not_FanRun", "out", "FanRunLatch", "in")
-
-    # Startup delay timer. The onDelay is now set directly from the default value.
-    b.add_component(
-        "kitControl:BooleanDelay",
-        "StartupDelayTimer",
-        properties={"onDelay": str(int(10.0 * 60000))},  # Default 10 min
-    )
-    b.add_link("FanRunLatch", "out", "StartupDelayTimer", "in")
-
-    # The core logic is enabled only when the fan is running AND the startup delay is met.
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_link("FanRunCmd", "out", "RunLogicEnable", "inA")
-    b.add_link("StartupDelayTimer", "out", "RunLogicEnable", "inB")
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 3. UPDATE CADENCE TIMER
-    # A MultiVibrator creates the periodic pulse that triggers the T&R calculation.
-    # ==========================================================================
-    b.start_sub_folder("UpdateTimer")
-    # The period is now set directly from the default value.
-    b.add_multi_vibrator("UpdatePulse", period_ms=str(int(2.0 * 60000))) # Default 2 min
-    b.add_component("kitControl:OneShot", "UpdateTrigger")
-    b.add_link("UpdatePulse", "out", "UpdateTrigger", "in")
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 4. CORE TRIM AND RESPOND LOGIC
-    # This is where the setpoint adjustment is calculated.
-    # ==========================================================================
-    b.start_sub_folder("TrimRespondLogic")
-
-    # Internal memory for the current setpoint, using a NumericLatch
-    b.add_component("kitControl:NumericLatch", "CurrentSp_Latch")
-
-    # Determine if we are in a "Trim" or "Respond" condition
-    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
-    b.add_link("TotalRequests", "out", "IsRespondCondition", "inA")
-    b.add_link("Ignore", "out", "IsRespondCondition", "inB")
-
-    # --- Calculate the Respond amount ---
-    # respondAmount = min(SPres * (R - Ignore), SPResMax)
-    b.add_component("kitControl:Subtract", "ExcessRequests")
-    b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
-    b.add_link("Ignore", "out", "ExcessRequests", "inB")
-
-    b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
-    b.add_link("SPres", "out", "ProportionalResponse", "inB")
-
-    b.add_component("kitControl:Minimum", "CappedResponse")
-    b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
-    b.add_link("SPResMax", "out", "CappedResponse", "inB")
-
-    # --- Select Trim or Respond adjustment value ---
-    b.add_numeric_switch("Adjustment_Switch")
-    b.add_link("IsRespondCondition", "out", "Adjustment_Switch", "inSwitch")
-    b.add_link("CappedResponse", "out", "Adjustment_Switch", "inTrue")  # Respond
-    b.add_link("SPtrim", "out", "Adjustment_Switch", "inFalse")       # Trim
-
-    # --- Calculate the new setpoint ---
-    b.add_component("kitControl:Add", "NewSetpoint_Unclamped")
-    b.add_link("CurrentSp_Latch", "out", "NewSetpoint_Unclamped", "inA")
-    b.add_link("Adjustment_Switch", "out", "NewSetpoint_Unclamped", "inB")
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 5. OUTPUT CLAMPING AND SELECTION
-    # This final stage clamps the calculated setpoint between SPmin and SPmax,
-    # and selects between SP0 and the calculated SP based on the run state.
-    # ==========================================================================
-    b.start_sub_folder("OutputLogic")
-
-    # Clamp the new setpoint: max(SPmin, min(NewSetpoint, SPmax))
-    b.add_component("kitControl:Minimum", "Clamp_Hi")
-    b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
-    b.add_link("SPmax", "out", "Clamp_Hi", "inB")
-
-    b.add_component("kitControl:Maximum", "Clamp_Lo")
-    b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
-    b.add_link("SPmin", "out", "Clamp_Lo", "inB")
-
-    # This is the final calculated Trim & Respond setpoint
-    b.add_numeric_writable("CalculatedSp")
-    b.add_link("Clamp_Lo", "out", "CalculatedSp", "in16")
-
-    # The latch is updated only when the main logic and update trigger are active
-    b.add_component("kitControl:And", "UpdateLatch_Clock")
-    b.add_link("RunLogicEnable", "out", "UpdateLatch_Clock", "inA")
-    b.add_link("UpdateTrigger", "out", "UpdateLatch_Clock", "inB")
-    b.add_link("CalculatedSp", "out", "CurrentSp_Latch", "in")
-    b.add_link("UpdateLatch_Clock", "out", "CurrentSp_Latch", "clock")
-
-    # Final Mux: If RunLogic is enabled, use the latched SP. Otherwise, use SP0.
-    b.add_numeric_switch("FinalSp_Switch")
-    b.add_link("RunLogicEnable", "out", "FinalSp_Switch", "inSwitch")
-    b.add_link("CurrentSp_Latch", "out", "FinalSp_Switch", "inTrue")
-    b.add_link("SP0", "out", "FinalSp_Switch", "inFalse")
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 6. FINAL WIRING
-    # Connect the final selected setpoint to the main output.
-    # ==========================================================================
-    b.add_link("FinalSp_Switch", "out", "DischargeAirPressureSp_Out", "in16")
-
-
-def main() -> None:
-    """Main entry point for the script."""
-    parser = argparse.ArgumentParser(
-        description="Build a .bog file for the G36 Trim & Respond algorithm."
-    )
-    parser.add_argument(
-        "-o",
-        "--output_dir",
-        default="examples",
-        help="Directory to write the .bog file.",
-    )
-    args = parser.parse_args()
-
-    builder = BogFolderBuilder("G36_AHU_Duct_Static_Reset")
-    build_graph(builder)
-
-    os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, "hvac_g36_ahu_duct_static_reset.bog")
-    builder.save(out_path)
-    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out_path)}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
-=== FILE: hvac_vav_box_cooling_request_logic.py ===
-DIR: .
-=== CODE START ===
-"""
-This script programmatically builds the VAV Box Cooling Request logic
-from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
-(1, 2, or 3) based on zone temperature deviation from setpoint and the
-cooling loop demand. A higher value indicates a more urgent request. The
-final output is the maximum of all generated requests, ensuring the highest
-priority request is always represented.
-
-This script programmatically builds the VAV Box Cooling Request logic
-from ASHRAE Guideline 36, §5.6.8.1.
-
-It uses a parallel structure with a final Maximum block to prioritize
-requests based on zone temperature deviation and cooling demand.
-"""
-
-import sys
-import os
-import argparse
-
+import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
 
 def main():
-
-    parser = argparse.ArgumentParser(
-        description="Build a .bog file for VAV Cooling Request logic."
+    p = argparse.ArgumentParser(
+        description="Build a G36 Trim & Respond .bog file with SPResMax."
     )
-    parser.add_argument(
-        "-o",
-        "--output_dir",
-        default="examples",
-        help="Output directory for the .bog file.",
+    p.add_argument("-o", "--output_dir", default="examples")
+    args = p.parse_args()
+
+    b = BogFolderBuilder("G36_TrimAndRespond_SPResMax", debug=True)
+
+    # --- Top-level I/O and Configuration ---
+    b.add_boolean_writable("Fan_Status", default_value=False)
+    b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
+    b.add_boolean_writable("Enabled", default_value=True)
+    b.add_boolean_writable("ManualReset", default_value=False)
+
+    b.add_numeric_writable("SP0", default_value=1.0, precision=2)
+    b.add_numeric_writable("SPmin", default_value=0.40, precision=2)
+    b.add_numeric_writable("SPmax", default_value=1.25, precision=2)
+    b.add_numeric_writable("SPtrim", default_value=-0.02, precision=2)
+    b.add_numeric_writable("SPres", default_value=0.04, precision=2)
+    b.add_numeric_writable(
+        "SPResMax", default_value=0.08, precision=2
+    )  # Added SPResMax
+    b.add_numeric_writable("Ignore", default_value=1.0, precision=0)
+
+    b.add_numeric_writable("UpdateMinutes", default_value=0.5)
+    b.add_numeric_writable("StartupDelayMinutes", default_value=0.5)
+
+    b.add_numeric_writable("Output", 0.0, precision=2)
+
+    # --- Logic Components ---
+    b.start_sub_folder("StateManagement")
+    b.add_component("kitControl:BooleanDelay", "StartupDelay")
+    b.add_component("kitControl:And", "RunLogicEnable")
+    b.add_component(
+        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
     )
-    args = parser.parse_args()
+    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.end_sub_folder()
 
-    script_filename = os.path.basename(__file__).replace(".py", "")
+    b.start_sub_folder("Logic")
+    # Update Timer
+    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    b.add_component("kitControl:Multiply", "Update_ms_Calc")
+    b.add_component("kitControl:OneShot", "UpdatePulse")
+    b.add_component("kitControl:And", "PulseGate")
 
-    builder = BogFolderBuilder("G36_VAV_Cooling_Req")
-    print("Creating top-level inputs and outputs...")
+    # Trim vs Respond Logic
+    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
+    b.add_component("kitControl:Subtract", "ExcessRequests")
 
-    # --- Inputs ---
-    builder.add_numeric_writable("ZoneTemp", default_value=78.0)
-    builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
-    builder.add_numeric_writable("ZoneDemand", default_value=96.0)
+    # --- NEW: Sub-folder for SPResMax Capping Logic ---
+    b.start_sub_folder("RespondCappingLogic")
+    b.add_component("kitControl:Multiply", "ProportionalResponse")
+    b.add_component("kitControl:Minimum", "CappedResponse")
+    b.end_sub_folder()  # End RespondCappingLogic
 
-    builder.add_numeric_writable("VAVCoolingRequestsTotal")
-    print("Creating and organizing logic components in sub-folders...")
+    b.add_numeric_switch("AdjustmentSwitch")
 
-    builder.start_sub_folder("SetpointDeviationCalcs")
-    builder.add_component("kitControl:Add", "Setpoint_Plus_5F")
-    builder.add_component("kitControl:Add", "Setpoint_Plus_3F")
-    builder.add_component("kitControl:NumericConst", "Const_5", properties={"out": 5.0})
-    builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
-    builder.end_sub_folder()
+    # Custom Counter Core
+    b.add_component("kitControl:NumericLatch", "ValueLatch")
+    b.add_component("kitControl:Add", "NewSetpoint_Unclamped")
+    b.add_component("kitControl:Minimum", "Clamp_Hi")
+    b.add_component("kitControl:Maximum", "Clamp_Lo")
+    b.add_numeric_switch("ResetSwitch")
+    b.add_numeric_switch("FinalOutputSwitch")
 
-    builder.start_sub_folder("Generate3RequestsLogic")
-    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
+    # Latch Initialization Logic
+    b.add_component("kitControl:OneShot", "InitializeLatchPulse")
+    b.add_numeric_switch("LatchInputSwitch")
+
+    # Dynamic Minimum Clamp Logic
+    b.add_numeric_switch("MinClampSwitch")
+
+    # Reset Logic
+    b.add_component("kitControl:Not", "FanIsOff")
+    b.add_component("kitControl:Or", "ResetTrigger")
+    b.add_component("kitControl:OneShot", "ResetPulse")
+    b.end_sub_folder()
+
+    # --- Wiring ---
+
+    # State Management & Startup Delay
+    b.add_link("Fan_Status", "out", "StartupDelay", "in")
+    b.add_link("StartupDelayMinutes", "out", "Delay_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
+    b.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
     )
-    builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
-    )
-    builder.end_sub_folder()
+    b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
+    b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
-    builder.start_sub_folder("Generate2RequestsLogic")
-    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
-    )
-    builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}
-    )
-    builder.end_sub_folder()
+    # Timer
+    b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
+    b.add_link(
+        "Update_ms_Calc", "out", "UpdateTimer", "Period"
+    )  # Uses special dual-link logic
+    b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
+    b.add_link("UpdatePulse", "out", "PulseGate", "inA")
+    b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
 
-    builder.start_sub_folder("Generate1RequestLogic")
-    builder.add_component("kitControl:GreaterThan", "Demand_GT_95")
-    builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_95", properties={"out": 95.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_1_Req", properties={"out": 1.0}
-    )
-    builder.end_sub_folder()
+    # Determine Adjustment Value (Trim or Respond)
+    b.add_link("TotalRequests", "out", "IsRespondCondition", "inA")
+    b.add_link("Ignore", "out", "IsRespondCondition", "inB")
+    b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
+    b.add_link("Ignore", "out", "ExcessRequests", "inB")
 
-    builder.start_sub_folder("Prioritization")
-    builder.add_component("kitControl:Maximum", "Maximum")
-    builder.end_sub_folder()
+    # Wiring for the RespondCappingLogic sub-folder
+    b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
+    b.add_link("SPres", "out", "ProportionalResponse", "inB")
+    b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
+    b.add_link("SPResMax", "out", "CappedResponse", "inB")
 
-    print("Wiring components across all folders...")
+    b.add_link("IsRespondCondition", "out", "AdjustmentSwitch", "inSwitch")
+    b.add_link(
+        "CappedResponse", "out", "AdjustmentSwitch", "inTrue"
+    )  # Use the capped value
+    b.add_link("SPtrim", "out", "AdjustmentSwitch", "inFalse")
 
-    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_5F", "inA")
-    builder.add_link("Const_5", "out", "Setpoint_Plus_5F", "inB")
-    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_3F", "inA")
-    builder.add_link("Const_3", "out", "Setpoint_Plus_3F", "inB")
+    # Calculate New Setpoint (with feedback from final output)
+    b.add_link("FinalOutputSwitch", "out", "NewSetpoint_Unclamped", "inA")
+    b.add_link("AdjustmentSwitch", "out", "NewSetpoint_Unclamped", "inB")
 
-    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_5F", "inA")
-    builder.add_link("Setpoint_Plus_5F", "out", "Temp_GT_SP_plus_5F", "inB")
-    builder.add_link("Temp_GT_SP_plus_5F", "out", "Timer_2min_Delay3", "in")
-    builder.add_link("Timer_2min_Delay3", "out", "NumericSwitch_3_Req", "inSwitch")
-    builder.add_link("Const_3_Req", "out", "NumericSwitch_3_Req", "inTrue")
+    # Wire the Dynamic Minimum Clamp
+    b.add_link("StartupDelay", "out", "MinClampSwitch", "inSwitch")
+    b.add_link(
+        "SPmin", "out", "MinClampSwitch", "inTrue"
+    )  # After delay, use normal SPmin
+    b.add_link(
+        "SP0", "out", "MinClampSwitch", "inFalse"
+    )  # During delay, use SP0 as min
 
-    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_3F", "inA")
-    builder.add_link("Setpoint_Plus_3F", "out", "Temp_GT_SP_plus_3F", "inB")
-    builder.add_link("Temp_GT_SP_plus_3F", "out", "Timer_2min_Delay2", "in")
-    builder.add_link("Timer_2min_Delay2", "out", "NumericSwitch_2_Req", "inSwitch")
-    builder.add_link("Const_2_Req", "out", "NumericSwitch_2_Req", "inTrue")
+    # Clamp the new setpoint
+    b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
+    b.add_link("SPmax", "out", "Clamp_Hi", "inB")
+    b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
+    b.add_link(
+        "MinClampSwitch", "out", "Clamp_Lo", "inB"
+    )  # Use the output of our new switch
 
-    builder.add_link("ZoneDemand", "out", "Demand_GT_95", "inA")
-    builder.add_link("Const_95", "out", "Demand_GT_95", "inB")
-    builder.add_link("Demand_GT_95", "out", "NumericSwitch_1_Req", "inSwitch")
-    builder.add_link("Const_1_Req", "out", "NumericSwitch_1_Req", "inTrue")
+    # Reset Logic
+    b.add_link("Fan_Status", "out", "FanIsOff", "in")
+    b.add_link("ManualReset", "out", "ResetTrigger", "inA")
+    b.add_link("FanIsOff", "out", "ResetTrigger", "inB")
+    b.add_link("ResetTrigger", "out", "ResetPulse", "in")
+    b.add_link("ResetPulse", "out", "ResetSwitch", "inSwitch")
+    b.add_link("SP0", "out", "ResetSwitch", "inTrue")
+    b.add_link("Clamp_Lo", "out", "ResetSwitch", "inFalse")
 
-    builder.add_link("NumericSwitch_3_Req", "out", "Maximum", "inA")
-    builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
-    builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
-    builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
+    # Latching the new value with initialization
+    b.add_link("RunLogicEnable", "out", "InitializeLatchPulse", "in")
+    b.add_link("InitializeLatchPulse", "out", "LatchInputSwitch", "inSwitch")
+    b.add_link("SP0", "out", "LatchInputSwitch", "inTrue")
+    b.add_link("ResetSwitch", "out", "LatchInputSwitch", "inFalse")
+    b.add_link("LatchInputSwitch", "out", "ValueLatch", "in")
+    b.add_link("PulseGate", "out", "ValueLatch", "clock")
 
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
+    # Final Output Selection
+    b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
+    b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
+    b.add_link("SP0", "out", "FinalOutputSwitch", "inFalse")
+
+    # Wire to Viewer
+    b.add_link("FinalOutputSwitch", "out", "Output", "in16")
+
     os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+    out = os.path.join(args.output_dir, "g36_trim_and_respond_with_spresmax.bog")
+    b.save(out)
+    print(f"Created {out}")
 
 
 if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: hvac_vav_box_pressure_request_logic.py ===
+=== FILE: hvac_gl36_box_pressure_request_logic.py ===
 DIR: .
 === CODE START ===
 """
@@ -1501,6 +1310,141 @@ def main():
     builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
     builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
     builder.add_link("Maximum", "out", "VAVrequestsTotal", "in16")
+
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: hvac_gl36_vav_box_cooling_request_logic.py ===
+DIR: .
+=== CODE START ===
+"""
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
+(1, 2, or 3) based on zone temperature deviation from setpoint and the
+cooling loop demand. A higher value indicates a more urgent request. The
+final output is the maximum of all generated requests, ensuring the highest
+priority request is always represented.
+
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1.
+
+It uses a parallel structure with a final Maximum block to prioritize
+requests based on zone temperature deviation and cooling demand.
+"""
+
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for VAV Cooling Request logic."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    builder = BogFolderBuilder("G36_VAV_Cooling_Req")
+    print("Creating top-level inputs and outputs...")
+
+    # --- Inputs ---
+    builder.add_numeric_writable("ZoneTemp", default_value=78.0)
+    builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
+    builder.add_numeric_writable("ZoneDemand", default_value=96.0)
+
+    builder.add_numeric_writable("VAVCoolingRequestsTotal")
+    print("Creating and organizing logic components in sub-folders...")
+
+    builder.start_sub_folder("SetpointDeviationCalcs")
+    builder.add_component("kitControl:Add", "Setpoint_Plus_5F")
+    builder.add_component("kitControl:Add", "Setpoint_Plus_3F")
+    builder.add_component("kitControl:NumericConst", "Const_5", properties={"out": 5.0})
+    builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate3RequestsLogic")
+    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
+    )
+    builder.add_numeric_switch("NumericSwitch_3_Req")
+    builder.add_component(
+        "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate2RequestsLogic")
+    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
+    builder.add_component(
+        "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
+    )
+    builder.add_numeric_switch("NumericSwitch_2_Req")
+    builder.add_component(
+        "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate1RequestLogic")
+    builder.add_component("kitControl:GreaterThan", "Demand_GT_95")
+    builder.add_numeric_switch("NumericSwitch_1_Req")
+    builder.add_component(
+        "kitControl:NumericConst", "Const_95", properties={"out": 95.0}
+    )
+    builder.add_component(
+        "kitControl:NumericConst", "Const_1_Req", properties={"out": 1.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Prioritization")
+    builder.add_component("kitControl:Maximum", "Maximum")
+    builder.end_sub_folder()
+
+    print("Wiring components across all folders...")
+
+    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_5F", "inA")
+    builder.add_link("Const_5", "out", "Setpoint_Plus_5F", "inB")
+    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_3F", "inA")
+    builder.add_link("Const_3", "out", "Setpoint_Plus_3F", "inB")
+
+    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_5F", "inA")
+    builder.add_link("Setpoint_Plus_5F", "out", "Temp_GT_SP_plus_5F", "inB")
+    builder.add_link("Temp_GT_SP_plus_5F", "out", "Timer_2min_Delay3", "in")
+    builder.add_link("Timer_2min_Delay3", "out", "NumericSwitch_3_Req", "inSwitch")
+    builder.add_link("Const_3_Req", "out", "NumericSwitch_3_Req", "inTrue")
+
+    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_3F", "inA")
+    builder.add_link("Setpoint_Plus_3F", "out", "Temp_GT_SP_plus_3F", "inB")
+    builder.add_link("Temp_GT_SP_plus_3F", "out", "Timer_2min_Delay2", "in")
+    builder.add_link("Timer_2min_Delay2", "out", "NumericSwitch_2_Req", "inSwitch")
+    builder.add_link("Const_2_Req", "out", "NumericSwitch_2_Req", "inTrue")
+
+    builder.add_link("ZoneDemand", "out", "Demand_GT_95", "inA")
+    builder.add_link("Const_95", "out", "Demand_GT_95", "inB")
+    builder.add_link("Demand_GT_95", "out", "NumericSwitch_1_Req", "inSwitch")
+    builder.add_link("Const_1_Req", "out", "NumericSwitch_1_Req", "inTrue")
+
+    builder.add_link("NumericSwitch_3_Req", "out", "Maximum", "inA")
+    builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
+    builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
+    builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
 
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
@@ -1691,6 +1635,202 @@ def main():
     out_path = os.path.join(args.output_dir, f"{script_filename}.bog")
     builder.save(out_path)
     print(f"Created Niagara .bog at: {out_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: multivibrator_link_test.py ===
+DIR: .
+=== CODE START ===
+"""
+multivibrator_link_test.py
+
+A minimal "smoke test" to verify the dynamic linking of a numeric value
+to the 'Period' property of a kitControl:MultiVibrator component.
+
+This script is designed to confirm that the fixes made to the BogFolderBuilder
+correctly generate the required dual-link XML structure with the necessary
+type converters.
+
+Algorithm:
+1.  A NumericWritable ('UpdateSeconds') provides a user-configurable input.
+2.  This value is multiplied by 1000 to convert it to milliseconds.
+3.  The resulting millisecond value is linked to the 'Period' of the MultiVibrator.
+4.  The 'out' of the MultiVibrator is linked to a BooleanWritable ('PulseOutput')
+    to provide a clear visual indication of its operation.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    Main function to build and save the .bog file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to smoke test dynamic linking to a MultiVibrator's Period."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("MultiVibratorLinkTest", debug=True)
+
+    print("--- Creating Components for MultiVibrator Test ---")
+
+    # --- Inputs ---
+    # This is the knob you can turn in Workbench to change the period.
+    builder.add_numeric_writable("UpdateSeconds", default_value=5.0)
+
+    # --- Output ---
+    # This boolean will pulse on and off so you can see the result.
+    builder.add_boolean_writable("PulseOutput")
+
+    # --- Logic Sub-folder ---
+    builder.start_sub_folder("Logic")
+
+    # A constant for converting seconds to milliseconds.
+    builder.add_component(
+        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
+    )
+
+    # The block that performs the ms calculation.
+    builder.add_component("kitControl:Multiply", "Update_ms_Calc")
+
+    # The MultiVibrator to be tested.
+    # The initial 'period' property is set here, but will be overridden by the link.
+    builder.add_component(
+        "kitControl:MultiVibrator", "TestMultiVibrator", properties={"period": "1000"}
+    )
+
+    builder.end_sub_folder()
+
+    print("\n--- Wiring Components ---")
+
+    # Wire the seconds-to-milliseconds calculation
+    builder.add_link("UpdateSeconds", "out", "Update_ms_Calc", "inA")
+    builder.add_link("Const_1000", "out", "Update_ms_Calc", "inB")
+
+    # *** This is the critical link being tested. ***
+    # It should trigger the special dual-link logic in the builder.
+    print("Adding the dynamic link to the MultiVibrator's Period...")
+    builder.add_link("Update_ms_Calc", "out", "TestMultiVibrator", "Period")
+
+    # Wire the final output for visualization
+    builder.add_link("TestMultiVibrator", "out", "PulseOutput", "in16")
+
+    # --- Save the .bog file ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(
+        f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
+    )
+    print("Drag this file into Niagara Workbench to test the dynamic link.")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: numeric_delay_playground.py ===
+DIR: .
+=== CODE START ===
+"""
+numeric_delay_playground.py
+
+This script builds a simple "playground" or test environment for the
+kitControl:NumericDelay component, matching a direct-wired layout. It allows
+a user to observe how the component continuously delays a changing input value.
+
+Algorithm Overview:
+-------------------
+1.  **Inputs:** A numeric value to delay, a delay time in minutes (defaulting
+    to 1), and a max step size are provided as user-configurable writables.
+2.  **Delay Time Conversion:** The 'DelayTimeMinutes' is converted to
+    milliseconds to correctly configure the 'updateTime' property of the
+    NumericDelay block.
+3.  **Delay Logic:** The NumericDelay component is directly linked to the
+    'ValueToDelay' input. It continuously attempts to match its output to the
+    input value, but its rate of change is limited by the 'updateTime' and
+    'maxStepSize', effectively slewing the value over time.
+"""
+
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for a NumericDelay playground."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("NumericDelayPlayground", debug=True)
+
+    # --- Top-level I/O and Configuration ---
+    builder.add_numeric_writable("ValueToDelay", default_value=100.0, precision=2)
+    builder.add_numeric_writable("DelayTimeMinutes", default_value=1.0, precision=2)
+    builder.add_numeric_writable("MaxStepSize", default_value=0.5, precision=2)
+    builder.add_numeric_writable("DelayedOutput", default_value=0.0, precision=2)
+
+    # --- Logic Components (No Sub-folder) ---
+    # The core NumericDelay component
+    builder.add_component("kitControl:NumericDelay", "MainDelay")
+
+    # Logic to convert minutes to milliseconds for the delay time
+    builder.add_component(
+        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
+    )
+    builder.add_component("kitControl:Multiply", "Delay_ms_Calc")
+
+    # --- Wiring ---
+
+    # Wire the value and configuration directly to the NumericDelay block
+    builder.add_link("ValueToDelay", "out", "MainDelay", "in")
+    builder.add_link("MaxStepSize", "out", "MainDelay", "maxStepSize")
+
+    # Wire the delay time calculation
+    builder.add_link("DelayTimeMinutes", "out", "Delay_ms_Calc", "inA")
+    builder.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
+    builder.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "MainDelay",
+        "updateTime",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+
+    # Wire the final delayed value to the output
+    builder.add_link("MainDelay", "out", "DelayedOutput", "in16")
+
+    # --- Save the .bog file ---
+    os.makedirs(args.output_dir, exist_ok=True)
+    out = os.path.join(args.output_dir, f"{script_filename}.bog")
+    builder.save(out)
+    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out)}")
 
 
 if __name__ == "__main__":
@@ -2029,100 +2169,162 @@ if __name__ == "__main__":
 DIR: .
 === CODE START ===
 """
-Ping-Pong Counter Algorithm (Configurable Timer)
+Custom Ping-Pong Algorithm (G36 Style)
 
-This script demonstrates a G36-style trim-and-respond scaffold. A counter
-oscillates between a high and low limit, driven by a periodic pulse from a
-MultiVibrator.
+This script implements a robust "ping-pong" or oscillating counter using
+fundamental logic blocks, avoiding the kitControl:Counter component. This
+is a reliable pattern for creating custom accumulators and control logic.
 
-This version includes a top-level NumericWritable 'UpdateSeconds' that is
-used to configure the MultiVibrator's period when the .bog file is generated.
-The conversion from seconds to milliseconds is also shown on the wiresheet
-for documentation purposes.
+Its also the fundamnental building blocks to G36 T&R algorithms on real hvac.
 
-A TRUE G36 algorithm will combine compontents of rate_of_change_limiter.py and
-the ping_pong_algorithm example. Please reference both of these as they are 
-thoroughly tested!
+Algorithm Overview:
+1.  When 'Enable' goes true, a startup delay begins.
+2.  During this delay, the output is held at the 'InitialValue'.
+3.  After the delay, the main logic is enabled.
+4.  A periodic timer pulses every 'UpdateIntervalSeconds'.
+5.  On each pulse, the logic adds or subtracts the 'Step' value from the
+    current output. The direction is determined by a BooleanLatch.
+6.  When the output hits the 'UpperLimit' or 'LowerLimit', the
+    BooleanLatch flips, reversing the counting direction.
+7.  The core of the logic is a NumericLatch which acts as the memory,
+    storing the accumulated value between pulses.
 """
 
-import os, argparse
+import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ping-pong with a configurable MultiVibrator")
-    ap.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for .bog"
+    p = argparse.ArgumentParser(
+        description="Custom ping-pong counter using a NumericLatch."
     )
-    args = ap.parse_args()
+    p.add_argument("-o", "--output_dir", default="examples")
+    args = p.parse_args()
 
-    b = BogFolderBuilder("PingPongAlgorithm", debug=True)
+    script_filename = os.path.basename(__file__).replace(".py", "")
 
-    # ---- Top-level I/O and Configuration ----
-    b.add_boolean_writable("ManualReset", default_value=False)
-    b.add_boolean_writable("Enabled", default_value=True)
-    b.add_numeric_writable("Step", default_value=1.05)
-    b.add_numeric_writable("TopLimit", default_value=20.0)
-    b.add_numeric_writable("LowLimit", default_value=-20.0)
-    b.add_numeric_writable("Output")
-    
-    UpdateSeconds_default = 2.0
-    b.add_numeric_writable("UpdateSeconds", default_value=UpdateSeconds_default)
+    b = BogFolderBuilder("PingPongAlgorithm")
 
+    # --- Top-level I/O and Configuration ---
+    b.add_boolean_writable("Enable", default_value=False)
+    b.add_numeric_writable("InitialValue", default_value=1.0, precision=2)
+    b.add_numeric_writable("UpperLimit", default_value=5.0, precision=2)
+    b.add_numeric_writable("LowerLimit", default_value=-5.0, precision=2)
+    b.add_numeric_writable("Step", default_value=0.25, precision=2)
+    b.add_numeric_writable("UpdateIntervalSeconds", default_value=1.0)
+    b.add_numeric_writable("StartupDelaySeconds", default_value=5.0)
+    b.add_numeric_writable("OutputViewer", 0.0, precision=2)
 
-    # ---- Logic subfolder ----
+    # --- Logic Components ---
     b.start_sub_folder("Logic")
+
+    # State Management (Startup Delay)
+    b.add_component("kitControl:BooleanDelay", "StartupDelay")
+    b.add_component("kitControl:And", "RunLogicEnable")
     b.add_component(
-        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": str(int(UpdateSeconds_default * 1000))}
+        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
     )
-    b.add_component("kitControl:NumericConst", "Const_1000", properties={"value": 1000.0})
-    b.add_component("kitControl:Multiply", "Update_ms_Display")
-    b.add_numeric_writable("CalculatedPeriod_ms")
-    b.add_component("kitControl:OneShot", "FireOneShot")
-    b.add_component("kitControl:And", "And")
-    b.add_component("kitControl:Counter", "Counter")
-    b.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
-    b.add_component("kitControl:LessThanEqual", "LessThanEq")
-    b.add_component("kitControl:Or", "Or1")
-    b.add_component("kitControl:BooleanLatch", "BooleanLatch")
-    b.add_boolean_switch("CountDown")
-    b.add_boolean_switch("CountUp")
-    b.add_component("kitControl:OneShot", "ResetOneShot")
+    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+
+    # Update Timer
+    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    b.add_component("kitControl:Multiply", "Update_ms_Calc")
+    b.add_component("kitControl:OneShot", "UpdatePulse")
+    b.add_component("kitControl:And", "PulseGate")
+
+    # Custom Counter Core
+    b.add_component("kitControl:NumericLatch", "ValueLatch")
+    b.add_component("kitControl:Add", "AddStep")
+    b.add_component("kitControl:Subtract", "SubtractStep")
+    b.add_numeric_switch("DirectionSwitch")
+    b.add_numeric_switch("FinalOutputSwitch")
+
+    # Direction Control Logic
+    b.add_component("kitControl:GreaterThanEqual", "HitUpperLimit")
+    b.add_component("kitControl:LessThanEqual", "HitLowerLimit")
+    b.add_component("kitControl:Or", "HitAnyLimit")
+    b.add_component("kitControl:BooleanLatch", "DirectionLatch")
 
     b.end_sub_folder()
 
-    # ---- Wiring ----
-    b.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
-    b.add_link("Const_1000", "out", "Update_ms_Display", "inB")
-    b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-    b.add_link("CalculatedPeriod_ms", "out", "MultiVibrator", "Period") # <------ broken
-    b.add_link("MultiVibrator", "out", "FireOneShot", "in")
-    b.add_link("FireOneShot", "out", "And", "inA")
-    b.add_link("Enabled", "out", "And", "inB")
-    b.add_link("Step", "out", "Counter", "countIncrement")
-    b.add_link("ManualReset", "out", "ResetOneShot", "in")
-    b.add_link("ResetOneShot", "out", "Counter", "clear")
-    b.add_link("Counter", "out", "Output", "in16")
-    b.add_link("Counter", "out", "GreaterThanEq", "inA")
-    b.add_link("TopLimit", "out", "GreaterThanEq", "inB")
-    b.add_link("Counter", "out", "LessThanEq", "inA")
-    b.add_link("LowLimit", "out", "LessThanEq", "inB")
-    b.add_link("GreaterThanEq", "out", "Or1", "inA")
-    b.add_link("LessThanEq", "out", "Or1", "inB")
-    b.add_link("Or1", "out", "BooleanLatch", "clock")
-    b.add_link("GreaterThanEq", "out", "BooleanLatch", "in")
-    b.add_link("BooleanLatch", "out", "CountDown", "inSwitch")
-    b.add_link("BooleanLatch", "out", "CountUp", "inSwitch")
-    b.add_link("And", "out", "CountDown", "inTrue")
-    b.add_link("And", "out", "CountUp", "inFalse")
-    b.add_link("CountDown", "out", "Counter", "countDown")
-    b.add_link("CountUp", "out", "Counter", "countUp")
+    # --- Wiring ---
 
-    # ---- Save ----
+    # State Management & Startup Delay
+    b.add_link("Enable", "out", "StartupDelay", "in")
+    b.add_link("StartupDelaySeconds", "out", "Delay_ms_Calc", "inA")
+    b.add_link("Const_1000", "out", "Delay_ms_Calc", "inB")
+    b.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+    b.add_link("Enable", "out", "RunLogicEnable", "inA")
+    b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
+
+    # Timer
+    b.add_link("UpdateIntervalSeconds", "out", "Update_ms_Calc", "inA")
+    b.add_link("Const_1000", "out", "Update_ms_Calc", "inB")
+    b.add_link(
+        "Update_ms_Calc",
+        "out",
+        "UpdateTimer",
+        "Period",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+    b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
+    b.add_link("UpdatePulse", "out", "PulseGate", "inA")
+    b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
+
+    # Limit Detection (feedback from final output)
+    b.add_link("FinalOutputSwitch", "out", "HitUpperLimit", "inA")
+    b.add_link("UpperLimit", "out", "HitUpperLimit", "inB")
+    b.add_link("FinalOutputSwitch", "out", "HitLowerLimit", "inA")
+    b.add_link("LowerLimit", "out", "HitLowerLimit", "inB")
+
+    # Direction Latching
+    b.add_link("HitUpperLimit", "out", "HitAnyLimit", "inA")
+    b.add_link("HitLowerLimit", "out", "HitAnyLimit", "inB")
+    b.add_link("HitAnyLimit", "out", "DirectionLatch", "clock")
+    b.add_link(
+        "HitUpperLimit", "out", "DirectionLatch", "in"
+    )  # Count down when we hit the top
+
+    # Calculation Logic
+    b.add_link("FinalOutputSwitch", "out", "AddStep", "inA")
+    b.add_link("Step", "out", "AddStep", "inB")
+    b.add_link("FinalOutputSwitch", "out", "SubtractStep", "inA")
+    b.add_link("Step", "out", "SubtractStep", "inB")
+
+    # Direction Selection
+    b.add_link("DirectionLatch", "out", "DirectionSwitch", "inSwitch")
+    b.add_link(
+        "SubtractStep", "out", "DirectionSwitch", "inTrue"
+    )  # If latch is true (hit top), subtract
+    b.add_link(
+        "AddStep", "out", "DirectionSwitch", "inFalse"
+    )  # If latch is false (hit bottom), add
+
+    # Latching the new value
+    b.add_link("DirectionSwitch", "out", "ValueLatch", "in")
+    b.add_link("PulseGate", "out", "ValueLatch", "clock")
+
+    # Final Output Selection
+    b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
+    b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
+    b.add_link("InitialValue", "out", "FinalOutputSwitch", "inFalse")
+
+    # Wire to Viewer
+    b.add_link("FinalOutputSwitch", "out", "OutputViewer", "in16")
+
+    # Save
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "ping_pong_configurable_timer.bog")
-    b.save(out)
-    print(f"Created Niagara .bog at: {os.path.abspath(out)}")
+    b.save(output_path)
 
 
 if __name__ == "__main__":
@@ -2144,7 +2346,7 @@ the time delta over which the maximum change is allowed, similar to the pattern
 found in the ping_pong_algorithm example.
 
 A TRUE G36 algorithm will combine compontents of rate_of_change_limiter.py and
-the ping_pong_algorithm example. Please reference both of these as they are 
+the ping_pong_algorithm example. Please reference both of these as they are
 thoroughly tested!
 
 Algorithm Overview:
@@ -2182,11 +2384,11 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     # ==========================================================================
     b.add_component("kitControl:SineWave", "FastChangingInput")
     b.add_numeric_writable("MaxChangePerSecond", default_value=5.0)
-    
+
     # New configurable time delta
     update_seconds_default = 5.0
     b.add_numeric_writable("UpdateSeconds", default_value=update_seconds_default)
-    
+
     b.add_numeric_writable("RateLimitedOutput", default_value=0.0)
 
     # ==========================================================================
@@ -2197,12 +2399,16 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     # --- Timer for periodic updates ---
     # The initial period is set from the default value.
     b.add_component(
-        "kitControl:MultiVibrator", "UpdateTimer", properties={"period": str(int(update_seconds_default * 1000))}
+        "kitControl:MultiVibrator",
+        "UpdateTimer",
+        properties={"period": str(int(update_seconds_default * 1000))},
     )
     b.add_component("kitControl:OneShot", "UpdateTick")
 
     # --- Visual feedback for timer period in milliseconds ---
-    b.add_component("kitControl:NumericConst", "Const_1000", properties={"value": 1000.0})
+    b.add_component(
+        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
+    )
     b.add_component("kitControl:Multiply", "Update_ms_Display")
     b.add_numeric_writable("CalculatedPeriod_ms")
 
@@ -2213,7 +2419,9 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     b.add_component("kitControl:Subtract", "CalculateDelta")
 
     # --- Logic to clamp the change within limits (using Multiply by -1) ---
-    b.add_component("kitControl:NumericConst", "Const_Neg_1", properties={"value": -1.0})
+    b.add_component(
+        "kitControl:NumericConst", "Const_Neg_1", properties={"value": -1.0}
+    )
     b.add_component("kitControl:Multiply", "CreateNegativeLimit")
     b.add_component("kitControl:Maximum", "Clamp_Low")
     b.add_component("kitControl:Minimum", "Clamp_High")
@@ -2231,11 +2439,11 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     b.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
     b.add_link("Const_1000", "out", "Update_ms_Display", "inB")
     b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-    
+
     # NOTE: As seen in ping_pong_algorithm.py, this link may not allow for live updates
     # of the MultiVibrator's period in the Workbench. The initial value will be set correctly.
     b.add_link("CalculatedPeriod_ms", "out", "UpdateTimer", "Period")
-    
+
     b.add_link("UpdateTimer", "out", "UpdateTick", "in")
 
     # --- Wire the Delta Calculation ---
@@ -2279,7 +2487,7 @@ def main() -> None:
     build_rate_limiter(builder)
 
     output_filename = "rate_of_change_limiter_configurable.bog"
-    
+
     os.makedirs(args.output_dir, exist_ok=True)
     out_path = os.path.join(args.output_dir, output_filename)
     builder.save(out_path)

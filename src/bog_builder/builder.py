@@ -451,7 +451,6 @@ class BogFolderBuilder:
                     "[BOG BUILDER DEBUG] Applying special dual-link for MultiVibrator period."
                 )
 
-            # 1. Add the standard b:Link to the uppercase 'Period' slot
             self._links.append(
                 {
                     "source_name": source_comp_name,
@@ -462,7 +461,6 @@ class BogFolderBuilder:
                     "converter_type": None,
                 }
             )
-            # 2. Add the b:ConversionLink to the lowercase 'period' property
             self._links.append(
                 {
                     "source_name": source_comp_name,
@@ -473,9 +471,28 @@ class BogFolderBuilder:
                     "converter_type": "conv:StatusNumericToRelTime",
                 }
             )
-            return  # Exit after handling the special case
-        # --- END OF CORRECTED LOGIC ---
+            return
 
+        if (
+            s_type in numeric_source_types
+            and t_type == "kitControl:NumericDelay"
+            and target_slot == "maxStepSize"
+        ):
+            if self.debug:
+                print(
+                    "[BOG BUILDER DEBUG] Applying StatusNumericToNumber conversion for NumericDelay.maxStepSize."
+                )
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": "maxStepSize",
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToNumber",
+                }
+            )
+            return
         try:
             link_def = LinkDefinition(
                 source_name=source_comp_name,
@@ -1208,6 +1225,13 @@ class BogFolderBuilder:
                     element,
                     "p",
                     {"n": "period", "f": "L", "t": "b:RelTime", "v": str(per)},
+                )
+            elif data["type"] == "kitControl:NumericDelay":
+                # Ensure maxStepSize property is created and marked as linkable (f="L")
+                ET.SubElement(
+                    element,
+                    "p",
+                    {"n": "maxStepSize", "f": "L", "t": "b:Double", "v": "0.0"},
                 )
             elif data["type"] == "kitControl:OneShot":
                 # Add the standard 'in' slot for the trigger
