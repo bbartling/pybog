@@ -1,6 +1,5 @@
 """
-
-hvac_g36_ahu_duct_static_reset.py
+hvac_g36_ahu_supply_temp_reset.py
 
 Made and validated in field by pybog creator.
 
@@ -10,24 +9,26 @@ multivibrator_link_test, rate_of_change_limiter,
 
 Duct static reset and supply air temp reset algorith very similar.
 
-G36 Duct Static Pressure Trim & Respond Algorithm (with SPResMax)
+This script builds a wiresheet implementation of the ASHRAE Guideline 36
+Supply Air Temperature (SAT) Trim & Respond algorithm, based on a proven
+Java program object. This version is structurally identical to the robust
+duct static pressure version, including startup initialization and delays.
 
-This script builds a robust wiresheet implementation of the ASHRAE G36
-Trim & Respond algorithm, now including the SPResMax cap. This version
-uses a custom counter built from fundamental logic blocks for explicit control.
-
-Algorithm Overview (matching the Java logic):
-1.  When Fan_Status is false, the output is driven to SP0.
-2.  When Fan_Status becomes true, a StartupDelay holds the output at SP0.
-3.  After the delay, the main logic runs on a periodic timer.
-4.  On each timer pulse, the logic checks TotalRequests:
-    - If <= Ignore, trim down by SPtrim.
-    - If > Ignore, respond up by SPres * (Requests - Ignore), but
-      the response amount is capped at a maximum of SPResMax.
-5.  The final setpoint is clamped between SPmin and SPmax. During the
-    startup delay, the effective minimum is held at SP0 and is delayed
-    to prevent rapid changes.
-6.  A ManualReset or loss of Fan_Status resets the output to SP0.
+Algorithm Overview:
+-------------------
+1.  **Core Engine:** A Trim & Respond (T&R) counter adjusts an internal
+    variable called 'tMaxState'. This is the maximum allowed SAT at the
+    lowest OAT.
+    - If cooling requests are low, 'tMaxState' is trimmed UP (allowing warmer supply air).
+    - If cooling requests are high, 'tMaxState' is responded DOWN (demanding colder supply air).
+2.  **OAT Reset:** The final SAT setpoint is calculated using a linear reset
+    (interpolation) based on the current OAT and the calculated 'tMaxState'.
+3.  **State Management:** The T&R engine is only active when the fan has been
+    running for a specified startup delay. When the fan is off or during the
+    startup delay, 'tMaxState' is reset to its absolute maximum (SatMax).
+4.  **Clamping & Delays:** All calculated values are clamped within their defined
+    min/max limits, and a NumericDelay is used to smooth the minimum clamp
+    value after startup, preventing erratic behavior.
 """
 
 import sys, os, argparse
@@ -36,41 +37,55 @@ from bog_builder import BogFolderBuilder
 
 def main():
     p = argparse.ArgumentParser(
-        description="Build a G36 Trim & Respond for duct pressure"
+        description="Build a G36 AHU SAT Trim & Respond .bog file."
     )
     p.add_argument("-o", "--output_dir", default="examples")
     args = p.parse_args()
 
-    b = BogFolderBuilder("G36AhuDuctPressTrimAndRespond", debug=True)
+    b = BogFolderBuilder("G36AhuSupTempTrimAndRespond", debug=True)
+
+    sat_max = 70.0
 
     # --- Top-level I/O and Configuration ---
     b.add_boolean_writable("Fan_Status", default_value=False)
     b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
+    b.add_numeric_writable("OutsideAirTemp", default_value=72.0, precision=1)
     b.add_boolean_writable("Enabled", default_value=True)
     b.add_boolean_writable("ManualReset", default_value=False)
 
-    b.add_numeric_writable("SP0", default_value=1.0, precision=2)
-    b.add_numeric_writable("SPmin", default_value=0.40, precision=2)
-    b.add_numeric_writable("SPmax", default_value=1.25, precision=2)
-    b.add_numeric_writable("SPtrim", default_value=-0.02, precision=2)
-    b.add_numeric_writable("SPres", default_value=0.04, precision=2)
-    b.add_numeric_writable("SPResMax", default_value=0.08, precision=2)
-    b.add_numeric_writable("Ignore", default_value=1.0, precision=0)
+    # SAT Reset Configuration
+    b.add_numeric_writable("SatMin", default_value=55.0, precision=1)
+    b.add_numeric_writable("SatMax", default_value=sat_max, precision=1)
+    b.add_numeric_writable("OatMin", default_value=60.0, precision=1)
+    b.add_numeric_writable("OatMax", default_value=75.0, precision=1)
 
+    # T&R Tuning
+    b.add_numeric_writable("SPtrim", default_value=0.2, precision=2)
+    b.add_numeric_writable("SPres", default_value=-0.3, precision=2)
+    b.add_numeric_writable("SPResMax", default_value=-1.0, precision=2)
+    b.add_numeric_writable("Ignore", default_value=2.0, precision=0)
+
+    # Timers
     b.add_numeric_writable("UpdateMinutes", default_value=2.0)
     b.add_numeric_writable("StartupDelayMinutes", default_value=10.0)
 
-    b.add_numeric_writable("Output", 0.0, precision=2)
+    # Final Output
+    b.add_numeric_writable("Output_SAT_Setpoint", default_value=sat_max, precision=2)
 
     # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:And", "EnableGate")  # NEW
+    b.add_component("kitControl:And", "EnableGate")
     b.add_component("kitControl:BooleanDelay", "StartupDelay")
     b.add_component("kitControl:And", "RunLogicEnable")
     b.add_component(
         "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
     )
     b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+
+    # this correct some odd quark in flow programming to smooth
+    # start up values after startup delay expires
+    b.add_numeric_writable("MaxStepSize", default_value=0.1, precision=2)
+    b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
 
     # Update Timer
     b.add_component("kitControl:MultiVibrator", "UpdateTimer")
@@ -82,32 +97,26 @@ def main():
     b.add_component("kitControl:GreaterThan", "IsRespondCondition")
     b.add_component("kitControl:Subtract", "ExcessRequests")
 
-    b.start_sub_folder("RespondCappingLogic")
     b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_component("kitControl:Minimum", "CappedResponse")
-    b.end_sub_folder()
+    b.add_component(
+        "kitControl:Maximum", "CappedResponse"
+    )  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 
-    # Custom Counter Core
-    b.add_component("kitControl:NumericLatch", "ValueLatch")
-    b.add_component("kitControl:Add", "NewSetpoint_Unclamped")
-    b.add_component("kitControl:Minimum", "Clamp_Hi")
-    b.add_component("kitControl:Maximum", "Clamp_Lo")
+    # tMaxState Counter Core
+    b.add_component("kitControl:NumericLatch", "tMaxState_Latch")
+    b.add_component("kitControl:Add", "New_tMaxState_Unclamped")
+    b.add_component("kitControl:Minimum", "tMaxState_Clamp_Hi")
+    b.add_component("kitControl:Maximum", "tMaxState_Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
-    b.add_numeric_switch("FinalOutputSwitch")
 
-    # Latch Initialization Logic
+    # Latch Initialization Logic (like duct static version)
     b.add_component("kitControl:OneShot", "InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
 
-    # Dynamic Minimum Clamp Logic
+    # Dynamic Minimum Clamp Logic (like duct static version)
     b.add_numeric_switch("MinClampSwitch")
-
-    # this correct some odd quark in flow programming to smooth
-    # start up values after startup delay expires
-    b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
-    b.add_numeric_writable("MaxStepSize", default_value=0.1, precision=2)
 
     # dont define a properties={"": 0.5} for NumericDelay just
     # wire in a numeric writeable for that as shown below
@@ -119,9 +128,12 @@ def main():
     b.add_component("kitControl:Or", "ResetTrigger")
     b.add_component("kitControl:OneShot", "ResetPulse")
 
+    b.add_component("kitControl:Reset", "SAT_Reset_By_OAT")
+    b.end_sub_folder()
+
     # --- Wiring ---
 
-    # State Management & Startup Delay
+    # State Management
     b.add_link("Fan_Status", "out", "EnableGate", "inA")
     b.add_link("Enabled", "out", "EnableGate", "inB")
     b.add_link("EnableGate", "out", "StartupDelay", "in")
@@ -138,7 +150,7 @@ def main():
     b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
     b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
-    # Timer
+    # T&R Timer
     b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
     b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period")
@@ -146,7 +158,7 @@ def main():
     b.add_link("UpdatePulse", "out", "PulseGate", "inA")
     b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
 
-    # Determine Adjustment Value (Trim or Respond)
+    # T&R Adjustment Calculation
     b.add_link("TotalRequests", "out", "IsRespondCondition", "inA")
     b.add_link("Ignore", "out", "IsRespondCondition", "inB")
     b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
@@ -161,22 +173,22 @@ def main():
     b.add_link("CappedResponse", "out", "AdjustmentSwitch", "inTrue")
     b.add_link("SPtrim", "out", "AdjustmentSwitch", "inFalse")
 
-    # Calculate New Setpoint
-    b.add_link("FinalOutputSwitch", "out", "NewSetpoint_Unclamped", "inA")
-    b.add_link("AdjustmentSwitch", "out", "NewSetpoint_Unclamped", "inB")
+    # tMaxState Counter and Clamping
+    b.add_link("tMaxState_Latch", "out", "New_tMaxState_Unclamped", "inA")
+    b.add_link("AdjustmentSwitch", "out", "New_tMaxState_Unclamped", "inB")
+    b.add_link("New_tMaxState_Unclamped", "out", "tMaxState_Clamp_Hi", "inA")
+    b.add_link("SatMax", "out", "tMaxState_Clamp_Hi", "inB")
 
-    # Wire the Dynamic Minimum Clamp Switch
+    # Dynamic Minimum Clamp with Delay
     b.add_link("StartupDelay", "out", "MinClampSwitch", "inSwitch")
-    b.add_link("SPmin", "out", "MinClampSwitch", "inTrue")
-    b.add_link("SP0", "out", "MinClampSwitch", "inFalse")
-
-    # --- NEW: Wire the Numeric Delay for the clamp value ---
+    b.add_link("SatMin", "out", "MinClampSwitch", "inTrue")
+    b.add_link(
+        "SatMax", "out", "MinClampSwitch", "inFalse"
+    )  # During startup, min clamp is SatMax
     b.add_link("MinClampSwitch", "out", "MinClampDelay", "in")
     b.add_link("MinClampDelayMinutes", "out", "MinClampDelay_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "MinClampDelay_ms_Calc", "inB")
 
-    # this correct some odd quark in flow programming to smooth
-    # start up values after startup delay expires
     b.add_link("MaxStepSize", "out", "MinClampDelay", "maxStepSize")
     b.add_link(
         "MinClampDelay_ms_Calc",
@@ -187,41 +199,45 @@ def main():
         converter_type="conv:StatusNumericToRelTime",
     )
 
-    # Clamp the new setpoint using the delayed minimum
-    b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
-    b.add_link("SPmax", "out", "Clamp_Hi", "inB")
-    b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
-    b.add_link(
-        "MinClampDelay", "out", "Clamp_Lo", "inB"
-    )  # Use the output of the new delay
+    b.add_link("tMaxState_Clamp_Hi", "out", "tMaxState_Clamp_Lo", "inA")
+    b.add_link("MinClampDelay", "out", "tMaxState_Clamp_Lo", "inB")  # Use delayed min
 
-    # Reset Logic
+    # Reset Logic for tMaxState
     b.add_link("Fan_Status", "out", "FanIsOff", "in")
     b.add_link("ManualReset", "out", "ResetTrigger", "inA")
     b.add_link("FanIsOff", "out", "ResetTrigger", "inB")
     b.add_link("ResetTrigger", "out", "ResetPulse", "in")
     b.add_link("ResetPulse", "out", "ResetSwitch", "inSwitch")
-    b.add_link("SP0", "out", "ResetSwitch", "inTrue")
-    b.add_link("Clamp_Lo", "out", "ResetSwitch", "inFalse")
+    b.add_link("SatMax", "out", "ResetSwitch", "inTrue")
+    b.add_link("tMaxState_Clamp_Lo", "out", "ResetSwitch", "inFalse")
 
-    # Latching the new value with initialization
+    # Latching the new tMaxState value with initialization
     b.add_link("RunLogicEnable", "out", "InitializeLatchPulse", "in")
     b.add_link("InitializeLatchPulse", "out", "LatchInputSwitch", "inSwitch")
-    b.add_link("SP0", "out", "LatchInputSwitch", "inTrue")
+    b.add_link("SatMax", "out", "LatchInputSwitch", "inTrue")  # Initialize to SatMax
     b.add_link("ResetSwitch", "out", "LatchInputSwitch", "inFalse")
-    b.add_link("LatchInputSwitch", "out", "ValueLatch", "in")
-    b.add_link("PulseGate", "out", "ValueLatch", "clock")
+    b.add_link("LatchInputSwitch", "out", "tMaxState_Latch", "in")
+    b.add_link("PulseGate", "out", "tMaxState_Latch", "clock")
 
-    # Final Output Selection
-    b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
-    b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
-    b.add_link("SP0", "out", "FinalOutputSwitch", "inFalse")
+    # -------- Rewritten OAT Reset wiring (Reverse-Acting) --------
+    # At OatMin (low OAT) => high SAT (tMaxState_Latch)
+    # At OatMax (high OAT) => low SAT (SatMin)
+    b.add_link("OutsideAirTemp", "out", "SAT_Reset_By_OAT", "inA")
+    b.add_link("OatMin", "out", "SAT_Reset_By_OAT", "inputLowLimit")
+    b.add_link("OatMax", "out", "SAT_Reset_By_OAT", "inputHighLimit")
+    b.add_link(
+        "tMaxState_Latch", "out", "SAT_Reset_By_OAT", "outputLowLimit"
+    )  # reverse mapping
+    b.add_link(
+        "SatMin", "out", "SAT_Reset_By_OAT", "outputHighLimit"
+    )  # reverse mapping
 
-    # Wire to Viewer
-    b.add_link("FinalOutputSwitch", "out", "Output", "in16")
+    # Final Output
+    b.add_link("SAT_Reset_By_OAT", "out", "Output_SAT_Setpoint", "in16")
 
+    # --- Save File ---
     os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "g36_duct_static_reset_tr.bog")
+    out = os.path.join(args.output_dir, "g36_supply_temp_reset_tr.bog")
     b.save(out)
     print(f"Created {out}")
 

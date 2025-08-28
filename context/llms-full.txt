@@ -880,97 +880,21 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: hot_water_reset_example.py ===
-DIR: .
-=== CODE START ===
-"""
-A classic HVAC algorithm for a hot water reset schedule. This script uses a
-`kitControl:Reset` block to calculate a hot water supply temperature setpoint
-based on the outside air temperature (OAT). As the OAT gets colder, the hot
-water setpoint gets hotter, and vice-versa. This is a common energy-saving
-strategy for boiler systems.
-"""
-
-from __future__ import annotations
-
-import argparse
-import os
-import sys
-
-from bog_builder import BogFolderBuilder
-
-
-def build_hot_water_reset(output_directory: str) -> str:
-
-    # Create builder with a descriptive folder name
-    builder = BogFolderBuilder("HotWaterTempReset", debug=True)
-
-    # Define numeric writables for outdoor air temperature and limits
-    builder.add_numeric_writable("OAT", default_value=11.0)
-    builder.add_numeric_writable("OAT_LOW", default_value=0.0)
-    builder.add_numeric_writable("OAT_HIGH", default_value=50.0)
-    builder.add_numeric_writable("HWST_LOW", default_value=110.0)
-    builder.add_numeric_writable("HWST_HIGH", default_value=160.0)
-
-    # The Reset block takes five inputs and produces a single out output.
-    # Provide fallback values matching the initial values of the connected
-    # writables so the exported XML mirrors Workbench behaviour.  The
-    # properties dict expects a nested dict with a ``value`` key.
-    reset_properties = {
-        "inA": {"value": 11.0},
-        "inputLowLimit": {"value": 0.0},
-        "inputHighLimit": {"value": 50.0},
-        "outputLowLimit": {"value": 160.0},
-        "outputHighLimit": {"value": 110.0},
-    }
-    builder.add_component("kitControl:Reset", "Reset", properties=reset_properties)
-
-    # Output writable for the supply temperature setpoint
-    builder.add_numeric_writable("HotWaterSupplyTempStp")
-
-    # Create the links between components.  Note that each target slot
-    # corresponds to a named slot on the Reset block or the numeric writable.
-    builder.add_link("OAT", "out", "Reset", "inA")
-    builder.add_link("OAT_LOW", "out", "Reset", "inputLowLimit")
-    builder.add_link("OAT_HIGH", "out", "Reset", "inputHighLimit")
-    builder.add_link("HWST_HIGH", "out", "Reset", "outputLowLimit")
-    builder.add_link("HWST_LOW", "out", "Reset", "outputHighLimit")
-    builder.add_link("Reset", "out", "HotWaterSupplyTempStp", "in10")
-
-    # Write the .bog file
-    os.makedirs(output_directory, exist_ok=True)
-    output_path = os.path.join(output_directory, "HotWaterTempReset.bog")
-    builder.save(output_path)
-    return output_path
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate a hot water reset .bog file."
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="examples",
-        help=(
-            "Directory to write the output .bog file.  If omitted, the file is "
-            "written to an 'examples' folder next to this script."
-        ),
-    )
-    args = parser.parse_args()
-    out_dir = args.output
-    full_path = build_hot_water_reset(out_dir)
-    print(f"Created {full_path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
 === FILE: hvac_g36_ahu_duct_static_reset.py ===
 DIR: .
 === CODE START ===
 """
+
+hvac_g36_ahu_duct_static_reset.py
+
+Made and validated in field by pybog creator.
+
+Final version was a slow build off of ping pong, linear_reset_examples, 
+multivibrator_link_test, rate_of_change_limiter,
+ and numeric_delay_playground examples.
+
+Duct static reset and supply air temp reset algorith very similar.
+
 G36 Duct Static Pressure Trim & Respond Algorithm (with SPResMax)
 
 This script builds a robust wiresheet implementation of the ASHRAE G36
@@ -986,55 +910,48 @@ Algorithm Overview (matching the Java logic):
     - If > Ignore, respond up by SPres * (Requests - Ignore), but
       the response amount is capped at a maximum of SPResMax.
 5.  The final setpoint is clamped between SPmin and SPmax. During the
-    startup delay, the effective minimum is held at SP0.
+    startup delay, the effective minimum is held at SP0 and is delayed
+    to prevent rapid changes.
 6.  A ManualReset or loss of Fan_Status resets the output to SP0.
 """
 
 import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
-
 def main():
-    p = argparse.ArgumentParser(
-        description="Build a G36 Trim & Respond .bog file with SPResMax."
-    )
+    p = argparse.ArgumentParser(description="Build a G36 Trim & Respond for duct pressure")
     p.add_argument("-o", "--output_dir", default="examples")
     args = p.parse_args()
 
-    b = BogFolderBuilder("G36_TrimAndRespond_SPResMax", debug=True)
+    b = BogFolderBuilder("G36AhuDuctPressTrimAndRespond", debug=True)
 
     # --- Top-level I/O and Configuration ---
     b.add_boolean_writable("Fan_Status", default_value=False)
     b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
     b.add_boolean_writable("Enabled", default_value=True)
     b.add_boolean_writable("ManualReset", default_value=False)
-
+    
     b.add_numeric_writable("SP0", default_value=1.0, precision=2)
     b.add_numeric_writable("SPmin", default_value=0.40, precision=2)
     b.add_numeric_writable("SPmax", default_value=1.25, precision=2)
     b.add_numeric_writable("SPtrim", default_value=-0.02, precision=2)
     b.add_numeric_writable("SPres", default_value=0.04, precision=2)
-    b.add_numeric_writable(
-        "SPResMax", default_value=0.08, precision=2
-    )  # Added SPResMax
+    b.add_numeric_writable("SPResMax", default_value=0.08, precision=2)
     b.add_numeric_writable("Ignore", default_value=1.0, precision=0)
 
-    b.add_numeric_writable("UpdateMinutes", default_value=0.5)
-    b.add_numeric_writable("StartupDelayMinutes", default_value=0.5)
-
+    b.add_numeric_writable("UpdateMinutes", default_value=2.0)
+    b.add_numeric_writable("StartupDelayMinutes", default_value=10.0)
+    
     b.add_numeric_writable("Output", 0.0, precision=2)
 
     # --- Logic Components ---
-    b.start_sub_folder("StateManagement")
+    b.start_sub_folder("Logic")
+    b.add_component("kitControl:And", "EnableGate") # NEW
     b.add_component("kitControl:BooleanDelay", "StartupDelay")
     b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
-    )
+    b.add_component("kitControl:NumericConst", "Const_60000", properties={"value": 60000.0})
     b.add_component("kitControl:Multiply", "Delay_ms_Calc")
-    b.end_sub_folder()
 
-    b.start_sub_folder("Logic")
     # Update Timer
     b.add_component("kitControl:MultiVibrator", "UpdateTimer")
     b.add_component("kitControl:Multiply", "Update_ms_Calc")
@@ -1044,12 +961,11 @@ def main():
     # Trim vs Respond Logic
     b.add_component("kitControl:GreaterThan", "IsRespondCondition")
     b.add_component("kitControl:Subtract", "ExcessRequests")
-
-    # --- NEW: Sub-folder for SPResMax Capping Logic ---
+    
     b.start_sub_folder("RespondCappingLogic")
     b.add_component("kitControl:Multiply", "ProportionalResponse")
     b.add_component("kitControl:Minimum", "CappedResponse")
-    b.end_sub_folder()  # End RespondCappingLogic
+    b.end_sub_folder() 
 
     b.add_numeric_switch("AdjustmentSwitch")
 
@@ -1060,7 +976,7 @@ def main():
     b.add_component("kitControl:Maximum", "Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
     b.add_numeric_switch("FinalOutputSwitch")
-
+    
     # Latch Initialization Logic
     b.add_component("kitControl:OneShot", "InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
@@ -1068,35 +984,38 @@ def main():
     # Dynamic Minimum Clamp Logic
     b.add_numeric_switch("MinClampSwitch")
 
+    # this correct some odd quark in flow programming to smooth
+    # start up values after startup delay expires
+    b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
+    b.add_numeric_writable("MaxStepSize", default_value=0.1, precision=2)
+    
+    # dont define a properties={"": 0.5} for NumericDelay just
+    # wire in a numeric writeable for that as shown below
+    b.add_component("kitControl:NumericDelay", "MinClampDelay")
+    b.add_component("kitControl:Multiply", "MinClampDelay_ms_Calc")
+
     # Reset Logic
     b.add_component("kitControl:Not", "FanIsOff")
     b.add_component("kitControl:Or", "ResetTrigger")
     b.add_component("kitControl:OneShot", "ResetPulse")
-    b.end_sub_folder()
 
     # --- Wiring ---
 
     # State Management & Startup Delay
-    b.add_link("Fan_Status", "out", "StartupDelay", "in")
+    b.add_link("Fan_Status", "out", "EnableGate", "inA")
+    b.add_link("Enabled", "out", "EnableGate", "inB")
+    b.add_link("EnableGate", "out", "StartupDelay", "in")
     b.add_link("StartupDelayMinutes", "out", "Delay_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
-    b.add_link(
-        "Delay_ms_Calc",
-        "out",
-        "StartupDelay",
-        "onDelay",
-        link_type="b:ConversionLink",
-        converter_type="conv:StatusNumericToRelTime",
-    )
+    b.add_link("Delay_ms_Calc", "out", "StartupDelay", "onDelay",
+               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
     b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
     b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
     # Timer
     b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
-    b.add_link(
-        "Update_ms_Calc", "out", "UpdateTimer", "Period"
-    )  # Uses special dual-link logic
+    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period") 
     b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
     b.add_link("UpdatePulse", "out", "PulseGate", "inA")
     b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
@@ -1106,39 +1025,41 @@ def main():
     b.add_link("Ignore", "out", "IsRespondCondition", "inB")
     b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
     b.add_link("Ignore", "out", "ExcessRequests", "inB")
-
-    # Wiring for the RespondCappingLogic sub-folder
+    
     b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
     b.add_link("SPres", "out", "ProportionalResponse", "inB")
     b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
     b.add_link("SPResMax", "out", "CappedResponse", "inB")
 
     b.add_link("IsRespondCondition", "out", "AdjustmentSwitch", "inSwitch")
-    b.add_link(
-        "CappedResponse", "out", "AdjustmentSwitch", "inTrue"
-    )  # Use the capped value
+    b.add_link("CappedResponse", "out", "AdjustmentSwitch", "inTrue")
     b.add_link("SPtrim", "out", "AdjustmentSwitch", "inFalse")
 
-    # Calculate New Setpoint (with feedback from final output)
+    # Calculate New Setpoint
     b.add_link("FinalOutputSwitch", "out", "NewSetpoint_Unclamped", "inA")
     b.add_link("AdjustmentSwitch", "out", "NewSetpoint_Unclamped", "inB")
 
-    # Wire the Dynamic Minimum Clamp
+    # Wire the Dynamic Minimum Clamp Switch
     b.add_link("StartupDelay", "out", "MinClampSwitch", "inSwitch")
-    b.add_link(
-        "SPmin", "out", "MinClampSwitch", "inTrue"
-    )  # After delay, use normal SPmin
-    b.add_link(
-        "SP0", "out", "MinClampSwitch", "inFalse"
-    )  # During delay, use SP0 as min
+    b.add_link("SPmin", "out", "MinClampSwitch", "inTrue")
+    b.add_link("SP0", "out", "MinClampSwitch", "inFalse")
 
-    # Clamp the new setpoint
+    # --- NEW: Wire the Numeric Delay for the clamp value ---
+    b.add_link("MinClampSwitch", "out", "MinClampDelay", "in")
+    b.add_link("MinClampDelayMinutes", "out", "MinClampDelay_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "MinClampDelay_ms_Calc", "inB")
+
+    # this correct some odd quark in flow programming to smooth
+    # start up values after startup delay expires
+    b.add_link("MaxStepSize", "out", "MinClampDelay", "maxStepSize")
+    b.add_link("MinClampDelay_ms_Calc", "out", "MinClampDelay", "updateTime",
+               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+
+    # Clamp the new setpoint using the delayed minimum
     b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
     b.add_link("SPmax", "out", "Clamp_Hi", "inB")
     b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
-    b.add_link(
-        "MinClampSwitch", "out", "Clamp_Lo", "inB"
-    )  # Use the output of our new switch
+    b.add_link("MinClampDelay", "out", "Clamp_Lo", "inB") # Use the output of the new delay
 
     # Reset Logic
     b.add_link("Fan_Status", "out", "FanIsOff", "in")
@@ -1161,15 +1082,240 @@ def main():
     b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
     b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
     b.add_link("SP0", "out", "FinalOutputSwitch", "inFalse")
-
+    
     # Wire to Viewer
     b.add_link("FinalOutputSwitch", "out", "Output", "in16")
 
     os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "g36_trim_and_respond_with_spresmax.bog")
+    out = os.path.join(args.output_dir, "g36_duct_static_reset_tr.bog")
     b.save(out)
     print(f"Created {out}")
 
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: hvac_g36_ahu_supply_temp_reset.py ===
+DIR: .
+=== CODE START ===
+"""
+hvac_g36_ahu_supply_temp_reset.py
+
+Made and validated in field by pybog creator.
+
+Final version was a slow build off of ping pong, linear_reset_examples, 
+multivibrator_link_test, rate_of_change_limiter,
+ and numeric_delay_playground examples.
+
+Duct static reset and supply air temp reset algorith very similar.
+
+This script builds a wiresheet implementation of the ASHRAE Guideline 36
+Supply Air Temperature (SAT) Trim & Respond algorithm, based on a proven
+Java program object. This version is structurally identical to the robust
+duct static pressure version, including startup initialization and delays.
+
+Algorithm Overview:
+-------------------
+1.  **Core Engine:** A Trim & Respond (T&R) counter adjusts an internal
+    variable called 'tMaxState'. This is the maximum allowed SAT at the
+    lowest OAT.
+    - If cooling requests are low, 'tMaxState' is trimmed UP (allowing warmer supply air).
+    - If cooling requests are high, 'tMaxState' is responded DOWN (demanding colder supply air).
+2.  **OAT Reset:** The final SAT setpoint is calculated using a linear reset
+    (interpolation) based on the current OAT and the calculated 'tMaxState'.
+3.  **State Management:** The T&R engine is only active when the fan has been
+    running for a specified startup delay. When the fan is off or during the
+    startup delay, 'tMaxState' is reset to its absolute maximum (SatMax).
+4.  **Clamping & Delays:** All calculated values are clamped within their defined
+    min/max limits, and a NumericDelay is used to smooth the minimum clamp
+    value after startup, preventing erratic behavior.
+"""
+
+import sys, os, argparse
+from bog_builder import BogFolderBuilder
+
+def main():
+    p = argparse.ArgumentParser(description="Build a G36 AHU SAT Trim & Respond .bog file.")
+    p.add_argument("-o", "--output_dir", default="examples")
+    args = p.parse_args()
+
+    b = BogFolderBuilder("G36AhuSupTempTrimAndRespond", debug=True) 
+
+    sat_max = 70.0
+
+    # --- Top-level I/O and Configuration ---
+    b.add_boolean_writable("Fan_Status", default_value=False)
+    b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
+    b.add_numeric_writable("OutsideAirTemp", default_value=72.0, precision=1)
+    b.add_boolean_writable("Enabled", default_value=True)
+    b.add_boolean_writable("ManualReset", default_value=False)
+    
+    # SAT Reset Configuration
+    b.add_numeric_writable("SatMin", default_value=55.0, precision=1)
+    b.add_numeric_writable("SatMax", default_value=sat_max, precision=1)
+    b.add_numeric_writable("OatMin", default_value=60.0, precision=1)
+    b.add_numeric_writable("OatMax", default_value=75.0, precision=1)
+
+    # T&R Tuning
+    b.add_numeric_writable("SPtrim", default_value=0.2, precision=2)
+    b.add_numeric_writable("SPres", default_value=-0.3, precision=2)
+    b.add_numeric_writable("SPResMax", default_value=-1.0, precision=2)
+    b.add_numeric_writable("Ignore", default_value=2.0, precision=0)
+
+    # Timers
+    b.add_numeric_writable("UpdateMinutes", default_value=0.50)
+    b.add_numeric_writable("StartupDelayMinutes", default_value=0.50)
+    
+    # Final Output
+    b.add_numeric_writable("Output_SAT_Setpoint", default_value=sat_max, precision=2)
+
+    # --- Logic Components ---
+    b.start_sub_folder("Logic")
+    b.add_component("kitControl:And", "EnableGate")
+    b.add_component("kitControl:BooleanDelay", "StartupDelay")
+    b.add_component("kitControl:And", "RunLogicEnable")
+    b.add_component("kitControl:NumericConst", "Const_60000", properties={"value": 60000.0})
+    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+
+    # this correct some odd quark in flow programming to smooth
+    # start up values after startup delay expires
+    b.add_numeric_writable("MaxStepSize", default_value=0.1, precision=2)
+    b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
+
+    # Update Timer
+    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    b.add_component("kitControl:Multiply", "Update_ms_Calc")
+    b.add_component("kitControl:OneShot", "UpdatePulse")
+    b.add_component("kitControl:And", "PulseGate")
+
+    # Trim vs Respond Logic
+    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
+    b.add_component("kitControl:Subtract", "ExcessRequests")
+    
+    b.add_component("kitControl:Multiply", "ProportionalResponse")
+    b.add_component("kitControl:Maximum", "CappedResponse") # Use Maximum for negative response cap
+
+    b.add_numeric_switch("AdjustmentSwitch")
+
+    # tMaxState Counter Core
+    b.add_component("kitControl:NumericLatch", "tMaxState_Latch")
+    b.add_component("kitControl:Add", "New_tMaxState_Unclamped")
+    b.add_component("kitControl:Minimum", "tMaxState_Clamp_Hi")
+    b.add_component("kitControl:Maximum", "tMaxState_Clamp_Lo")
+    b.add_numeric_switch("ResetSwitch")
+    
+    # Latch Initialization Logic (like duct static version)
+    b.add_component("kitControl:OneShot", "InitializeLatchPulse")
+    b.add_numeric_switch("LatchInputSwitch")
+
+    # Dynamic Minimum Clamp Logic (like duct static version)
+    b.add_numeric_switch("MinClampSwitch")
+
+    # dont define a properties={"": 0.5} for NumericDelay just
+    # wire in a numeric writeable for that as shown below
+    b.add_component("kitControl:NumericDelay", "MinClampDelay")
+    b.add_component("kitControl:Multiply", "MinClampDelay_ms_Calc")
+
+    # Reset Logic
+    b.add_component("kitControl:Not", "FanIsOff")
+    b.add_component("kitControl:Or", "ResetTrigger")
+    b.add_component("kitControl:OneShot", "ResetPulse")
+
+    b.add_component("kitControl:Reset", "SAT_Reset_By_OAT")
+    b.end_sub_folder()
+
+    # --- Wiring ---
+
+    # State Management
+    b.add_link("Fan_Status", "out", "EnableGate", "inA")
+    b.add_link("Enabled", "out", "EnableGate", "inB")
+    b.add_link("EnableGate", "out", "StartupDelay", "in")
+    b.add_link("StartupDelayMinutes", "out", "Delay_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
+    b.add_link("Delay_ms_Calc", "out", "StartupDelay", "onDelay",
+               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+    b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
+    b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
+
+    # T&R Timer
+    b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
+    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period") 
+    b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
+    b.add_link("UpdatePulse", "out", "PulseGate", "inA")
+    b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
+
+    # T&R Adjustment Calculation
+    b.add_link("TotalRequests", "out", "IsRespondCondition", "inA")
+    b.add_link("Ignore", "out", "IsRespondCondition", "inB")
+    b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
+    b.add_link("Ignore", "out", "ExcessRequests", "inB")
+    
+    b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
+    b.add_link("SPres", "out", "ProportionalResponse", "inB")
+    b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
+    b.add_link("SPResMax", "out", "CappedResponse", "inB")
+
+    b.add_link("IsRespondCondition", "out", "AdjustmentSwitch", "inSwitch")
+    b.add_link("CappedResponse", "out", "AdjustmentSwitch", "inTrue")
+    b.add_link("SPtrim", "out", "AdjustmentSwitch", "inFalse")
+
+    # tMaxState Counter and Clamping
+    b.add_link("tMaxState_Latch", "out", "New_tMaxState_Unclamped", "inA")
+    b.add_link("AdjustmentSwitch", "out", "New_tMaxState_Unclamped", "inB")
+    b.add_link("New_tMaxState_Unclamped", "out", "tMaxState_Clamp_Hi", "inA")
+    b.add_link("SatMax", "out", "tMaxState_Clamp_Hi", "inB")
+    
+    # Dynamic Minimum Clamp with Delay
+    b.add_link("StartupDelay", "out", "MinClampSwitch", "inSwitch")
+    b.add_link("SatMin", "out", "MinClampSwitch", "inTrue")
+    b.add_link("SatMax", "out", "MinClampSwitch", "inFalse") # During startup, min clamp is SatMax
+    b.add_link("MinClampSwitch", "out", "MinClampDelay", "in")
+    b.add_link("MinClampDelayMinutes", "out", "MinClampDelay_ms_Calc", "inA")
+    b.add_link("Const_60000", "out", "MinClampDelay_ms_Calc", "inB")
+
+
+    b.add_link("MaxStepSize", "out", "MinClampDelay", "maxStepSize")
+    b.add_link("MinClampDelay_ms_Calc", "out", "MinClampDelay", "updateTime",
+               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+    
+    b.add_link("tMaxState_Clamp_Hi", "out", "tMaxState_Clamp_Lo", "inA")
+    b.add_link("MinClampDelay", "out", "tMaxState_Clamp_Lo", "inB") # Use delayed min
+
+    # Reset Logic for tMaxState
+    b.add_link("Fan_Status", "out", "FanIsOff", "in")
+    b.add_link("ManualReset", "out", "ResetTrigger", "inA")
+    b.add_link("FanIsOff", "out", "ResetTrigger", "inB")
+    b.add_link("ResetTrigger", "out", "ResetPulse", "in")
+    b.add_link("ResetPulse", "out", "ResetSwitch", "inSwitch")
+    b.add_link("SatMax", "out", "ResetSwitch", "inTrue") 
+    b.add_link("tMaxState_Clamp_Lo", "out", "ResetSwitch", "inFalse")
+
+    # Latching the new tMaxState value with initialization
+    b.add_link("RunLogicEnable", "out", "InitializeLatchPulse", "in")
+    b.add_link("InitializeLatchPulse", "out", "LatchInputSwitch", "inSwitch")
+    b.add_link("SatMax", "out", "LatchInputSwitch", "inTrue") # Initialize to SatMax
+    b.add_link("ResetSwitch", "out", "LatchInputSwitch", "inFalse")
+    b.add_link("LatchInputSwitch", "out", "tMaxState_Latch", "in")
+    b.add_link("PulseGate", "out", "tMaxState_Latch", "clock")
+
+    # -------- Rewritten OAT Reset wiring (Reverse-Acting) --------
+    # At OatMin (low OAT) => high SAT (tMaxState_Latch)
+    # At OatMax (high OAT) => low SAT (SatMin)
+    b.add_link("OutsideAirTemp", "out", "SAT_Reset_By_OAT", "inA")
+    b.add_link("OatMin", "out", "SAT_Reset_By_OAT", "inputLowLimit")
+    b.add_link("OatMax", "out", "SAT_Reset_By_OAT", "inputHighLimit")
+    b.add_link("tMaxState_Latch", "out", "SAT_Reset_By_OAT", "outputLowLimit")   # reverse mapping
+    b.add_link("SatMin", "out", "SAT_Reset_By_OAT", "outputHighLimit")          # reverse mapping
+
+    # Final Output
+    b.add_link("SAT_Reset_By_OAT", "out", "Output_SAT_Setpoint", "in16")
+
+    # --- Save File ---
+    os.makedirs(args.output_dir, exist_ok=True)
+    out = os.path.join(args.output_dir, "g36_supply_temp_reset_tr.bog")
+    b.save(out)
+    print(f"Created {out}")
 
 if __name__ == "__main__":
     main()
@@ -1451,6 +1597,164 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: linear_reset_examples.py ===
+DIR: .
+=== CODE START ===
+"""
+linear_reset_examples.py
+
+Build a .bog showcasing three linear reset schedules, each implemented
+exclusively with `kitControl:Reset`:
+
+1) Hot Water Reset (Reverse-Acting, Heating)
+   - As OAT drops, HWST rises (reverse acting).
+
+2) SAT Reset (Reverse-Acting, Cooling)
+   - As OAT rises, SAT setpoint falls (reverse acting).
+
+3) Chilled Water Reset (Direct-Acting, Cooling)
+   - As OAT drops, CHWST may rise (example values shown).
+
+Notes:
+- The kitControl:Reset block performs the interpolation and enforces
+  input/output limits; no external MIN/MAX or custom math is required.
+
+PLEASE USE kitControl:Reset block FOR ANY RESET REQUESTS AND DO NOT
+ATTEMPT MANUAL MATHEMATIC LOGIC BLOCKS AS IT LOOKS POOR IN WIRESHEET
+AND HUMAN CONTROLS TECH WILL DELETE IT OUT AND NOT USE PYBOG.
+"""
+
+import os
+import sys
+import argparse
+
+# Keep imports simple for the web app runner (no try/except).
+# If your repo has `src/bog_builder`, this helps local execution.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    p = argparse.ArgumentParser(
+        description="Build a .bog file demonstrating three linear reset schedules using kitControl:Reset only."
+    )
+    p.add_argument("-o", "--output_dir", default="examples", help="Output directory")
+    args = p.parse_args()
+
+    b = BogFolderBuilder("LinearResetPlayground", debug=True)
+
+    # --- Shared Input / Outputs ---
+    b.add_numeric_writable("OutsideAirTemp", default_value=50.0, precision=1)
+
+    # Exposed outputs for each reset
+    b.add_numeric_writable("SAT_Setpoint_Out")
+    b.add_numeric_writable("ChilledWaterSetpoint_Out")
+    b.add_numeric_writable("HotWaterSetpoint_Out")
+
+    # ---------------------------------------------------------------------
+    # 1) Hot Water Reset (Reverse-Acting, Heating)
+    #    OAT: low -> high    Output: high -> low
+    # ---------------------------------------------------------------------
+    b.start_sub_folder("HotWaterReset_Reverse")
+    b.add_numeric_writable("HW_OAT_LOW", default_value=0.0)
+    b.add_numeric_writable("HW_OAT_HIGH", default_value=60.0)
+    b.add_numeric_writable("HWST_LOW", default_value=140.0)
+    b.add_numeric_writable("HWST_HIGH", default_value=180.0)
+
+    # Provide fallback properties so the exported XML mirrors WB defaults.
+    hw_props = {
+        "inA": {"value": 50.0},
+        "inputLowLimit": {"value": 0.0},
+        "inputHighLimit": {"value": 60.0},
+        # Reverse acting mapping: low OAT -> HIGH output; high OAT -> LOW output
+        "outputLowLimit": {"value": 180.0},
+        "outputHighLimit": {"value": 140.0},
+    }
+    b.add_component("kitControl:Reset", "HotWaterReset", properties=hw_props)
+    b.end_sub_folder()
+
+    # ---------------------------------------------------------------------
+    # 2) SAT Reset (Reverse-Acting, Cooling)
+    #    OAT: low -> high    Output: high -> low
+    # ---------------------------------------------------------------------
+    b.start_sub_folder("SAT_Reset_Reverse")
+    b.add_numeric_writable("SAT_OAT_LOW", default_value=60.0)
+    b.add_numeric_writable("SAT_OAT_HIGH", default_value=75.0)
+    b.add_numeric_writable("SAT_MIN", default_value=55.0)
+    b.add_numeric_writable("SAT_MAX", default_value=70.0)
+
+    sat_props = {
+        "inA": {"value": 60.0},
+        "inputLowLimit": {"value": 60.0},
+        "inputHighLimit": {"value": 75.0},
+        # Reverse acting mapping: low OAT -> SAT_MAX; high OAT -> SAT_MIN
+        "outputLowLimit": {"value": 70.0},  # at OAT_LOW
+        "outputHighLimit": {"value": 55.0}, # at OAT_HIGH
+    }
+    b.add_component("kitControl:Reset", "SAT_Reset", properties=sat_props)
+    b.end_sub_folder()
+
+    # ---------------------------------------------------------------------
+    # 3) Chilled Water Reset (Direct-Acting, Cooling)
+    #    OAT: low -> high    Output: low -> high  (example direct-acting)
+    # ---------------------------------------------------------------------
+    b.start_sub_folder("ChilledWaterReset_Direct")
+    b.add_numeric_writable("CHW_OAT_LOW", default_value=40.0)
+    b.add_numeric_writable("CHW_OAT_HIGH", default_value=60.0)
+    b.add_numeric_writable("CHWST_LOW", default_value=44.0)
+    b.add_numeric_writable("CHWST_HIGH", default_value=50.0)
+
+    chw_props = {
+        "inA": {"value": 50.0},
+        "inputLowLimit": {"value": 40.0},
+        "inputHighLimit": {"value": 60.0},
+        # Direct acting mapping: low OAT -> low output; high OAT -> high output
+        "outputLowLimit": {"value": 44.0},
+        "outputHighLimit": {"value": 50.0},
+    }
+    b.add_component("kitControl:Reset", "ChilledWaterReset", properties=chw_props)
+    b.end_sub_folder()
+
+    # ===========================
+    # Wiring (simple & explicit)
+    # ===========================
+
+    # 1) Hot Water Reset
+    b.add_link("OutsideAirTemp", "out", "HotWaterReset", "inA")
+    b.add_link("HW_OAT_LOW", "out", "HotWaterReset", "inputLowLimit")
+    b.add_link("HW_OAT_HIGH", "out", "HotWaterReset", "inputHighLimit")
+    b.add_link("HWST_HIGH", "out", "HotWaterReset", "outputLowLimit")   # reverse
+    b.add_link("HWST_LOW", "out", "HotWaterReset", "outputHighLimit")   # reverse
+    b.add_link("HotWaterReset", "out", "HotWaterSetpoint_Out", "in16")
+
+    # 2) SAT Reset (reverse)
+    b.add_link("OutsideAirTemp", "out", "SAT_Reset", "inA")
+    b.add_link("SAT_OAT_LOW", "out", "SAT_Reset", "inputLowLimit")
+    b.add_link("SAT_OAT_HIGH", "out", "SAT_Reset", "inputHighLimit")
+    b.add_link("SAT_MAX", "out", "SAT_Reset", "outputLowLimit")         # reverse
+    b.add_link("SAT_MIN", "out", "SAT_Reset", "outputHighLimit")        # reverse
+    b.add_link("SAT_Reset", "out", "SAT_Setpoint_Out", "in16")
+
+    # 3) Chilled Water Reset (direct)
+    b.add_link("OutsideAirTemp", "out", "ChilledWaterReset", "inA")
+    b.add_link("CHW_OAT_LOW", "out", "ChilledWaterReset", "inputLowLimit")
+    b.add_link("CHW_OAT_HIGH", "out", "ChilledWaterReset", "inputHighLimit")
+    b.add_link("CHWST_LOW", "out", "ChilledWaterReset", "outputLowLimit")   # direct
+    b.add_link("CHWST_HIGH", "out", "ChilledWaterReset", "outputHighLimit") # direct
+    b.add_link("ChilledWaterReset", "out", "ChilledWaterSetpoint_Out", "in16")
+
+    # Save
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, "linear_reset_examples.bog")
+    b.save(out_path)
+    print(f"Created {out_path}")
 
 
 if __name__ == "__main__":

@@ -7,10 +7,11 @@ constant_comparision_test.py	.
 find_max_value.py	.
 find_second_highest_of_6.py	.
 four_in_add_logic.py	.
-hot_water_reset_example.py	.
 hvac_g36_ahu_duct_static_reset.py	.
+hvac_g36_ahu_supply_temp_reset.py	.
 hvac_gl36_box_pressure_request_logic.py	.
 hvac_gl36_vav_box_cooling_request_logic.py	.
+linear_reset_examples.py	.
 manual_average_min_max.py	.
 minimal_latch_demo.py	.
 multivibrator_link_test.py	.

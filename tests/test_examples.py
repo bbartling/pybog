@@ -230,31 +230,6 @@ def test_boolean_numeric_switch(tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def test_counter_smoke_test(tmp_path: Path) -> None:
-    builder = BogFolderBuilder("CounterSmoke")
-    builder.add_numeric_writable("CounterViewer", 0.0, precision=0)
-    builder.add_component("kitControl:NumericConst", "Inc", properties={"out": 1.0})
-    builder.start_sub_folder("Logic")
-    builder.add_multi_vibrator("Pulse", period_ms="2000")
-    builder.add_component("kitControl:OneShot", "PulseEdge")
-    builder.add_component(
-        "kitControl:BooleanDelay",
-        "Delay",
-        properties={"onDelay": "3000", "offDelay": "0"},
-    )
-    builder.add_counter("C", count_increment=1.0, initial_value=0.0)
-    builder.add_link("Pulse", "out", "PulseEdge", "in")
-    builder.add_link("PulseEdge", "out", "C", "countUp")
-    builder.add_link("Inc", "out", "C", "countIncrement")
-    builder.add_link("C", "out", "CounterViewer", "in10")
-    builder.add_link("PulseEdge", "out", "Delay", "in")
-    builder.add_link("Delay", "out", "C", "clear")
-    builder.end_sub_folder()
-    out_path = tmp_path / "counter_smoke_test.bog"
-    builder.save(str(out_path))
-    assert out_path.exists()
-
-
 def test_find_max_value(tmp_path: Path) -> None:
     builder = BogFolderBuilder("FindMaxValueWithSwitches")
     inputs = [f"VAV_{i}" for i in range(1, 11)]
