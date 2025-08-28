@@ -210,110 +210,89 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
-
-
-## 🚀 LLM Agent - `generic_agent.py`
-
-Experimental Iterative **BOG File Builder**!
-Tested on **WSL** 🐧  
-Powered by a **FREE API Key** from [Google AI Studio](https://aistudio.google.com/apikey) 🔑  
-Running with **Gemini-2.5 Flash** ⚡
-
-
-From the WSL bash console, set your API key as a temporary OS environment variable:
-
 ```bash
-export GOOGLE_API_KEY="PASTE_IT_HERE"
-```
-
-The `generic_agent.py` reads in your API key, lets you input a desired an HVAC control sequence, and iteratively synthesizes a runnable Python builder script that creates a Niagara `.bog` file.  
-
-It works like this:
-
-1. **Prompt for description**  
-   You’ll be asked to describe the control system logic you want (e.g. *"Create a central plant with heating and cooling setpoints of 40°F/45°F and 75°F/70°F with a free cooling range between 50 and 60°F"*).
-
-2. **Prompt for bog file name**  
-   You’ll also be asked to give a short, human-friendly name for the output file (e.g. *"central_plant_sequencing"*).  
-   The agent forces the generated script to save exactly to that file, e.g.:  
-   `/mnt/c/Users/ben/Niagara4.11/JENEsys/central_plant_sequencing.bog`
-
-3. **Synthesize → Run → Fix loop**  
-   - Attempt 1: the LLM generates a Python script into `.agent_tmp/` and runs it.  
-   - If it fails, the agent captures the full traceback and sends both the failing code and the error back to the LLM.  
-   - The LLM then repairs the script and tries again.  
-   - This repeats up to `--max-iters` times (default 4).  
-
-4. **Result**  
-   Once successful, you’ll see debug logs from `BogFolderBuilder` and a success message where then you can open it right up in Workbench:  
-
-```
-
-✅ Generated .bog file at: /mnt/c/Users/ben/Niagara4.11/JENEsys/central\_plant\_sequencing.bog
-
-```
-
-5. **Stats**  
-At the end, the script prints how many Gemini API calls were used and how many attempts were needed.  
-
-Example:
-
-```
-
-—— Stats ——
-Gemini calls: 4
-Attempts: 4
-Total input tokens: 18636
-Total output tokens: 2249
-Total tokens: 20885
-
+python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
 ```
 
 ---
 
-### Command-line arguments
 
-```bash
-python generic_agent.py [--output <path>] [--max-iters N] [--workdir <dir>]
-```
+# 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
 
-* `--output`: optional final destination for the `.bog`. If omitted, the file stays in the default Niagara output dir (`Niagara4.11/JENEsys`).
-* `--max-iters`: max number of generate→run→fix attempts (default 4).
-* `--workdir`: scratch directory for synthesized Python scripts (default `.agent_tmp/`).
-  You should add `.agent_tmp/` to `.gitignore` since it only contains temporary generated scripts.
+The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest.
 
+---
 
-### Prompt Chaining Activity Diagram
-* Note - It is very experimental but working and subject to change once better methods can be created. TODO research MCP server to burn less tokens currently it uses LOTS of tokens in the context files sent to LLM service.
+## 🚀 How It Works
+
+1. **Upload the project zip**
+   In the chat interface, attach the `pybog-develop.zip` file (found in this repository). The agent will automatically extract the archive and inspect the code.
+
+2. **Describe your control logic**
+   Tell ChatGPT what sequence of operations you want to implement. For example:
+
+   > “Create a central plant with a boiler and chiller. Enable heating when the outside air temperature is 50 °F or below, and cooling when it is 65 °F or above. Use variable speed pumps with a differential pressure setpoint of 20 PSI and include a 2 °F deadband for both heating and cooling.”
+
+3. **ChatGPT builds and tests the script**
+
+   * The agent writes a Python script using the `BogFolderBuilder` API.
+   * It runs the script in a sandboxed environment and inspects the results.
+   * If it fails, the agent reads the traceback, fixes the code, and tries again.
+   * This iterate-and-repair loop continues until a valid `.bog` file is produced.
+
+4. **Download the result**
+   Once successful, ChatGPT presents a link to download the generated `.bog` file. You can import this file directly into Niagara Workbench for testing.
+
+---
+
+## ✅ Advantages
+
+* No API key required
+* No local Python setup
+* Faster prototyping directly within the conversation
+
+---
+
+## 📊 Updated Flowchart
+
+The following Mermaid diagram illustrates the high-level flow when using ChatGPT Agent Mode:
 
 ```mermaid
 flowchart TD
-  start([Start CLI]) --> askDesc[Prompt description]
-  askDesc --> askName[Prompt bog file name]
-  askName --> loadCtx[Load context files]
-  loadCtx --> attempt{{Attempt == 1?}}
+  start([Start chat session]) --> upload[User uploads pybog zip]
+  upload --> describe[User describes desired control logic]
+  describe --> init[Agent extracts context files and builder]
+  init --> iterate{{Is first attempt?}}
 
-  attempt -- Yes --> gen[LLM generate script]
-  attempt -- No  --> fix[LLM fix script - prev code + traceback]
+  iterate -- Yes --> gen[Agent generates Python script]
+  iterate -- No  --> fix[Agent repairs script using previous code and traceback]
 
-  gen --> write[Write script to temp folder]
+  gen --> write[Write script to sandbox]
   fix --> write
 
-  write --> run[Run script with -o output dir]
-  run --> success{Run ok AND file created?}
+  write --> run[Execute script and build .bog]
+  run --> success{Run ok and file created?}
 
-  success -- Yes --> done[Print success\nPrint stats\nExit]
-  success -- No  --> cap[Capture stderr tail as traceback]
-  cap --> retry{Attempt < max iters?}
-
-  retry -- Yes --> incr[Increment attempt\nStore code and error]
-  incr --> attempt
-
-  retry -- No --> fail[Print failure\nPrint stats\nExit]
+  success -- Yes --> done[Present download link\nExit]
+  success -- No  --> cap[Capture error/traceback]
+  cap --> retry{Attempts < max allowed?}
+  retry -- Yes --> incr[Update attempt count and context]
+  incr --> iterate
+  retry -- No --> fail[Report failure\nExit]
 ```
 
 ---
+
+## 💡 Tips
+
+* **Be specific** when describing your control logic (setpoints, deadbands, number of pumps, etc.). The more detail you provide, the more accurate the generated `.bog` file will be.
+* **Validate in Workbench**: After downloading, import the `.bog` file into Niagara Workbench to review the wiresheet and adjust as needed.
+
+With Agent Mode, you can rapidly prototype complex HVAC sequences without writing any code yourself. Just describe what you need, and let ChatGPT handle the heavy lifting.
+
+---
+
+
 
 ### Generate Context Text Files
 
