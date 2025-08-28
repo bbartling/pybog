@@ -205,7 +205,7 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 * The `Add` block's links use these handles to reference the `out` slots from `Input1` and `Input2` and connect them to its `inA` and `inB` inputs.
 
 
-![Adder Logic Created with Python](snips/addrMadeWithPy.jpg)
+![Adder Logic Created with Python](https://github.com/bbartling/pybog/blob/develop/snips/addrMadeWithPy.jpg)
 
 
 ---
@@ -219,9 +219,10 @@ python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsy
 
 # 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
 
-The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest.
+The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest. Be se sure to hit the plus sign to enable "Agent" mode in ChatGPT.
 
----
+
+![Agent mode snip](https://github.com/bbartling/pybog/blob/develop/snips/agent_mode_snip.png)
 
 ## 🚀 How It Works
 
@@ -253,7 +254,7 @@ The workflow is entirely conversational: upload your project zip, describe the c
 
 ---
 
-## 📊 Updated Flowchart
+## 📊 AI Agent
 
 The following Mermaid diagram illustrates the high-level flow when using ChatGPT Agent Mode:
 
