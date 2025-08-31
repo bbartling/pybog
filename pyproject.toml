@@ -1,21 +1,45 @@
+# pyproject.toml
+
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bog_builder"
+name = "bog-builder"
 version = "0.1.1"
-description = "Niagara .bog file builder with robust Pydantic validation"
-readme = "README.md"
-requires-python = ">=3.8"
+description = "A Python toolkit for programmatically generating Tridium Niagara .bog files for HVAC controls."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Ben Bartling", email = "you@example.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: System :: Hardware :: Universal Serial Bus (USB)",
+]
+
+# Core dependencies for the library to function
 dependencies = [
-    "pydantic",
-    "google-generativeai",
-    "matplotlib",
-    "pytest"
+    "pydantic"
 ]
 
 [project.optional-dependencies]
+# Dependencies for development, testing, and analysis
 dev = [
+    "pytest",
     "black",
+    "matplotlib",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bbartling/pybog"
+Repository = "https://github.com/bbartling/pybog"
+"YouTube Channel" = "https://www.youtube.com/@TalkShopWithBen"

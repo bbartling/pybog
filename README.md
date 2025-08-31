@@ -210,12 +210,6 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-```bash
-python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
-```
-
----
-
 
 # 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
 
