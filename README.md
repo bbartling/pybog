@@ -5,28 +5,42 @@
 ![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
 
-## Local Python Project Setup
-On WSL in the root directory afer after cloning project run:
+## Python Project Setup
+I use **WSL (Windows Subsystem for Linux)** but it make work just fine on ordinary Windows or Mac. Generating `bogs` can be done easily without setting up Python enivornments as shown further below via "ChatGPT Agent" mode and `The Bog Maker 4000` website. Both examples are demo'd on YouTube.
 >
 > ```bash
-> wsl
+> pip install pybog
+> ```
+>
+
+The project may get frequent updates so try:
+>
+> ```bash
+> pip install pybog --upgrade
+> ```
+>
+
+### Contribute to `pybog` via developing a local Python package
+>
+> ```bash
 > pip install .
 > ```
 >
 
-To uninstall bog_builer if developing
+To uninstall bog_builer if developing:
 > ```bash
 > pip uninstall bog_builder
 > ```
 >
 
-Optinal run unit tests
+Make sure tests pass:
 > pytest
 
+Make Git PR and if it is a mega make over beyond submitting [examples](https://github.com/bbartling/pybog/tree/develop/examples) Python files give me a heads up prior please.
 
 ## Running Example Scripts with WSL
 
-Each example script can be executed directly in **WSL (Windows Subsystem for Linux)** to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
+Each example script can be executed directly in WSL to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
 
 
 1. **Run a specific example from project root directory**
@@ -364,6 +378,7 @@ This will:
 👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
 
 ---
+
 
 [🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
 

@@ -5,14 +5,14 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bog-builder"
-version = "0.1.1"
+name = "pybog"
+version = "0.1.0"
 description = "A Python toolkit for programmatically generating Tridium Niagara .bog files for HVAC controls."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-  { name = "Ben Bartling", email = "you@example.com" },
+  { name = "Ben Bartling", email = "ben.bartling@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
