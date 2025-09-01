@@ -373,8 +373,6 @@ This will:
 **Pie Chart (distribution of block usage)**
 ![kitControl Pie](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_pie.png)
 
----
-
 👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
 
 ---
@@ -392,5 +390,6 @@ Reference logic building blocks from Niagara’s kitControl palette are document
 
 ## License
 
-MIT License — free for reuse with attribution. Pull requests welcome.
+MIT License — free for reuse with attribution. Any files generated here are provided strictly for research and educational purposes. All outputs are delivered “as-is,” with no guarantees of accuracy, safety, or fitness for any application. Neither the pybog project nor its creator accepts any responsibility or liability under any circumstances. By generating or using a .bog file produced by this project, you agree that you assume all risks and full responsibility for any outcomes—including, but not limited to, personal injury, loss of life, financial loss, equipment damage, or mechanical system failures. If you choose to use these files in any way, you do so entirely at your own risk.
+
 
