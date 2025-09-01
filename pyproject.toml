@@ -9,7 +9,7 @@ name = "pybog"
 version = "0.1.0"
 description = "A Python toolkit for programmatically generating Tridium Niagara .bog files for HVAC controls."
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [
   { name = "Ben Bartling", email = "ben.bartling@gmail.com" },
