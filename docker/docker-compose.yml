@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  pybog-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: pybog-api
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENVIRONMENT=production
+    volumes:
+      - ../outputs:/app/outputs
+      - ../uploads:/app/uploads
+      - ../logs:/app/logs
+      - ../context:/app/context
+      - ../examples:/app/examples
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a simple database for session management
+  redis:
+    image: redis:7-alpine
+    container_name: pybog-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # Optional: Add nginx for reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: pybog-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - pybog-api
+
+volumes:
+  redis_data:

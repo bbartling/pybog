@@ -1,0 +1,566 @@
+/* Authentic Niagara Workbench Theme */
+
+:root {
+  /* Workbench Color Palette */
+  --wb-bg-primary: #3a3f41;
+  --wb-bg-secondary: #2b2e30;
+  --wb-bg-canvas: #e8e8e8;
+  --wb-bg-component: #f0f0f0;
+  --wb-border: #a0a0a0;
+  --wb-border-dark: #606060;
+  --wb-text: #000000;
+  --wb-text-light: #333333;
+  --wb-header-gradient-start: #d4d0c8;
+  --wb-header-gradient-end: #b8b4a8;
+  --wb-pin-input: #0066cc;
+  --wb-pin-output: #ff6600;
+  --wb-wire: #666666;
+  --wb-grid-line: #d0d0d0;
+  --wb-tree-bg: #ffffff;
+  --wb-tree-selected: #316ac5;
+  --wb-tree-hover: #e8f4fd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 11px;
+  background: var(--wb-bg-primary);
+  color: var(--wb-text);
+  overflow: hidden;
+}
+
+/* Main Workbench Container */
+.workbench-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--wb-bg-primary);
+}
+
+/* Workbench Header Bar */
+.workbench-header {
+  height: 32px;
+  background: linear-gradient(to bottom, #4a5254 0%, #3a3f41 100%);
+  border-bottom: 1px solid #202020;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: #ffffff;
+  font-size: 11px;
+}
+
+.wb-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.wb-logo svg {
+  color: #00a4e4;
+}
+
+.wb-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.wb-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+.wb-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00ff00;
+}
+
+.wb-status-dot.offline {
+  background: #ff0000;
+}
+
+/* Main Layout */
+.workbench-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Sidebar - Nav Tree */
+.workbench-nav {
+  width: 250px;
+  background: var(--wb-bg-secondary);
+  border-right: 1px solid #202020;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nav-header {
+  height: 24px;
+  background: linear-gradient(to bottom, #5a6264 0%, #4a5254 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-bottom: 1px solid #202020;
+}
+
+.nav-tree {
+  flex: 1;
+  background: var(--wb-tree-bg);
+  overflow-y: auto;
+  font-size: 11px;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tree-node:hover {
+  background: var(--wb-tree-hover);
+}
+
+.tree-node.selected {
+  background: var(--wb-tree-selected);
+  color: white;
+}
+
+.tree-indent {
+  width: 16px;
+  display: inline-block;
+}
+
+.tree-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-expand {
+  width: 12px;
+  font-size: 9px;
+  color: #666;
+}
+
+.tree-label {
+  flex: 1;
+}
+
+/* Main Canvas Area */
+.workbench-canvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--wb-bg-secondary);
+}
+
+/* Wire Sheet */
+.wiresheet-container {
+  flex: 1;
+  background: var(--wb-bg-canvas);
+  position: relative;
+  overflow: auto;
+}
+
+.wiresheet-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(to right, var(--wb-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--wb-grid-line) 1px, transparent 1px);
+  background-size: 16px 16px;
+  pointer-events: none;
+}
+
+.wiresheet-content {
+  position: relative;
+  padding: 20px;
+  min-height: 100%;
+  z-index: 1;
+}
+
+/* Workbench Components */
+.wb-component {
+  background: var(--wb-bg-component);
+  border: 1px solid var(--wb-border);
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  position: relative;
+  display: inline-block;
+  margin: 8px;
+  min-width: 120px;
+}
+
+.wb-component-header {
+  background: linear-gradient(to bottom, var(--wb-header-gradient-start) 0%, var(--wb-header-gradient-end) 100%);
+  border-bottom: 1px solid var(--wb-border);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+}
+
+.wb-component-title {
+  color: var(--wb-text);
+}
+
+.wb-component-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+.wb-component-body {
+  padding: 4px;
+  background: white;
+  min-height: 40px;
+}
+
+/* Component Pins */
+.wb-pins {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.wb-pins.input {
+  left: -6px;
+}
+
+.wb-pins.output {
+  right: -6px;
+}
+
+.wb-pin {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin: 4px 0;
+  cursor: crosshair;
+  position: relative;
+}
+
+.wb-pin.input {
+  background: var(--wb-pin-input);
+  border: 1px solid #004499;
+}
+
+.wb-pin.output {
+  background: var(--wb-pin-output);
+  border: 1px solid #cc4400;
+}
+
+.wb-pin:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 4px currentColor;
+}
+
+.wb-pin-label {
+  position: absolute;
+  font-size: 9px;
+  white-space: nowrap;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.wb-pin.input .wb-pin-label {
+  left: 12px;
+}
+
+.wb-pin.output .wb-pin-label {
+  right: 12px;
+}
+
+/* Property Fields */
+.wb-property {
+  display: flex;
+  align-items: center;
+  margin: 2px 0;
+  font-size: 10px;
+}
+
+.wb-property-label {
+  min-width: 60px;
+  color: var(--wb-text-light);
+  padding-right: 4px;
+}
+
+.wb-property-value {
+  flex: 1;
+  background: white;
+  border: 1px solid var(--wb-border);
+  padding: 1px 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+
+/* Wire Connections */
+.wiresheet-wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.wire-path {
+  stroke: var(--wb-wire);
+  stroke-width: 2;
+  fill: none;
+}
+
+.wire-path.active {
+  stroke: #00a4e4;
+  stroke-width: 3;
+}
+
+.wire-path.animated {
+  stroke-dasharray: 5, 5;
+  animation: wireDash 0.5s linear infinite;
+}
+
+@keyframes wireDash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Bottom Panel */
+.workbench-bottom {
+  height: 200px;
+  background: var(--wb-bg-secondary);
+  border-top: 1px solid #202020;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-tabs {
+  height: 24px;
+  background: linear-gradient(to bottom, #4a5254 0%, #3a3f41 100%);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 4px;
+}
+
+.bottom-tab {
+  background: var(--wb-bg-secondary);
+  border: 1px solid #202020;
+  border-bottom: none;
+  padding: 2px 12px;
+  margin-right: 2px;
+  font-size: 11px;
+  color: #cccccc;
+  cursor: pointer;
+}
+
+.bottom-tab.active {
+  background: var(--wb-tree-bg);
+  color: var(--wb-text);
+  position: relative;
+  z-index: 1;
+}
+
+.bottom-content {
+  flex: 1;
+  background: var(--wb-tree-bg);
+  border: 1px solid #202020;
+  padding: 8px;
+  overflow: auto;
+}
+
+/* BOG File List */
+.bog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bog-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: white;
+  border: 1px solid var(--wb-border);
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.bog-item:hover {
+  background: var(--wb-tree-hover);
+}
+
+.bog-item-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  color: #ff6600;
+}
+
+.bog-item-name {
+  flex: 1;
+}
+
+.bog-item-size {
+  color: #666;
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+/* Chat Input Area */
+.chat-input-panel {
+  background: var(--wb-bg-component);
+  border-top: 1px solid var(--wb-border);
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.chat-input-field {
+  flex: 1;
+  background: white;
+  border: 1px solid var(--wb-border);
+  padding: 6px;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 11px;
+  resize: none;
+  min-height: 32px;
+  max-height: 80px;
+}
+
+.chat-input-field:focus {
+  outline: none;
+  border-color: var(--wb-tree-selected);
+}
+
+.chat-button {
+  background: linear-gradient(to bottom, #ffffff 0%, #e0e0e0 100%);
+  border: 1px solid var(--wb-border);
+  padding: 6px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-button:hover {
+  background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
+}
+
+.chat-button:active {
+  background: linear-gradient(to bottom, #d0d0d0 0%, #b0b0b0 100%);
+}
+
+.chat-button.primary {
+  background: linear-gradient(to bottom, #4a90e2 0%, #357abd 100%);
+  color: white;
+  border-color: #2968a3;
+}
+
+.chat-button.primary:hover {
+  background: linear-gradient(to bottom, #5ba0f2 0%, #4590d2 100%);
+}
+
+/* Message Components */
+.message-component {
+  margin: 12px 8px;
+  opacity: 0;
+  animation: componentFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes componentFadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.message-component.user {
+  margin-left: auto;
+  margin-right: 20px;
+  max-width: 60%;
+}
+
+.message-component.assistant {
+  margin-right: auto;
+  margin-left: 20px;
+  max-width: 70%;
+}
+
+.message-component.system {
+  margin: 12px auto;
+  max-width: 80%;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--wb-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #606060;
+  border: 1px solid #404040;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #707070;
+}
+
+/* Splitters */
+.splitter-vertical {
+  width: 4px;
+  background: var(--wb-bg-secondary);
+  cursor: col-resize;
+  position: relative;
+}
+
+.splitter-horizontal {
+  height: 4px;
+  background: var(--wb-bg-secondary);
+  cursor: row-resize;
+  position: relative;
+}
+
+.splitter-vertical:hover,
+.splitter-horizontal:hover {
+  background: #4a5254;
+}

@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector for embeddings + app data
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: pybog-postgres
+    environment:
+      POSTGRES_USER: pybog
+      POSTGRES_PASSWORD: pybog123
+      POSTGRES_DB: pybog
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pybog-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pybog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (optional, used by API for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: pybog-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - pybog-network
+
+  # PyBog API (Core)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pybog-api
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=postgresql://pybog:pybog123@postgres:5432/pybog
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./api:/app/api
+      - ./bog_builder:/app/bog_builder
+      - ./data/outputs:/app/data/outputs
+      - ./data/uploads:/app/data/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - pybog-network
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # n8n Workflow Engine
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: pybog-n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      # Postgres configuration for n8n
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=pybog
+      - DB_POSTGRESDB_PASSWORD=pybog123
+      # Development encryption key (change in prod)
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-dev_encryption_key_change_me}
+      # Pass API and OpenAI URL to workflows
+      - PYBOG_API_BASE=http://api:8000
+      - PYBOG_API_URL=http://api:8000/api/generate-bog
+      - OPENAI_API_BASE=https://api.openai.com/v1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Webhook authentication secrets
+      - WEBHOOK_USERNAME=${WEBHOOK_USERNAME:-webhook_user}
+      - WEBHOOK_PASSWORD=${WEBHOOK_PASSWORD:-webhook_pass_change_me}
+      # Enable community nodes
+      - NODE_FUNCTION_ALLOW_EXTERNAL=@n8n/n8n-nodes-langchain
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflow_data:/home/node/workflows
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - pybog-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pybog-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_N8N_URL=http://localhost:5678
+    depends_on:
+      - api
+      - n8n
+    networks:
+      - pybog-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+
+networks:
+  pybog-network:
+    driver: bridge

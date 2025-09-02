@@ -1,0 +1,604 @@
+{
+  "name": "Workflow 2 - AnalysisChat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analysis-chat",
+        "options": {}
+      },
+      "id": "4acf25b7-b504-4cc2-83bc-bc544bea8c0e",
+      "name": "Webhook Trigger1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        -32
+      ],
+      "webhookId": "analysis-chat-workflow",
+      "notes": "Receives initial HVAC text input via webhook"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ccd435c1-96a9-4a6c-99b7-95a18d95e51e",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1056,
+        240
+      ],
+      "notes": "Provides language model for agent"
+    },
+    {
+      "parameters": {
+        "name": "hvacAnalyzer",
+        "description": "Extract I/O list from HVAC text description",
+        "jsCode": "try {\n  const { extracted_text = '' } = ($input.first().json || {});\n  if (!extracted_text) throw new Error('No extracted_text provided');\n  \n  const io = { inputs: [], outputs: [] };\n  \n  // Enhanced regex patterns for HVAC components\n  const inputPatterns = [\n    /(temperature|pressure|status|setpoint|signal|monitor|sensor|reading|value|feedback)/gi,\n    /(outdoor\\s+air|return\\s+air|supply\\s+air|mixed\\s+air)\\s+(temperature|humidity)/gi,\n    /(damper|valve)\\s+(position|status)/gi\n  ];\n  \n  const outputPatterns = [\n    /(fan|valve|damper|actuator|pump|heater|cooler)\\s*(modulate|run|open|close|shut|start|stop|enable|disable)/gi,\n    /(supply|return|exhaust)\\s+fan/gi,\n    /(heating|cooling)\\s+(valve|coil)/gi\n  ];\n  \n  // Extract inputs\n  inputPatterns.forEach(pattern => {\n    const matches = extracted_text.match(pattern) || [];\n    matches.forEach(m => {\n      const clean = m.trim().toLowerCase();\n      if (!io.inputs.some(existing => existing.toLowerCase() === clean)) {\n        io.inputs.push(m.trim());\n      }\n    });\n  });\n  \n  // Extract outputs\n  outputPatterns.forEach(pattern => {\n    const matches = extracted_text.match(pattern) || [];\n    matches.forEach(m => {\n      const clean = m.trim().toLowerCase();\n      if (!io.outputs.some(existing => existing.toLowerCase() === clean)) {\n        io.outputs.push(m.trim());\n      }\n    });\n  });\n  \n  return { io_points: io };\n} catch(e) {\n  return { error: 'Failed to extract I/O points: ' + e.message };\n}"
+      },
+      "id": "46a1c1b0-4eda-45e8-99df-965580476ac8",
+      "name": "HVAC Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        240
+      ],
+      "notes": "Extracts inputs and outputs from HVAC text"
+    },
+    {
+      "parameters": {
+        "name": "blockDecomposer",
+        "description": "Break HVAC sequence into logical control blocks",
+        "jsCode": "try {\n  const { extracted_text = '' } = ($input.first().json || {});\n  if (!extracted_text) throw new Error('No extracted_text provided');\n  \n  const blockKeywords = {\n    'Safety/Alarms': /safety|alarm|emergency|trip|fault|error|fail/gi,\n    'Scheduling/Modes': /schedule|mode|time|occupied|unoccupied|start|stop/gi,\n    'Fan Control': /fan|blower|cfm|airflow|speed/gi,\n    'Temperature Control': /temperature|setpoint|heating|cooling|thermostat/gi,\n    'Damper Control': /damper|outdoor\\s+air|return\\s+air|mixed\\s+air|economizer/gi,\n    'Valve Control': /valve|chilled\\s+water|hot\\s+water|steam/gi,\n    'Pressure Control': /pressure|static|differential/gi\n  };\n  \n  const blocks = Object.keys(blockKeywords).filter(blockName => {\n    return extracted_text.match(blockKeywords[blockName]);\n  });\n  \n  return { \n    blocks: blocks.length ? blocks : ['General HVAC Sequence'],\n    block_details: blocks.length ? blocks.map(b => ({\n      name: b,\n      keywords_found: extracted_text.match(blockKeywords[b]) || []\n    })) : []\n  };\n} catch(e) {\n  return { error: 'Failed to decompose blocks: ' + e.message };\n}"
+      },
+      "id": "d314fe87-0270-4049-91fa-f140daf284e3",
+      "name": "Block Decomposer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        240
+      ],
+      "notes": "Decomposes HVAC text into logical control blocks"
+    },
+    {
+      "parameters": {
+        "name": "pseudocodeGenerator",
+        "description": "Convert HVAC English description to structured pseudocode",
+        "jsCode": "try {\n  const { blocks = [], io_points = {}, extracted_text = '' } = ($input.first().json || {});\n  if (!blocks.length && !io_points.inputs) throw new Error('No blocks or io_points provided');\n  \n  const inputs = io_points.inputs || [];\n  const outputs = io_points.outputs || [];\n  \n  const pseudocode = blocks.map(blockName => {\n    let logic = [];\n    \n    // Generate context-aware logic based on block type\n    switch(blockName.toLowerCase()) {\n      case 'safety/alarms':\n        logic = [\n          'IF safety_condition_violated THEN',\n          '  SHUTDOWN all_equipment',\n          '  ACTIVATE alarm',\n          '  LOG safety_event'\n        ];\n        break;\n      case 'fan control':\n        logic = [\n          'IF occupied_mode AND temperature_deviation > threshold THEN',\n          '  MODULATE fan_speed BASED_ON temperature_error',\n          'ELSE',\n          '  SET fan_speed TO minimum_ventilation'\n        ];\n        break;\n      case 'temperature control':\n        logic = [\n          'IF space_temperature < heating_setpoint THEN',\n          '  OPEN heating_valve',\n          'ELSE IF space_temperature > cooling_setpoint THEN',\n          '  OPEN cooling_valve',\n          'ELSE',\n          '  CLOSE all_valves'\n        ];\n        break;\n      default:\n        // Generic logic using available I/O points\n        if (inputs.length && outputs.length) {\n          logic = [\n            `IF ${inputs[0]} meets_condition THEN`,\n            `  ACTIVATE ${outputs[0]}`,\n            'ELSE',\n            `  DEACTIVATE ${outputs[0]}`\n          ];\n        } else {\n          logic = [\n            `IF condition_for_${blockName.replace(/[^a-zA-Z0-9]/g, '_')} THEN`,\n            '  PERFORM required_action',\n            'ELSE',\n            '  MAINTAIN current_state'\n          ];\n        }\n    }\n    \n    return {\n      block: blockName,\n      logic: logic\n    };\n  });\n  \n  return { pseudocode };\n} catch(e) {\n  return { error: 'Failed to generate pseudocode: ' + e.message };\n}"
+      },
+      "id": "7bd046d0-b7f4-4d39-abee-6baa49af041d",
+      "name": "Pseudocode Generator",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        240
+      ],
+      "notes": "Generates structured pseudocode from blocks and I/O points"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are an expert HVAC controls engineer. Your task is to analyze HVAC sequence descriptions and prepare them for BOG (Building Operation Graphics) generation.\n\nProcess the input text through these steps:\n1. First, use hvacAnalyzer to extract all inputs and outputs\n2. Then, use blockDecomposer to identify logical control blocks\n3. Finally, use pseudocodeGenerator to create structured logic\n\nProvide a comprehensive analysis that includes:\n- All identified input/output points\n- Logical control blocks found\n- Structured pseudocode for each block\n- Any potential issues or ambiguities in the sequence\n\nBe thorough and ensure all HVAC components and control logic are captured.",
+        "options": {
+          "maxIterations": 10
+        }
+      },
+      "id": "c5397ef9-28d3-4ea0-b7e6-ba1a0c2f9ee8",
+      "name": "HVAC Expert Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        -32
+      ],
+      "notes": "Orchestrates HVAC analysis using tools in sequence"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate the agent's analysis results\ntry {\n  const data = $input.first().json || {};\n  const agentOutput = data.output || data;\n  \n  // Extract structured data from agent response\n  let io_points = {};\n  let blocks = [];\n  let pseudocode = [];\n  \n  // Try to parse agent output for structured data\n  if (typeof agentOutput === 'string') {\n    // If agent returned text, try to extract JSON-like structures\n    const ioMatch = agentOutput.match(/\"io_points\"\\s*:\\s*({[^}]+})/i);\n    const blocksMatch = agentOutput.match(/\"blocks\"\\s*:\\s*(\\[[^\\]]+\\])/i);\n    const pseudocodeMatch = agentOutput.match(/\"pseudocode\"\\s*:\\s*(\\[[^\\]]+\\])/i);\n    \n    if (ioMatch) {\n      try { io_points = JSON.parse(ioMatch[1]); } catch(e) {}\n    }\n    if (blocksMatch) {\n      try { blocks = JSON.parse(blocksMatch[1]); } catch(e) {}\n    }\n    if (pseudocodeMatch) {\n      try { pseudocode = JSON.parse(pseudocodeMatch[1]); } catch(e) {}\n    }\n  } else if (typeof agentOutput === 'object') {\n    // If agent returned structured data\n    io_points = agentOutput.io_points || {};\n    blocks = agentOutput.blocks || [];\n    pseudocode = agentOutput.pseudocode || [];\n  }\n  \n  // Ensure minimum structure\n  if (!io_points.inputs) io_points.inputs = [];\n  if (!io_points.outputs) io_points.outputs = [];\n  if (!blocks.length) blocks = ['General HVAC Sequence'];\n  if (!pseudocode.length) {\n    pseudocode = [{\n      block: blocks[0],\n      logic: ['IF condition THEN action', 'ELSE maintain_state']\n    }];\n  }\n  \n  const sessionId = data.sessionId || 'session_' + Date.now();\n  \n  return {\n    json: {\n      sessionId: sessionId,\n      analysis_complete: true,\n      io_points: io_points,\n      blocks: blocks,\n      pseudocode: pseudocode,\n      ready_for_review: true,\n      original_text: data.extracted_text || data.text || ''\n    }\n  };\n} catch(e) {\n  return {\n    json: {\n      sessionId: 'error_session',\n      error: 'Failed to process agent output: ' + e.message,\n      analysis_complete: false\n    }\n  };\n}"
+      },
+      "id": "fe9143ae-533b-4367-ad4a-ed5cac2c2300",
+      "name": "Analysis Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        -32
+      ],
+      "notes": "Processes and validates agent analysis results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.analysis_complete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d6e6099-7a7a-4457-8295-4e13e747cfba",
+      "name": "Analysis Validator",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        128,
+        240
+      ],
+      "notes": "Validates if analysis completed successfully"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"sessionId\": \"{{ $json.sessionId }}\",\n  \"status\": \"ready_for_review\",\n  \"message\": \"Analysis complete. Please review the extracted components:\",\n  \"analysis\": {\n    \"inputs\": {{ JSON.stringify($json.io_points.inputs) }},\n    \"outputs\": {{ JSON.stringify($json.io_points.outputs) }},\n    \"blocks\": {{ JSON.stringify($json.blocks) }},\n    \"pseudocode\": {{ JSON.stringify($json.pseudocode) }}\n  },\n  \"next_action\": \"Send approval to resume-chat endpoint to generate BOG file\"\n}",
+        "options": {}
+      },
+      "id": "29ef84b7-75f9-438e-ab6f-c1cb527e2d7e",
+      "name": "Preview Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -32
+      ],
+      "notes": "Sends analysis preview to user for approval"
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "hvac_chat_memory",
+        "options": {}
+      },
+      "id": "e085099d-2109-4ba8-b771-ed770c4cbc28",
+      "name": "Store Analysis State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        352,
+        224
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9e0LyulB1IEZ1fXO",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Stores analysis results awaiting approval"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resume-chat",
+        "options": {}
+      },
+      "id": "dd9d1a77-0272-459a-a89b-faf0bd4144c9",
+      "name": "Resume Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        544
+      ],
+      "webhookId": "resume-chat-workflow",
+      "notes": "Receives user approval to proceed with BOG generation"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "hvac_chat_memory",
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "sessionId",
+              "value": "={{ $json.sessionId }}"
+            },
+            {
+              "column": "state",
+              "value": "pending_approval"
+            }
+          ]
+        },
+        "sort": {
+          "values": [
+            {
+              "column": "created_at",
+              "direction": "DESC"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4c8a8fce-f00b-4405-a1e7-761b4b14816e",
+      "name": "Retrieve Analysis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        544
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9e0LyulB1IEZ1fXO",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Retrieves stored analysis data for approved session"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const data = $input.first().json || {};\n  \n  // Parse stored data\n  let analysisData;\n  if (data.data && typeof data.data === 'string') {\n    analysisData = JSON.parse(data.data);\n  } else {\n    analysisData = data.data || data;\n  }\n  \n  if (!analysisData.io_points || !analysisData.pseudocode) {\n    throw new Error('Missing required analysis data');\n  }\n  \n  // Format into PyBOG schema\n  const schema = {\n    metadata: {\n      title: 'HVAC Control Sequence',\n      description: 'Generated from natural language description',\n      created: new Date().toISOString(),\n      sessionId: analysisData.sessionId\n    },\n    inputs: (analysisData.io_points.inputs || []).map((input, index) => ({\n      id: `INPUT_${index + 1}`,\n      name: input,\n      type: 'analog', // Default to analog, can be refined\n      description: `Input point: ${input}`\n    })),\n    outputs: (analysisData.io_points.outputs || []).map((output, index) => ({\n      id: `OUTPUT_${index + 1}`,\n      name: output,\n      type: 'analog', // Default to analog, can be refined\n      description: `Output point: ${output}`\n    })),\n    setpoints: [], // Can be populated from analysis if needed\n    logic_blocks: (analysisData.pseudocode || []).map((block, index) => ({\n      id: `BLOCK_${index + 1}`,\n      name: block.block || `Block ${index + 1}`,\n      description: `Control logic for ${block.block}`,\n      pseudocode: Array.isArray(block.logic) ? block.logic : [block.logic || 'No logic defined'],\n      priority: index + 1\n    })),\n    original_text: analysisData.original_text || ''\n  };\n  \n  return {\n    json: {\n      bog_schema: schema,\n      sessionId: analysisData.sessionId,\n      ready_for_generation: true\n    }\n  };\n} catch(e) {\n  return {\n    json: {\n      error: 'Failed to format schema: ' + e.message,\n      sessionId: data.sessionId || 'unknown'\n    }\n  };\n}"
+      },
+      "id": "6d5d4927-cec9-4c7d-856d-207c3162a40b",
+      "name": "Schema Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        544
+      ],
+      "notes": "Formats analysis into comprehensive PyBOG schema"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/api/generate-bog",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "schema",
+              "value": "={{ JSON.stringify($json.bog_schema) }}"
+            },
+            {
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "e8cd874b-174e-455f-8c29-85cca038e0da",
+      "name": "Call PyBOG API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -272,
+        544
+      ],
+      "notes": "Sends schema to PyBOG API for BOG file generation"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "hvac_chat_memory",
+        "options": {}
+      },
+      "id": "8cec929b-bea3-4770-ba42-f157692edc47",
+      "name": "Update Completion State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        544
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9e0LyulB1IEZ1fXO",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Updates database with completion status"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const data = $input.first().json || {};\n  const response = data.body || data;\n  const sessionId = data.sessionId || 'unknown';\n  \n  let message = 'BOG file generated successfully!';\n  let downloadUrl = null;\n  let status = 'COMPLETED';\n  \n  if (data.error) {\n    message = 'Error: ' + data.error;\n    status = 'ERROR';\n  } else if (response.success && response.download_url) {\n    message = 'BOG file generated successfully! You can download it using the provided link.';\n    downloadUrl = response.download_url;\n  } else if (response.download_url) {\n    downloadUrl = response.download_url;\n  } else {\n    message = 'API call completed but no download URL was provided.';\n    status = 'WARNING';\n  }\n  \n  return {\n    json: {\n      sessionId: sessionId,\n      status: status,\n      message: message,\n      downloadUrl: downloadUrl,\n      bog_generated: status === 'COMPLETED',\n      timestamp: new Date().toISOString()\n    }\n  };\n} catch(e) {\n  return {\n    json: {\n      sessionId: data.sessionId || 'unknown',\n      status: 'ERROR',\n      message: 'Error processing API response: ' + e.message,\n      bog_generated: false\n    }\n  };\n}"
+      },
+      "id": "9ceb1be4-a07e-4786-b7c7-43d8f880e287",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        544
+      ],
+      "notes": "Formats final API response with proper status"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "93b5cb64-d61a-49eb-be9e-1d6dca937c04",
+      "name": "Final Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        320,
+        544
+      ],
+      "notes": "Returns final response with BOG download link"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const data = $input.first().json || {};\n  const sessionId = data.sessionId || 'unknown';\n  \n  let errorMessage = 'An unknown error occurred';\n  \n  if (data.error) {\n    errorMessage = data.error;\n  } else if (data.message) {\n    errorMessage = data.message;\n  }\n  \n  return {\n    json: {\n      sessionId: sessionId,\n      status: 'ERROR',\n      message: 'Workflow failed: ' + errorMessage,\n      error_details: data,\n      timestamp: new Date().toISOString()\n    }\n  };\n} catch(e) {\n  return {\n    json: {\n      sessionId: 'unknown',\n      status: 'CRITICAL_ERROR',\n      message: 'Critical workflow error: ' + e.message\n    }\n  };\n}"
+      },
+      "id": "fc33fc80-76ae-4073-b8cd-85785d60a32b",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        736
+      ],
+      "notes": "Handles errors from any workflow step"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "fe78eb60-f476-4de6-ad91-9bc63bccef93",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        320,
+        736
+      ],
+      "notes": "Returns error response to user"
+    },
+    {
+      "parameters": {
+        "tableName": "hvac_chat_memory"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -832,
+        240
+      ],
+      "id": "1074d524-6e30-4873-8028-1adc61a38aaa",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "9e0LyulB1IEZ1fXO",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger1": {
+      "main": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HVAC Analyzer": {
+      "ai_tool": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block Decomposer": {
+      "ai_tool": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pseudocode Generator": {
+      "ai_tool": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HVAC Expert Agent": {
+      "main": [
+        [
+          {
+            "node": "Analysis Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analysis Processor": {
+      "main": [
+        [
+          {
+            "node": "Analysis Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analysis Validator": {
+      "main": [
+        [
+          {
+            "node": "Preview Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Analysis State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Webhook": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Analysis": {
+      "main": [
+        [
+          {
+            "node": "Schema Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schema Formatter": {
+      "main": [
+        [
+          {
+            "node": "Call PyBOG API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call PyBOG API": {
+      "main": [
+        [
+          {
+            "node": "Update Completion State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Completion State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Final Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "HVAC Expert Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4cb265d1-77de-4983-9d75-a15532182ec8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "046ab924127beebc2a6ac199cb53caca898f316c28d80263b1da11e2adc4b791"
+  },
+  "id": "XrnQq17LHPEyVY67",
+  "tags": []
+}

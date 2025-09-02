@@ -199,3 +199,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Archive folder
+archive/
+

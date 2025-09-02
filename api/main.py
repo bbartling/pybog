@@ -1,0 +1,601 @@
+"""
+PyBOG API - Core endpoints for BOG generation
+Simplified version focused on essential functionality
+"""
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+import os
+import json
+import uuid
+import logging
+from pathlib import Path
+from datetime import datetime
+import asyncpg
+import httpx
+import asyncio
+
+# Import core PyBOG functionality
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from bog_builder import BogFolderBuilder
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create FastAPI app
+app = FastAPI(
+    title="PyBOG API",
+    version="2.0.0",
+    description="Core API for generating Niagara BOG files from HVAC specifications"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Storage paths
+OUTPUTS_DIR = Path("data/outputs")
+UPLOADS_DIR = Path("data/uploads")
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ------------------------
+# WebSocket Connection Manager
+# ------------------------
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+    
+    async def connect(self, websocket: WebSocket, session_id: str):
+        await websocket.accept()
+        self.active_connections[session_id] = websocket
+        logger.info(f"WebSocket connected for session: {session_id}")
+    
+    def disconnect(self, session_id: str):
+        if session_id in self.active_connections:
+            del self.active_connections[session_id]
+            logger.info(f"WebSocket disconnected for session: {session_id}")
+    
+    async def send_message(self, session_id: str, message: dict):
+        if session_id in self.active_connections:
+            try:
+                await self.active_connections[session_id].send_text(json.dumps(message))
+                logger.info(f"Message sent to session {session_id}: {message.get('type', 'unknown')}")
+            except Exception as e:
+                logger.error(f"Failed to send message to session {session_id}: {e}")
+                self.disconnect(session_id)
+        else:
+            logger.warning(f"No active connection for session: {session_id}")
+    
+    async def send_analysis_complete(self, session_id: str, analysis_data: dict):
+        await self.send_message(session_id, {
+            "type": "analysis_complete",
+            "sessionId": session_id,
+            "analysis": analysis_data,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    
+    async def send_bog_generated(self, session_id: str, download_url: str, message: str):
+        await self.send_message(session_id, {
+            "type": "bog_generated",
+            "sessionId": session_id,
+            "downloadUrl": download_url,
+            "message": message,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+manager = ConnectionManager()
+
+# ------------------------
+# Pydantic Models
+# ------------------------
+
+class SensorInput(BaseModel):
+    """Input sensor definition"""
+    name: str
+    type: str = Field(default="temperature", description="Sensor type: temperature, pressure, flow, humidity, CO2")
+    units: str = Field(default="°F", description="Units: °F, PSI, CFM, %, PPM")
+    default_value: float = 0.0
+    range_min: Optional[float] = None
+    range_max: Optional[float] = None
+
+class ActuatorOutput(BaseModel):
+    """Output actuator definition"""
+    name: str
+    type: str = Field(default="valve", description="Actuator type: valve, damper, VFD, relay")
+    control_type: str = Field(default="modulating", description="Control type: modulating, on_off")
+    range: str = Field(default="0-100%", description="Control range")
+    default_value: float = 0.0
+
+class ControlSequence(BaseModel):
+    """Control logic sequence"""
+    name: str
+    type: str = Field(default="normal", description="Sequence type: startup, shutdown, normal, safety")
+    description: str
+    components: List[str] = Field(default_factory=list, description="List of component names involved")
+    logic: Optional[str] = None
+
+class BogGenerationRequest(BaseModel):
+    """Request to generate a BOG file"""
+    bog_name: str = Field(description="Name for the BOG file")
+    session_id: Optional[str] = Field(default=None, description="Session ID for tracking")
+    inputs: List[SensorInput] = Field(description="List of input sensors")
+    outputs: List[ActuatorOutput] = Field(description="List of output actuators")
+    control_sequences: List[ControlSequence] = Field(default_factory=list, description="Control logic sequences")
+    setpoints: Dict[str, float] = Field(default_factory=dict, description="Setpoint values")
+    alarms: List[Dict[str, Any]] = Field(default_factory=list, description="Alarm conditions")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+class BogGenerationResponse(BaseModel):
+    """Response from BOG generation"""
+    success: bool
+    session_id: str
+    bog_file_path: Optional[str] = None
+    download_url: Optional[str] = None
+    components_processed: Dict[str, int]
+    message: str
+    errors: List[str] = Field(default_factory=list)
+
+class SchemaValidationRequest(BaseModel):
+    """Request to validate HVAC schema before generation"""
+    inputs: List[SensorInput]
+    outputs: List[ActuatorOutput]
+    control_sequences: List[ControlSequence] = Field(default_factory=list)
+
+class SchemaValidationResponse(BaseModel):
+    """Response from schema validation"""
+    valid: bool
+    errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    suggestions: List[str] = Field(default_factory=list)
+
+class SessionStateResponse(BaseModel):
+    """Response with session state information"""
+    session_id: str
+    state: str
+    analysis_data: Optional[Dict[str, Any]] = None
+    created_at: str
+    updated_at: str
+
+class WorkflowApprovalRequest(BaseModel):
+    """Request to approve or reject analysis"""
+    session_id: str
+    approved: bool
+    feedback: Optional[str] = None
+
+# ------------------------
+# API Endpoints
+# ------------------------
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "name": "PyBOG API",
+        "version": "2.0.0",
+        "status": "operational",
+        "endpoints": {
+            "generate": "/api/generate-bog",
+            "validate": "/api/validate-schema",
+            "download": "/api/download/{session_id}/{filename}",
+            "health": "/api/health"
+        }
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "pybog-api",
+        "storage": {
+            "outputs": str(OUTPUTS_DIR),
+            "uploads": str(UPLOADS_DIR)
+        }
+    }
+
+@app.post("/api/validate-schema", response_model=SchemaValidationResponse)
+async def validate_schema(request: SchemaValidationRequest):
+    """Validate HVAC schema before generation"""
+    errors = []
+    warnings = []
+    suggestions = []
+    
+    # Validate inputs
+    if not request.inputs:
+        errors.append("No input sensors defined. At least one sensor is required.")
+    else:
+        for sensor in request.inputs:
+            if not sensor.name:
+                errors.append(f"Sensor missing name")
+            if sensor.type not in ["temperature", "pressure", "flow", "humidity", "CO2"]:
+                warnings.append(f"Unknown sensor type '{sensor.type}' for {sensor.name}")
+    
+    # Validate outputs
+    if not request.outputs:
+        errors.append("No output actuators defined. At least one actuator is required.")
+    else:
+        for actuator in request.outputs:
+            if not actuator.name:
+                errors.append(f"Actuator missing name")
+            if actuator.type not in ["valve", "damper", "VFD", "relay"]:
+                warnings.append(f"Unknown actuator type '{actuator.type}' for {actuator.name}")
+    
+    # Validate control sequences
+    if not request.control_sequences:
+        suggestions.append("Consider adding control sequences to define system behavior")
+    else:
+        component_names = {s.name for s in request.inputs} | {a.name for a in request.outputs}
+        for sequence in request.control_sequences:
+            for component in sequence.components:
+                if component not in component_names:
+                    warnings.append(f"Component '{component}' in sequence '{sequence.name}' not found in inputs/outputs")
+    
+    # Provide suggestions
+    if len(request.inputs) < 2:
+        suggestions.append("Consider adding more sensors for redundancy and better control")
+    
+    if len(request.outputs) < 2:
+        suggestions.append("Consider adding more actuators for finer control")
+    
+    return SchemaValidationResponse(
+        valid=len(errors) == 0,
+        errors=errors,
+        warnings=warnings,
+        suggestions=suggestions
+    )
+
+@app.post("/api/generate-bog", response_model=BogGenerationResponse)
+async def generate_bog(request: BogGenerationRequest):
+    """Generate BOG file from HVAC schema"""
+    
+    session_id = request.session_id or str(uuid.uuid4())
+    errors = []
+    
+    try:
+        # Validate minimum requirements
+        if not request.inputs:
+            return BogGenerationResponse(
+                success=False,
+                session_id=session_id,
+                components_processed={"inputs": 0, "outputs": 0, "sequences": 0},
+                message="No input sensors specified",
+                errors=["At least one input sensor is required"]
+            )
+        
+        if not request.outputs:
+            return BogGenerationResponse(
+                success=False,
+                session_id=session_id,
+                components_processed={"inputs": len(request.inputs), "outputs": 0, "sequences": 0},
+                message="No output actuators specified",
+                errors=["At least one output actuator is required"]
+            )
+        
+        # Create BOG builder
+        bog_name = request.bog_name or f"hvac_control_{session_id[:8]}"
+        builder = BogFolderBuilder(bog_name, debug=True)
+        
+        # Add input sensors
+        for sensor in request.inputs:
+            try:
+                builder.add_numeric_writable(
+                    sensor.name,
+                    default_value=sensor.default_value,
+                    facets=f"units={sensor.units}"
+                )
+                logger.info(f"Added sensor: {sensor.name} ({sensor.type})")
+            except Exception as e:
+                errors.append(f"Failed to add sensor {sensor.name}: {str(e)}")
+        
+        # Add output actuators
+        for actuator in request.outputs:
+            try:
+                if actuator.control_type == "modulating":
+                    builder.add_numeric_writable(
+                        actuator.name,
+                        default_value=actuator.default_value,
+                        facets=f"range={actuator.range}"
+                    )
+                else:
+                    builder.add_boolean_writable(
+                        actuator.name,
+                        default_value=bool(actuator.default_value)
+                    )
+                logger.info(f"Added actuator: {actuator.name} ({actuator.type})")
+            except Exception as e:
+                errors.append(f"Failed to add actuator {actuator.name}: {str(e)}")
+        
+        # Add setpoints
+        for name, value in request.setpoints.items():
+            try:
+                builder.add_component(
+                    "kitControl:NumericConst", 
+                    name, 
+                    properties={"value": str(value)}
+                )
+                logger.info(f"Added setpoint: {name} = {value}")
+            except Exception as e:
+                errors.append(f"Failed to add setpoint {name}: {str(e)}")
+        
+        # Add basic control logic (if provided)
+        if request.control_sequences:
+            # This would be expanded to handle actual control logic
+            for sequence in request.control_sequences:
+                logger.info(f"Processing sequence: {sequence.name} - {sequence.description}")
+                # TODO: Implement actual control logic generation
+        
+        # Save BOG file
+        output_path = OUTPUTS_DIR / session_id
+        output_path.mkdir(exist_ok=True)
+        bog_file_path = output_path / f"{bog_name}.bog"
+        
+        builder.save(str(bog_file_path))
+        logger.info(f"BOG file saved to: {bog_file_path}")
+        
+        return BogGenerationResponse(
+            success=True,
+            session_id=session_id,
+            bog_file_path=str(bog_file_path),
+            download_url=f"/api/download/{session_id}/{bog_name}.bog",
+            components_processed={
+                "inputs": len(request.inputs),
+                "outputs": len(request.outputs),
+                "sequences": len(request.control_sequences)
+            },
+            message=f"BOG file '{bog_name}.bog' generated successfully",
+            errors=errors
+        )
+        
+    except Exception as e:
+        logger.error(f"BOG generation failed: {str(e)}")
+        return BogGenerationResponse(
+            success=False,
+            session_id=session_id,
+            components_processed={
+                "inputs": len(request.inputs),
+                "outputs": len(request.outputs),
+                "sequences": len(request.control_sequences)
+            },
+            message=f"BOG generation failed: {str(e)}",
+            errors=errors + [str(e)]
+        )
+
+@app.get("/api/download/{session_id}/{filename}")
+async def download_bog(session_id: str, filename: str):
+    """Download generated BOG file"""
+    file_path = OUTPUTS_DIR / session_id / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="application/octet-stream"
+    )
+
+@app.post("/api/pybog/generate")
+async def pybog_generate(request: BogGenerationRequest):
+    """n8n-compatible endpoint for BOG generation"""
+    # This is an alias for the main generate endpoint
+    # to maintain compatibility with n8n workflows
+    return await generate_bog(request)
+
+# ------------------------
+# Workflow Control Endpoints
+# ------------------------
+
+@app.get("/api/sessions/{session_id}/state", response_model=SessionStateResponse)
+async def get_session_state(session_id: str):
+    """Get current state of a session from database"""
+    try:
+        # Get database connection from environment
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        
+        conn = await asyncpg.connect(db_url)
+        try:
+            # Query the session state
+            query = """
+                SELECT sessionId, state, data, result_data, created_at, updated_at
+                FROM hvac_chat_memory 
+                WHERE sessionId = $1 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """
+            
+            row = await conn.fetchrow(query, session_id)
+            
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            
+            # Parse analysis data if available
+            analysis_data = None
+            if row['data']:
+                analysis_data = row['data'] if isinstance(row['data'], dict) else json.loads(row['data'])
+            elif row['result_data']:
+                analysis_data = row['result_data'] if isinstance(row['result_data'], dict) else json.loads(row['result_data'])
+            
+            return SessionStateResponse(
+                session_id=row['sessionid'],
+                state=row['state'],
+                analysis_data=analysis_data,
+                created_at=row['created_at'].isoformat(),
+                updated_at=row['updated_at'].isoformat()
+            )
+            
+        finally:
+            await conn.close()
+            
+    except asyncpg.PostgresError as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    except Exception as e:
+        logger.error(f"Error getting session state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/sessions/{session_id}/approve")
+async def approve_analysis(session_id: str, request: WorkflowApprovalRequest):
+    """Approve analysis and trigger BOG generation via n8n resume webhook"""
+    try:
+        if not request.approved:
+            # Handle feedback/rejection case
+            return {"message": "Analysis rejected, feedback recorded", "feedback": request.feedback}
+        
+        # Call n8n resume webhook to continue workflow
+        n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
+        resume_url = f"{n8n_url}/webhook/resume-chat"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(resume_url, json={
+                "sessionId": session_id,
+                "approved": True
+            })
+            
+            if response.status_code == 200:
+                return {
+                    "message": "Analysis approved, BOG generation started",
+                    "session_id": session_id,
+                    "workflow_response": response.json()
+                }
+            else:
+                logger.error(f"n8n webhook failed: {response.status_code} - {response.text}")
+                raise HTTPException(
+                    status_code=502, 
+                    detail=f"Workflow trigger failed: {response.text}"
+                )
+                
+    except httpx.RequestError as e:
+        logger.error(f"Request to n8n failed: {e}")
+        raise HTTPException(status_code=502, detail="Failed to connect to workflow engine")
+    except Exception as e:
+        logger.error(f"Error approving analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/sessions/{session_id}/feedback")
+async def submit_feedback(session_id: str, feedback: str):
+    """Submit feedback for analysis changes and restart analysis"""
+    try:
+        # TODO: Implement feedback handling
+        # This would trigger a new analysis cycle with the feedback
+        return {
+            "message": "Feedback submitted",
+            "session_id": session_id,
+            "feedback": feedback,
+            "status": "pending_reanalysis"
+        }
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/analysis-complete")
+async def analysis_complete(analysis_data: dict):
+    """Receive analysis from n8n and send to frontend via WebSocket"""
+    try:
+        session_id = analysis_data.get('sessionId')
+        if not session_id:
+            raise HTTPException(status_code=400, detail="sessionId is required")
+        
+        logger.info(f"Analysis complete received for session: {session_id}")
+        
+        # Parse analysis data
+        analysis_parsed = analysis_data.get('analysis', {})
+        if isinstance(analysis_parsed, str):
+            try:
+                analysis_parsed = json.loads(analysis_parsed)
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse analysis data: {analysis_parsed}")
+                analysis_parsed = {}
+        
+        # Send to frontend via WebSocket
+        await manager.send_analysis_complete(session_id, {
+            "sessionId": session_id,
+            "status": analysis_data.get('status', 'ready_for_review'),
+            "message": analysis_data.get('message', 'Analysis complete'),
+            "inputs": analysis_parsed.get('inputs', []),
+            "outputs": analysis_parsed.get('outputs', []),
+            "blocks": analysis_parsed.get('blocks', []),
+            "pseudocode": analysis_parsed.get('pseudocode', []),
+            "ready_for_review": True
+        })
+        
+        return {"status": "forwarded", "session_id": session_id}
+        
+    except Exception as e:
+        logger.error(f"Error processing analysis completion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/bog-generated")
+async def bog_generated(generation_data: dict):
+    """Receive BOG generation completion from n8n and send to frontend"""
+    try:
+        session_id = generation_data.get('sessionId')
+        if not session_id:
+            raise HTTPException(status_code=400, detail="sessionId is required")
+        
+        logger.info(f"BOG generation complete for session: {session_id}")
+        
+        download_url = generation_data.get('downloadUrl', '')
+        message = generation_data.get('message', 'BOG file generated successfully!')
+        
+        # Send to frontend via WebSocket
+        await manager.send_bog_generated(session_id, download_url, message)
+        
+        return {"status": "forwarded", "session_id": session_id}
+        
+    except Exception as e:
+        logger.error(f"Error processing BOG generation completion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ------------------------
+# WebSocket Support (Optional)
+# ------------------------
+
+@app.websocket("/ws/{session_id}")
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time updates"""
+    try:
+        await manager.connect(websocket, session_id)
+        
+        # Send initial connection confirmation
+        await manager.send_message(session_id, {
+            "type": "connected",
+            "sessionId": session_id,
+            "message": "WebSocket connected successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        while True:
+            data = await websocket.receive_text()
+            logger.info(f"Received WebSocket message from {session_id}: {data}")
+            
+            # Handle ping/pong for connection keep-alive
+            if data == "ping":
+                await manager.send_message(session_id, {
+                    "type": "pong",
+                    "sessionId": session_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for session: {session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for session {session_id}: {e}")
+    finally:
+        manager.disconnect(session_id)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

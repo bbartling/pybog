@@ -1,0 +1,46 @@
+/* Global Reset and Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  overflow: hidden;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Global button reset */
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Global input styling */
+input, textarea {
+  font-family: inherit;
+}
+
+/* Selection styling */
+::selection {
+  background: #4a9eff;
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: #4a9eff;
+  color: #ffffff;
+}
