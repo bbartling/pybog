@@ -55,6 +55,7 @@ class BogFolderBuilder:
         self._sub_folders: Dict[Tuple[str, ...], List[str]] = defaultdict(list)
         self._component_to_folder: Dict[str, Tuple[str, ...]] = {}
         self._current_folder_path: Tuple[str, ...] = (folder_name,)
+        self._folder_handles: Dict[Tuple[str, ...], str] = {}
         self.START_X = 10
         self.START_Y = 10
         self.X_COLUMN_WIDTH = 20  # DONT MODIFY HUMAN VERIFY VISUALLY GOOD
@@ -106,7 +107,13 @@ class BogFolderBuilder:
                 f"Choose a unique sub‑folder name."
             )
         self._sub_folders[parent_path].append(name)
-        self._current_folder_path = parent_path + (name,)
+        new_path = parent_path + (name,)
+
+        # Generate and store a unique handle for the new sub-folder path
+        handle = self._get_next_handle()
+        self._folder_handles[new_path] = handle
+
+        self._current_folder_path = new_path
 
     def end_sub_folder(self) -> None:
         """Exits the current sub‑folder, returning to the parent.
@@ -472,6 +479,28 @@ class BogFolderBuilder:
                 }
             )
             return
+        
+
+        if (
+            s_type in numeric_source_types
+            and t_type == "kitControl:BooleanDelay"
+            and target_slot.lower() in ("ondelay", "offdelay")
+        ):
+            if self.debug:
+                print(
+                    f"[BOG BUILDER DEBUG] Applying StatusNumericToRelTime conversion for BooleanDelay.{target_slot}."
+                )
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": target_slot,
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToRelTime",
+                }
+            )
+            return
 
         if (
             s_type in numeric_source_types
@@ -719,6 +748,7 @@ class BogFolderBuilder:
                 folder_element, folder_path_tuple + (sub_folder_name,)
             )
 
+
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
     ) -> Dict[str, Tuple[int, int]]:
@@ -747,7 +777,7 @@ class BogFolderBuilder:
                 outputs.append(name)
 
         self.log(f"Categorised as INPUTS: {sorted(inputs)}", is_layout_log=True)
-        self.log(f"Categorised as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
+        self.log(f"Categorisd as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
         self.log(f"Found SUB‑FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
 
         # --- Position Outputs with wrapping ---
@@ -764,17 +794,23 @@ class BogFolderBuilder:
             y += self.Y_INCREMENT
 
         num_output_cols = (len(outputs) - 1) // MAX_ITEMS_PER_COLUMN + 1
-        folder_x = self.START_X + (num_output_cols * self.X_COLUMN_WIDTH)
+        folder_x_start = self.START_X + (num_output_cols * self.X_COLUMN_WIDTH)
 
+        # Position folders horizontally
+        x = folder_x_start
         y = self.START_Y
         for name in sorted(sub_folders):
-            coords[name] = (folder_x, y)
+            coords[name] = (x, y)
             self.log(
                 f"Positioned FOLDER '{name}' at {coords[name]}", is_layout_log=True
             )
-            y += self.Y_INCREMENT
+            x += self.X_COLUMN_WIDTH  # Correctly increment X for horizontal layout
 
-        input_x_start = folder_x + self.X_COLUMN_WIDTH
+        # Calculate input start position after all folder columns
+        num_folder_cols = len(sub_folders)
+        input_x_start = folder_x_start + (num_folder_cols * self.X_COLUMN_WIDTH)
+        
+        # Position Inputs with wrapping
         x = input_x_start
         y = self.START_Y
         for i, name in enumerate(sorted(inputs)):
@@ -1184,13 +1220,14 @@ class BogFolderBuilder:
                 ET.SubElement(
                     element,
                     "p",
-                    {"n": "onDelay", "t": "b:RelTime", "v": str(on_d)},
+                    {"n": "onDelay", "f": "L", "t": "b:RelTime", "v": str(on_d)},
                 )
                 ET.SubElement(
                     element,
                     "p",
-                    {"n": "offDelay", "t": "b:RelTime", "v": str(off_d)},
+                    {"n": "offDelay", "f": "L", "t": "b:RelTime", "v": str(off_d)},
                 )
+
             elif data["type"] == "control:TimeTrigger":
                 tm = data["properties"].get("triggerMode")
                 if isinstance(tm, dict) and "value" in tm:

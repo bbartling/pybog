@@ -337,6 +337,8 @@ The graph is **not strictly hierarchical**: components can have links and refere
 * **Build a handle → name map.** Handles (e.g. `s="h:123"`) are common in link definitions. Build a dictionary so you can resolve these references.
 * **Be mindful of palettes.** The `type` attribute encodes the palette and block name (e.g. `kitControl:Add`). Grouping by palette helps narrow searches or generate statistics.
 
+---
+
 ### Analyzer Class
 
 The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
@@ -350,7 +352,7 @@ The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
 Analyse a `.dist` file, export JSON, and produce charts:
 
 ```bash
-python -m bog_builder.analyzer "/path/to/file.dist" \
+python -m bog_builder.analyzer analyze "/path/to/file.dist" \
   -o "/path/to/output.json" \
   --plots "/path/to/outputdir"
 ```
@@ -362,6 +364,41 @@ This will:
 
   * `kitcontrol_counts_bar.png`
   * `kitcontrol_counts_pie.png`
+
+---
+
+### Comparator Class
+
+The `BogComparator` in `bog_builder.analyzer` provides a powerful diffing tool for your Niagara files. It:
+
+* Compares two `.bog` or `.dist` archives to find the differences between them.
+* Identifies components that have been added, removed, or modified.
+* Highlights specific changes to component properties and links, including changes to link types and converters.
+
+### Example Usage
+
+Compare two `.bog` files to generate a diff report directly in your terminal:
+
+```bash
+python -m bog_builder.analyzer compare /path/to/version_A.bog /path/to/version_B.bog
+```
+
+This will print a detailed report listing:
+
+* Components that were added (`+`) or removed (`-`).
+* Modified components, detailing the exact property and link changes.
+
+---
+
+### Future Features (TODO)
+
+#### Web Interface (Flask App)
+
+A simple web application is planned to provide a graphical user interface for the comparator tool.
+
+* **How it will work:** Users will be able to upload two `.bog` or raw `.xml` files directly in their browser using an intuitive interface.
+* **Output:** The application will display a user-friendly, color-coded diff report, making it even easier to visualize changes than the terminal output.
+
 
 ---
 
