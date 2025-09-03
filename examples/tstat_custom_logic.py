@@ -1,6 +1,12 @@
 """
 thermostat.py
 
+This is custom logic with bool comparaters. In General do not use
+this as humans controls techs prefer to visually see the Tstat
+block being used from kitControl because it is what they are
+used to seeing and they may reject logic that looks like
+this.
+
 Simple thermostat logic:
 - Modes: 0=Off, 1=Heat, 2=Cool  (numeric select)
 - Hysteresis applied on both heat/cool thresholds

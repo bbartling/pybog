@@ -1,9 +1,13 @@
 addition_complicated.py	.
 average_min_max.py	.
+bad_parse_into_wb_example.py	.
 bool_and_numeric_switch.py	.
+bool_delay_playground.py	.
 bool_latch_play_ground.py	.
 bool_logic_playground.py	.
 constant_comparision_test.py	.
+counter_playground.py	.
+demand_based_chiller_enable.py	.
 find_max_value.py	.
 find_second_highest_of_6.py	.
 four_in_add_logic.py	.
@@ -11,6 +15,8 @@ hvac_g36_ahu_duct_static_reset.py	.
 hvac_g36_ahu_supply_temp_reset.py	.
 hvac_gl36_box_pressure_request_logic.py	.
 hvac_gl36_vav_box_cooling_request_logic.py	.
+lead_lag_cycles_block_playground.py	.
+lead_lag_runtime_block_playground.py	.
 linear_reset_examples.py	.
 manual_average_min_max.py	.
 minimal_latch_demo.py	.
@@ -25,9 +31,9 @@ rate_of_change_limiter.py	.
 schedule_bool_example.py	.
 schedule_enum_example.py	.
 schedule_numeric_example.py	.
-simple_math_logic.py	.
-subtract_simple.py	.
+sub_folder_playground.py	.
 test_periodic_trigger.py	.
-thermostat.py	.
 top_five_of_fifteen.py	.
+tstat_block_playground.py	.
+tstat_custom_logic.py	.
 zone_occ_setpoint_switch.py	.

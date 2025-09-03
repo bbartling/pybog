@@ -1,7 +1,4 @@
-"""
-
-"""
-
+""" """
 
 import os
 import argparse
@@ -37,9 +34,6 @@ def main():
 
     builder.start_sub_folder("Five")
     builder.end_sub_folder()
-
-
-
 
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)

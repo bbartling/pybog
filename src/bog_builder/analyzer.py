@@ -1,488 +1,525 @@
 # src/bog_builder/analyzer.py
 """
-Tools for analysing Niagara .bog and .dist archives.
+bog_builder.analyzer
 
-- JSON analysis with components + handle_map (old tool behavior).
-- Optional kitControl counts and bar/pie charts (new behavior).
-- Can list archive contents.
-- Robust .bog/.dist parsing (handles file.xml or baja.bog.xml).
+Analyze or compare Niagara .bog/.dist archives or raw bajaObjectGraph XML.
 
-Usage examples:
-  python -m bog_builder.analyzer path/to/file.bog -o analysis.json
-  python -m bog_builder.analyzer path/to/station.dist --count
-  python -m bog_builder.analyzer path/to/file.bog --plots out/plots
-  python -m bog_builder.analyzer path/to/file.bog -l
-  python -m bog_builder.analyzer compare path/to/bool_delay_playground_Broken.bog path/to/BoolDelay_Playground_Fixed.bog
+Usage
+-----
+Analyze a single file:
+    python -m bog_builder.analyzer analyze path/to/file.bog --format json
+
+Compare two graphs (ideal for LLM agents):
+    python -m bog_builder.analyzer compare path/to/Broken.xml path/to/Fixed.xml \
+        --ignore handles --ignore ws-annotations --format table
+
+Outputs
+-------
+- table  : human-readable console table
+- json   : full machine-friendly JSON (recommended for agents)
+- md     : markdown table (paste into READMEs)
+- html   : self-contained HTML diff table (drop into a web app)
+
+Notes
+-----
+- "Handles" (the `h=` attribute) are required for components/links to be fully
+  resolvable in Workbench projects. Workbench usually injects them on save.
+- `b:WsAnnotation` children are UI layout metadata; optional for logic but
+  helpful for usability.
 """
 
 from __future__ import annotations
-
 import argparse
-import collections
-import io
 import json
-import os
-import re
+import sys
 import zipfile
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Dict, List, Optional, Tuple, Iterable
 import xml.etree.ElementTree as ET
-
-try:
-    import matplotlib
-
-    matplotlib.use("Agg")  # headless-friendly
-    import matplotlib.pyplot as plt  # type: ignore
-except Exception:
-    plt = None  # plotting optional
+from collections import defaultdict, Counter
 
 
-
-# ------------------------- Comparator -------------------------
-
-class BogComparator:
-    """Compares two BOG/DIST files using the Analyzer class."""
-
-    def __init__(self, file_path_a: str, file_path_b: str, debug: bool = False):
-        self.analyzer_a = Analyzer(file_path_a, debug=debug)
-        self.analyzer_b = Analyzer(file_path_b, debug=debug)
-        self.data_a = self.analyzer_a.generate_analysis_data()
-        self.data_b = self.analyzer_b.generate_analysis_data()
-
-        if not self.data_a or not self.data_b:
-            raise ValueError("Failed to parse one or both files for comparison.")
-
-        self.comps_a = {c["name"]: c for c in self.data_a["components"]}
-        self.comps_b = {c["name"]: c for c in self.data_b["components"]}
-
-    def compare(self) -> Dict[str, Any]:
-        """Performs the comparison and returns a diff dictionary."""
-        diff: Dict[str, Any] = {"added": [], "removed": [], "modified": []}
-
-        names_a = set(self.comps_a.keys())
-        names_b = set(self.comps_b.keys())
-
-        diff["removed"] = sorted(list(names_a - names_b))
-        diff["added"] = sorted(list(names_b - names_a))
-
-        for name in sorted(list(names_a & names_b)):
-            comp_a = self.comps_a[name]
-            comp_b = self.comps_b[name]
-            
-            prop_changes = self._compare_properties(comp_a, comp_b)
-            link_changes = self._compare_links(comp_a, comp_b)
-
-            if prop_changes or link_changes:
-                diff["modified"].append({
-                    "name": name,
-                    "property_changes": prop_changes,
-                    "link_changes": link_changes,
-                })
-        
-        return diff
-
-    def _compare_properties(self, comp_a: Dict, comp_b: Dict) -> List[str]:
-        changes = []
-        props_a = comp_a.get("properties", {})
-        props_b = comp_b.get("properties", {})
-        all_prop_names = set(props_a.keys()) | set(props_b.keys())
-
-        for prop in sorted(list(all_prop_names)):
-            val_a = props_a.get(prop)
-            val_b = props_b.get(prop)
-            if val_a != val_b:
-                changes.append(f"Property '{prop}': '{val_a}' -> '{val_b}'")
-        return changes
-
-    def _get_link_signature(self, link: Dict, handle_map: Dict) -> str:
-        """Creates a comparable string representation of a link."""
-        source_name = handle_map.get(link["source_ord"], link["source_ord"])
-        sig = f"{source_name}:{link['source_slot']} -> :{link['target_slot']} (Type: {link['type']}"
-        if link.get("converter"):
-            sig += f", Converter: {link['converter']}"
-        sig += ")"
-        return sig
-
-    def _compare_links(self, comp_a: Dict, comp_b: Dict) -> Dict[str, List[str]]:
-        links_a = {self._get_link_signature(l, self.data_a["handle_map"]) for l in comp_a.get("links", [])}
-        links_b = {self._get_link_signature(l, self.data_b["handle_map"]) for l in comp_b.get("links", [])}
-
-        removed = sorted(list(links_a - links_b))
-        added = sorted(list(links_b - links_a))
-
-        if removed or added:
-            return {"added": added, "removed": removed}
-        return {}
-
-def print_diff(file_a: str, file_b: str, diff: Dict[str, Any]) -> None:
-    """Prints a formatted diff report."""
-    print(f"--- Diff Report ---")
-    print(f"File A: {os.path.basename(file_a)}")
-    print(f"File B: {os.path.basename(file_b)}")
-    print("-" * 20)
-
-    if diff["removed"]:
-        print("\n[REMOVED COMPONENTS]")
-        for name in diff["removed"]:
-            print(f"- {name}")
-
-    if diff["added"]:
-        print("\n[ADDED COMPONENTS]")
-        for name in diff["added"]:
-            print(f"+ {name}")
-
-    if diff["modified"]:
-        print("\n[MODIFIED COMPONENTS]")
-        for mod in diff["modified"]:
-            print(f"\nComponent: {mod['name']}")
-            for change in mod.get("property_changes", []):
-                print(f"  P: {change}")
-            
-            link_changes = mod.get("link_changes", {})
-            for removed_link in link_changes.get("removed", []):
-                print(f"  - Link: {removed_link}")
-            for added_link in link_changes.get("added", []):
-                print(f"  + Link: {added_link}")
-    
-    print("\n--- End of Report ---")
+# ----------------------------- Data structures ------------------------------
 
 
-# ----------------------------- Analyzer -----------------------------
+@dataclass(frozen=True)
+class NodeKey:
+    path: str
+    type: str
 
 
-class Analyzer:
-    """
-    Parse and analyse Niagara .bog or .dist files and produce:
-      - JSON tree (components, links, properties, handle_map)
-      - kitControl component counts
-      - optional plots (bar/pie) of kitControl usage
-    """
+@dataclass
+class Node:
+    key: NodeKey
+    handle: Optional[str]
+    attrs: Dict[str, str]
+    # links recorded as tuples of (src, dst) using canonical "path.pin" form if resolvable
+    outgoing_links: List[Tuple[str, str]]
+    incoming_links: List[Tuple[str, str]]
 
-    def __init__(self, file_path: str | Path, debug: bool = False) -> None:
-        self.file_path: str = str(file_path)
-        self.debug: bool = debug
-        self.xml_root: ET.Element | None = None
-        self.analysis_title: str = "Niagara Analysis"
 
-    # ------------------------- internal helpers -------------------------
+@dataclass
+class CompareOptions:
+    ignore_handles: bool = False
+    ignore_ws_annotations: bool = False
+    ignore_attr_keys: Tuple[str, ...] = (
+        "h",
+    )  # always ignores "h" when ignore_handles=True
 
-    @staticmethod
-    def _get_value_from_node(node: ET.Element) -> str | None:
-        """Value may be in 'v' attr or node text."""
-        if "v" in node.attrib:
-            return node.attrib["v"]
-        text = node.text
-        if text and text.strip():
-            return text.strip()
-        return None
 
-    def list_archive_contents(self) -> List[str]:
-        """List raw files in the archive."""
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"File not found: {self.file_path}")
-        if not zipfile.is_zipfile(self.file_path):
-            raise ValueError(f"Not a valid ZIP archive: {self.file_path}")
-        with zipfile.ZipFile(self.file_path, "r") as zf:
-            return zf.namelist()
+@dataclass
+class CompareReport:
+    added: List[NodeKey]
+    removed: List[NodeKey]
+    modified: List[Dict[str, object]]
+    # structural/quality checks:
+    problems_left: Dict[str, object]
+    problems_right: Dict[str, object]
+    summary: Dict[str, object]
 
-    def _process_file(self) -> None:
-        if self.xml_root is not None:
-            return
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"File not found: {self.file_path}")
 
-        if self.file_path.endswith(".bog"):
-            self.analysis_title = "Niagara BOG File Analysis"
-            self._parse_bog_file()
-        elif self.file_path.endswith(".dist"):
-            self.analysis_title = "Niagara Station Analysis"
-            self._parse_dist_file()
-        else:
-            raise ValueError("Unsupported file type (use .bog or .dist).")
+# ----------------------------- Parsing helpers -----------------------------
 
-    @staticmethod
-    def _decode_bytes(xml_bytes: bytes) -> str:
-        try:
-            return xml_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            return xml_bytes.decode("latin-1")
 
-    @staticmethod
-    def _find_xml_member(members: Iterable[str]) -> str | None:
-        """
-        Return the likely XML entry name inside a .bog:
-        prefer 'file.xml', otherwise 'baja.bog.xml', otherwise first .xml.
-        """
-        names = list(members)
-        for preferred in ("file.xml", "baja.bog.xml"):
-            if preferred in names:
-                return preferred
-        for n in names:
-            if n.lower().endswith(".xml"):
-                return n
-        return None
+def _is_ws_annotation(elem: ET.Element) -> bool:
+    return elem.tag == "p" and elem.attrib.get("t", "").endswith("WsAnnotation")
 
-    def _parse_bog_file(self) -> None:
-        try:
-            with zipfile.ZipFile(self.file_path, "r") as bog_zip:
-                xml_entry = self._find_xml_member(bog_zip.namelist())
-                if not xml_entry:
-                    raise ValueError("Could not locate an XML entry in the .bog.")
-                xml_bytes = bog_zip.read(xml_entry)
-                xml_content = self._decode_bytes(xml_bytes)
-                self.xml_root = ET.fromstring(xml_content)
-                if self.debug:
-                    print(f"[Analyzer] Parsed {xml_entry} from .bog")
-        except zipfile.BadZipFile:
-            raise ValueError(f"Invalid .bog (ZIP) file: {self.file_path}")
 
-    def _parse_dist_file(self) -> None:
-        if not zipfile.is_zipfile(self.file_path):
-            raise ValueError(f"Invalid .dist (ZIP) file: {self.file_path}")
+def _iter_root_p_elems(root: ET.Element) -> Iterable[ET.Element]:
+    for child in root:
+        if child.tag == "p":
+            yield child
 
-        pattern = re.compile(
-            r"niagara_user_home/stations/[^/]+/config\.bog$", re.IGNORECASE
-        )
-        with zipfile.ZipFile(self.file_path, "r") as dist_zip:
-            config_bog_path = None
-            for path in dist_zip.namelist():
-                if pattern.search(path):
-                    config_bog_path = path
+
+def _read_xml_from_bog_or_xml(path: Path) -> ET.Element:
+    if path.suffix.lower() in (".bog", ".dist"):
+        with zipfile.ZipFile(path, "r") as zf:
+            # heuristic: Niagara archives typically have a single file.xml at root
+            xml_name = None
+            for name in zf.namelist():
+                if name.lower().endswith(".xml"):
+                    xml_name = name
                     break
-            if not config_bog_path:
-                raise FileNotFoundError("config.bog not found inside .dist")
+            if xml_name is None:
+                raise ValueError(f"No XML found in archive: {path}")
+            with zf.open(xml_name) as f:
+                return ET.fromstring(f.read())
+    else:
+        return ET.parse(path).getroot()
 
-            with dist_zip.open(config_bog_path) as config_bog_file:
-                config_bog_data = config_bog_file.read()
 
-        with zipfile.ZipFile(io.BytesIO(config_bog_data), "r") as config_bog_zip:
-            xml_entry = self._find_xml_member(config_bog_zip.namelist())
-            if not xml_entry:
-                raise FileNotFoundError("No XML entry inside config.bog")
-            xml_content = self._decode_bytes(config_bog_zip.read(xml_entry))
-            self.xml_root = ET.fromstring(xml_content)
-            if self.debug:
-                print(f"[Analyzer] Parsed {xml_entry} from config.bog")
+def _walk_graph(
+    p_elem: ET.Element, current_path: str = "/"
+) -> Iterable[Tuple[str, ET.Element]]:
+    """Yield (path, element) for every <p> component."""
+    name = p_elem.attrib.get("n", "")
+    path = current_path
+    if name:
+        path = (current_path.rstrip("/") + "/" + name).replace("//", "/")
+    yield (path, p_elem)
+    for c in p_elem:
+        if c.tag == "p":
+            yield from _walk_graph(c, path)
 
-        self.analysis_title = "Niagara Station Analysis (config.bog)"
 
-    def _extract_all_components(
-        self, start_element: ET.Element
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
-        """
-        Extract all <p h="..."> components, their links, and basic properties.
-        Returns (components, handle_to_name_map).
-        """
-        components: List[Dict[str, Any]] = []
-        handle_to_name_map: Dict[str, str] = {}
+def _collect_links(root: ET.Element) -> List[ET.Element]:
+    # Links can appear as <l ...> under the root or elsewhere
+    # We'll gather all <l> elements in doc
+    return list(root.iterfind(".//l"))
 
-        for comp_element in start_element.findall(".//p[@h]"):
-            comp_name = comp_element.get("n")
-            comp_handle = comp_element.get("h")
-            if not (comp_name and comp_handle):
+
+def _handle_map_by_handle(nodes: Dict[NodeKey, Node]) -> Dict[str, NodeKey]:
+    m = {}
+    for nk, node in nodes.items():
+        if node.handle:
+            m[node.handle] = nk
+    return m
+
+
+def _pin_to_canonical(handle_pin: str, handle_map: Dict[str, NodeKey]) -> Optional[str]:
+    # formats are like "3.out" meaning handle 3, pin "out"
+    if "." not in handle_pin:
+        return None
+    handle, pin = handle_pin.split(".", 1)
+    nk = handle_map.get(handle)
+    if not nk:
+        return None
+    return f"{nk.path}.{pin}"
+
+
+# ----------------------------- Build Node index ----------------------------
+
+
+def build_index(path: Path, ignore_ws_annotations: bool) -> Dict[NodeKey, Node]:
+    root = _read_xml_from_bog_or_xml(path)
+    # find all top-level <p> under bajaObjectGraph
+    nodes: Dict[NodeKey, Node] = {}
+    for p in _iter_root_p_elems(root):
+        for apath, elem in _walk_graph(p, "/"):
+            if ignore_ws_annotations and _is_ws_annotation(elem):
                 continue
+            t = elem.attrib.get("t", "")
+            nk = NodeKey(apath, t)
+            n = Node(
+                key=nk,
+                handle=elem.attrib.get("h"),
+                attrs=dict(elem.attrib),
+                outgoing_links=[],
+                incoming_links=[],
+            )
+            nodes[nk] = n
 
-            handle_to_name_map[f"h:{comp_handle}"] = comp_name
-            comp: Dict[str, Any] = {
-                "name": comp_name,
-                "type": comp_element.get("t"),
-                "links": [],
-                "properties": {},
-            }
+    # collect links and map to canonical "path.pin" where possible
+    handle_map = _handle_map_by_handle(nodes)
+    for l in _collect_links(root):
+        s = l.attrib.get("s")  # source "handle.pin"
+        d = l.attrib.get("d")  # dest "handle.pin"
+        if not s or not d:
+            continue
+        s_canon = _pin_to_canonical(s, handle_map) or s
+        d_canon = _pin_to_canonical(d, handle_map) or d
+        # annotate on both ends if resolvable to nodes
+        s_handle = s.split(".", 1)[0]
+        d_handle = d.split(".", 1)[0]
+        s_key = handle_map.get(s_handle)
+        d_key = handle_map.get(d_handle)
+        if s_key and s_key in nodes:
+            nodes[s_key].outgoing_links.append((s_canon, d_canon))
+        if d_key and d_key in nodes:
+            nodes[d_key].incoming_links.append((s_canon, d_canon))
 
-            # Find potential links and filter them manually, as ElementTree has limited XPath support.
-            for p_element in comp_element.findall('.//p[@t]'):
-                link_type = p_element.get("t", "")
-                if link_type.startswith("b:") and "Link" in link_type:
-                    # This is a link element.
-                    link_element = p_element
-
-                    def _getv(tag: str) -> str:
-                        elem = link_element.find(f'p[@n="{tag}"]')
-                        return (
-                            elem.get("v") if elem is not None and "v" in elem.attrib else ""
-                        )
-                    
-                    link_data = {
-                        "type": link_type,
-                        "source_ord": _getv("sourceOrd"),
-                        "source_slot": _getv("sourceSlotName"),
-                        "target_slot": _getv("targetSlotName"),
-                        "converter": None,
-                    }
-                    
-                    # Check for a converter
-                    converter_elem = link_element.find('p[@n="converter"]')
-                    if converter_elem is not None:
-                        link_data["converter"] = converter_elem.get("t")
-
-                    comp["links"].append(link_data)
-
-            # Shallow property snapshot (n/v or text)
-            for prop in comp_element.findall("p"):
-                prop_name = prop.attrib.get("n")
-                if not prop_name:
-                    continue
-                # Avoid re-processing links as properties
-                if prop.get("t", "").endswith("Link"):
-                    continue
-                prop_val = self._get_value_from_node(prop)
-                comp["properties"][prop_name] = prop_val
-
-            components.append(comp)
-
-        return components, handle_to_name_map
+    return nodes
 
 
-    # ----------------------------- public API -----------------------------
-
-    def generate_analysis_data(self) -> Dict[str, Any] | None:
-        """Return dict with title, source, components, handle_map."""
-        self._process_file()
-        if self.xml_root is None:
-            return None
-        comps, handles = self._extract_all_components(self.xml_root)
-        return {
-            "title": self.analysis_title,
-            "source": os.path.basename(self.file_path),
-            "components": comps,
-            "handle_map": handles,
-        }
-
-    def save_analysis_to_file(
-        self, analysis_data: Dict[str, Any], output_file: str | Path
-    ) -> None:
-        out_path = Path(output_file)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("w", encoding="utf-8") as f:
-            json.dump(analysis_data, f, indent=2)
-        if self.debug:
-            print(f"[Analyzer] JSON saved to {out_path}")
-
-    # ---------------------- stats & plotting helpers ----------------------
-
-    def count_kitcontrol_components(self) -> Dict[str, int]:
-        """Count kitControl:* types (bucketed by the type after the colon)."""
-        analysis = self.generate_analysis_data()
-        if not analysis:
-            return {}
-        counts = collections.Counter()
-        for comp in analysis["components"]:
-            t = comp.get("type") or ""
-            if t.startswith("kitControl:"):
-                _, name = t.split(":", 1)
-                counts[name] += 1
-        return dict(counts.most_common())
-
-    def plot_kitcontrol_counts(self, output_dir: str | Path) -> List[str]:
-        """Write bar and pie charts to output_dir; return list of file paths."""
-        if plt is None:
-            raise ValueError("matplotlib is required for plotting but is not available")
-        counts = self.count_kitcontrol_components()
-        if not counts:
-            raise ValueError("No kitControl components found to plot")
-
-        names = list(counts.keys())
-        values = list(counts.values())
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        created: List[str] = []
-
-        # Bar
-        fig_b, ax_b = plt.subplots(figsize=(max(6, len(names) * 0.45), 4))
-        ax_b.bar(range(len(names)), values)
-        ax_b.set_title("kitControl Component Usage (Bar)")
-        ax_b.set_xlabel("Component Type")
-        ax_b.set_ylabel("Count")
-        ax_b.set_xticks(range(len(names)))
-        ax_b.set_xticklabels(names, rotation=45, ha="right")
-        fig_b.tight_layout()
-        f_bar = out_dir / "kitcontrol_counts_bar.png"
-        fig_b.savefig(f_bar)
-        plt.close(fig_b)
-        created.append(str(f_bar))
-
-        # Pie
-        fig_p, ax_p = plt.subplots(figsize=(5, 5))
-        ax_p.pie(values, labels=names, autopct="%1.1f%%", startangle=90)
-        ax_p.set_title("kitControl Component Usage (Pie)")
-        f_pie = out_dir / "kitcontrol_counts_pie.png"
-        fig_p.savefig(f_pie)
-        plt.close(fig_p)
-        created.append(str(f_pie))
-
-        if self.debug:
-            print(f"[Analyzer] Created plots: {created}")
-        return created
+# ----------------------------- Quality checks ------------------------------
 
 
-# ----------------------------- CLI entry -----------------------------
+def diagnose(nodes: Dict[NodeKey, Node]) -> Dict[str, object]:
+    # handle presence / uniqueness
+    missing_handles = [asdict(n.key) for n in nodes.values() if not n.handle]
+    dup_counter = Counter([n.handle for n in nodes.values() if n.handle])
+    duplicate_handles = [h for h, c in dup_counter.items() if c > 1]
+
+    # orphan link refs are detected during compare when the other side differs,
+    # but we can still report counts here:
+    link_count = sum(len(n.outgoing_links) for n in nodes.values())
+
+    # specific helpful heuristics for folder playgrounds
+    wsann_missing_under_folders = []
+    for n in nodes.values():
+        if n.key.type.endswith(":Folder"):
+            # if *no* wsAnnotation child exists under this folder, note it
+            # We can't see children directly here, but a cheap heuristic:
+            # any node whose path startswith this folder + "/wsAnnotation" will exist in nodes
+            expected = NodeKey(n.key.path + "/wsAnnotation", "b:WsAnnotation")
+            # If user asked us to ignore ws annotations when building index, this won't exist;
+            # so we only record a suggestion (not an error).
+            # We'll still include a "suggestion" entry:
+            wsann_missing_under_folders.append(asdict(n.key))
+
+    return {
+        "node_count": len(nodes),
+        "link_count": link_count,
+        "missing_handles": missing_handles,
+        "duplicate_handles": duplicate_handles,
+        "suggestions": {
+            "ws_annotation_placeholders_for_folders": wsann_missing_under_folders
+        },
+    }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyze and compare Niagara .bog or .dist files."
+# ----------------------------- Comparison ----------------------------------
+
+
+def _norm_attrs(attrs: Dict[str, str], opts: CompareOptions) -> Dict[str, str]:
+    if not opts.ignore_handles:
+        return dict(attrs)
+    return {k: v for k, v in attrs.items() if k not in opts.ignore_attr_keys}
+
+
+def compare(left_path: Path, right_path: Path, opts: CompareOptions) -> CompareReport:
+    left_idx = build_index(left_path, ignore_ws_annotations=opts.ignore_ws_annotations)
+    right_idx = build_index(
+        right_path, ignore_ws_annotations=opts.ignore_ws_annotations
     )
-    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug prints.")
-    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
-    # --- Analyze Command ---
-    parser_analyze = subparsers.add_parser("analyze", help="Analyze a single .bog or .dist file.")
-    parser_analyze.add_argument("file_path", help="Path to the .bog or .dist file.")
-    parser_analyze.add_argument("-o", "--output_file", help="Write JSON analysis to this path.")
-    parser_analyze.add_argument("-l", "--list_contents", action="store_true", help="List archive contents and exit.")
-    parser_analyze.add_argument("-c", "--count", action="store_true", help="Print kitControl component counts.")
-    parser_analyze.add_argument("-p", "--plots", help="Directory to write bar/pie charts of kitControl usage.")
-    
-    # --- Compare Command ---
-    parser_compare = subparsers.add_parser("compare", help="Compare two .bog or .dist files.")
-    parser_compare.add_argument("file_a", help="Path to the first file (A).")
-    parser_compare.add_argument("file_b", help="Path to the second file (B).")
+    left_keys = set(left_idx.keys())
+    right_keys = set(right_idx.keys())
 
-    args = parser.parse_args()
+    added = sorted(list(right_keys - left_keys), key=lambda k: (k.path, k.type))
+    removed = sorted(list(left_keys - right_keys), key=lambda k: (k.path, k.type))
 
-    if args.command == "analyze":
-        analyzer = Analyzer(args.file_path, debug=args.debug)
+    modified: List[Dict[str, object]] = []
+    for k in sorted(list(left_keys & right_keys), key=lambda k: (k.path, k.type)):
+        ln = left_idx[k]
+        rn = right_idx[k]
+        lattrs = _norm_attrs(ln.attrs, opts)
+        rattrs = _norm_attrs(rn.attrs, opts)
+        if lattrs != rattrs or ln.outgoing_links != rn.outgoing_links:
+            modified.append(
+                {
+                    "key": asdict(k),
+                    "left_attrs": lattrs,
+                    "right_attrs": rattrs,
+                    "left_links": ln.outgoing_links,
+                    "right_links": rn.outgoing_links,
+                }
+            )
 
-        if args.list_contents:
-            for n in analyzer.list_archive_contents():
-                print(n)
-            return
+    rep = CompareReport(
+        added=added,
+        removed=removed,
+        modified=modified,
+        problems_left=diagnose(left_idx),
+        problems_right=diagnose(right_idx),
+        summary={
+            "left": {
+                "file": str(left_path),
+                "nodes": len(left_idx),
+            },
+            "right": {
+                "file": str(right_path),
+                "nodes": len(right_idx),
+            },
+            "options": vars(opts),
+        },
+    )
+    return rep
 
-        analysis = analyzer.generate_analysis_data()
-        if analysis is None:
-            print("No analysis data generated.")
-            return
 
-        if args.output_file:
-            analyzer.save_analysis_to_file(analysis, args.output_file)
-        elif not (args.count or args.plots):
-            print(json.dumps(analysis, indent=2))
+# ----------------------------- Rendering -----------------------------------
 
-        if args.count:
-            counts = analyzer.count_kitcontrol_components()
-            print("kitControl component counts:")
-            for k, v in (counts.items() if counts else {}):
-                print(f"{k}: {v}")
 
-        if args.plots:
-            try:
-                files = analyzer.plot_kitcontrol_counts(args.plots)
-                print(f"Generated plot files in {args.plots}:")
-                for p in files:
-                    print(f"- {os.path.basename(p)}")
-            except Exception as exc:
-                print(f"Failed to generate plots: {exc}")
+def _render_table(rep: CompareReport) -> str:
+    lines = []
+    s = rep.summary
+    lines.append(f"Left : {s['left']['file']} (nodes={s['left']['nodes']})")
+    lines.append(f"Right: {s['right']['file']} (nodes={s['right']['nodes']})")
+    lines.append(f"Options: {json.dumps(s['options'])}")
+    lines.append("")
 
-    elif args.command == "compare":
-        try:
-            comparator = BogComparator(args.file_a, args.file_b, debug=args.debug)
-            diff = comparator.compare()
-            print_diff(args.file_a, args.file_b, diff)
-        except Exception as exc:
-            print(f"An error occurred during comparison: {exc}")
+    def fmt_key(k: NodeKey) -> str:
+        return f"{k.path} :: {k.type}"
+
+    if rep.added:
+        lines.append("=== Added in RIGHT (not in LEFT) ===")
+        for k in rep.added:
+            lines.append(f"+ {fmt_key(k)}")
+        lines.append("")
+    if rep.removed:
+        lines.append("=== Removed from LEFT (not in RIGHT) ===")
+        for k in rep.removed:
+            lines.append(f"- {fmt_key(k)}")
+        lines.append("")
+    if rep.modified:
+        lines.append("=== Modified (attrs or links) ===")
+        for m in rep.modified:
+            k = m["key"]
+            lines.append(f"* {k['path']} :: {k['type']}")
+            lines.append(f"  - left_attrs : {m['left_attrs']}")
+            lines.append(f"  - right_attrs: {m['right_attrs']}")
+            if m["left_links"] or m["right_links"]:
+                lines.append(f"  - left_links : {m['left_links']}")
+                lines.append(f"  - right_links: {m['right_links']}")
+            lines.append("")
+    lines.append("=== Diagnostics (LEFT) ===")
+    lines.append(json.dumps(rep.problems_left, indent=2))
+    lines.append("")
+    lines.append("=== Diagnostics (RIGHT) ===")
+    lines.append(json.dumps(rep.problems_right, indent=2))
+    return "\n".join(lines)
+
+
+def _render_md(rep: CompareReport) -> str:
+    def fmt_key(k: NodeKey) -> str:
+        return f"`{k.path}` — `{k.type}`"
+
+    out = []
+    out.append(
+        f"**Left**: `{rep.summary['left']['file']}`  \n"
+        f"**Right**: `{rep.summary['right']['file']}`  \n"
+        f"**Options**: `{json.dumps(rep.summary['options'])}`"
+    )
+    out.append("")
+    if rep.added:
+        out.append("### Added (in Right only)")
+        for k in rep.added:
+            out.append(f"- {fmt_key(k)}")
+        out.append("")
+    if rep.removed:
+        out.append("### Removed (missing in Right)")
+        for k in rep.removed:
+            out.append(f"- {fmt_key(k)}")
+        out.append("")
+    if rep.modified:
+        out.append("### Modified")
+        out.append("| Path | Type | Diff |")
+        out.append("|---|---|---|")
+        for m in rep.modified:
+            k = m["key"]
+            diff = f"<sub>left</sub> `{m['left_attrs']}` → <sub>right</sub> `{m['right_attrs']}`"
+            out.append(f"| `{k['path']}` | `{k['type']}` | {diff} |")
+        out.append("")
+    out.append("### Diagnostics")
+    out.append("**Left**")
+    out.append("```json")
+    out.append(json.dumps(rep.problems_left, indent=2))
+    out.append("```")
+    out.append("**Right**")
+    out.append("```json")
+    out.append(json.dumps(rep.problems_right, indent=2))
+    out.append("```")
+    return "\n".join(out)
+
+
+def _render_html(rep: CompareReport) -> str:
+    # simple self-contained HTML (no external CSS)
+    def esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    rows = []
+    for m in rep.modified:
+        k = m["key"]
+        rows.append(
+            f"<tr><td>{esc(k['path'])}</td><td>{esc(k['type'])}</td>"
+            f"<td><pre>{esc(json.dumps(m['left_attrs'], indent=2))}</pre></td>"
+            f"<td><pre>{esc(json.dumps(m['right_attrs'], indent=2))}</pre></td></tr>"
+        )
+    html = f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<title>BOG/XML Compare</title>
+<style>
+body{{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}}
+table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid #ddd;padding:8px;vertical-align:top}}
+th{{background:#f5f5f5}} pre{{margin:0;white-space:pre-wrap}}
+.code{{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}}
+.kv{{display:grid;grid-template-columns:auto 1fr;gap:.5rem 1rem}}
+.badge{{display:inline-block;padding:2px 6px;border:1px solid #ccc;border-radius:6px;background:#fafafa}}
+</style></head>
+<body>
+<h2>BOG/XML Compare</h2>
+<div class="kv">
+<div>Left</div><div class="code">{esc(rep.summary['left']['file'])} <span class="badge">nodes={rep.summary['left']['nodes']}</span></div>
+<div>Right</div><div class="code">{esc(rep.summary['right']['file'])} <span class="badge">nodes={rep.summary['right']['nodes']}</span></div>
+<div>Options</div><div class="code">{esc(json.dumps(rep.summary['options']))}</div>
+</div>
+<h3>Added</h3>
+<ul>
+{"".join(f"<li>{esc(k.path)} — {esc(k.type)}</li>" for k in rep.added) or "<li><em>None</em></li>"}
+</ul>
+<h3>Removed</h3>
+<ul>
+{"".join(f"<li>{esc(k.path)} — {esc(k.type)}</li>" for k in rep.removed) or "<li><em>None</em></li>"}
+</ul>
+<h3>Modified</h3>
+<table>
+<tr><th>Path</th><th>Type</th><th>Left attrs</th><th>Right attrs</th></tr>
+{"".join(rows) or "<tr><td colspan='4'><em>None</em></td></tr>"}
+</table>
+<h3>Diagnostics (Left)</h3>
+<pre class="code">{esc(json.dumps(rep.problems_left, indent=2))}</pre>
+<h3>Diagnostics (Right)</h3>
+<pre class="code">{esc(json.dumps(rep.problems_right, indent=2))}</pre>
+</body></html>"""
+    return html
+
+
+def render(rep: CompareReport, fmt: str) -> str:
+    if fmt == "table":
+        return _render_table(rep)
+    if fmt == "json":
+        return json.dumps(
+            {
+                "added": [asdict(k) for k in rep.added],
+                "removed": [asdict(k) for k in rep.removed],
+                "modified": rep.modified,
+                "problems_left": rep.problems_left,
+                "problems_right": rep.problems_right,
+                "summary": rep.summary,
+            },
+            indent=2,
+        )
+    if fmt == "md":
+        return _render_md(rep)
+    if fmt == "html":
+        return _render_html(rep)
+    raise ValueError(f"Unknown format: {fmt}")
+
+
+# ----------------------------- CLI -----------------------------------------
+
+
+def _cmd_analyze(args: argparse.Namespace) -> int:
+    idx = build_index(Path(args.file), ignore_ws_annotations=args.ignore_ws_annotations)
+    diag = diagnose(idx)
+    out = {
+        "file": str(args.file),
+        "nodes": len(idx),
+        "diagnostics": diag,
+        "options": {"ignore_ws_annotations": args.ignore_ws_annotations},
+    }
+    if args.format == "json":
+        print(json.dumps(out, indent=2))
+    elif args.format == "table":
+        print(f"File: {out['file']} (nodes={out['nodes']})")
+        print(json.dumps(diag, indent=2))
+    elif args.format == "md":
+        print(
+            f"**File** `{out['file']}`  \n**Nodes** `{out['nodes']}`\n\n```json\n{json.dumps(diag, indent=2)}\n```"
+        )
+    else:
+        raise ValueError("format must be one of: json, table, md")
+    return 0
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    rep = compare(
+        Path(args.left),
+        Path(args.right),
+        CompareOptions(
+            ignore_handles=args.ignore in ("handles", "all"),
+            ignore_ws_annotations=args.ignore in ("ws-annotations", "all"),
+        ),
+    )
+    print(render(rep, args.format))
+    return 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    p = argparse.ArgumentParser(
+        prog="bog_builder.analyzer",
+        description="Analyze or compare Niagara .bog/.dist or raw XML.",
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    pa = sub.add_parser("analyze", help="Analyze one graph and print diagnostics.")
+    pa.add_argument("file", help="Path to .bog/.dist or .xml")
+    pa.add_argument(
+        "--ignore-ws-annotations",
+        action="store_true",
+        help="Ignore b:WsAnnotation nodes",
+    )
+    pa.add_argument("--format", choices=["json", "table", "md"], default="table")
+    pa.set_defaults(func=_cmd_analyze)
+
+    pc = sub.add_parser("compare", help="Compare two graphs.")
+    pc.add_argument("left", help="Left file (.bog/.dist or .xml)")
+    pc.add_argument("right", help="Right file (.bog/.dist or .xml)")
+    pc.add_argument(
+        "--ignore",
+        choices=["none", "handles", "ws-annotations", "all"],
+        default="handles",
+        help="Ignore sets when diffing.",
+    )
+    pc.add_argument(
+        "--format", choices=["table", "json", "md", "html"], default="table"
+    )
+    pc.set_defaults(func=_cmd_compare)
+
+    args = p.parse_args(argv)
+    return args.func(args)
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

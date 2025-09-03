@@ -23,8 +23,10 @@ def main():
         description="BooleanDelay playground with adjustable delays."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples",
-        help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 

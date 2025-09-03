@@ -209,6 +209,202 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
+=== FILE: bad_parse_into_wb_example.py ===
+DIR: .
+=== CODE START ===
+"""
+Intentional bad parse in WB
+
+com.tridium.file.types.bog.CannotLoadBogException: local:|file:~bad_parse_into_wb_example.bog
+   at com.tridium.file.types.bog.BBogFile.doOpen(BBogFile.java:461)
+   at javax.baja.file.BSubSpaceFile.open(BSubSpaceFile.java:125)
+   at com.tridium.file.types.bog.BBogScheme.resolve(BBogScheme.java:56)
+   at javax.baja.naming.BOrdScheme.resolve(BOrdScheme.java:107)
+   at javax.baja.naming.BOrd.resolve(BOrd.java:274)
+   at com.tridium.workbench.shell.BNiagaraWbShell.resolve(BNiagaraWbShell.java:656)
+   at com.tridium.workbench.shell.NHyperlinkInfo.resolve(NHyperlinkInfo.java:279)
+   at com.tridium.workbench.shell.NHyperlinkInfo.hyperlink(NHyperlinkInfo.java:131)
+   at com.tridium.workbench.shell.BNiagaraWbShell.doHyperlink(BNiagaraWbShell.java:515)
+   at com.tridium.workbench.shell.BNiagaraWbShell.hyperlink(BNiagaraWbShell.java:473)
+   at com.tridium.workbench.file.BDirTable$Controller.hyperlink(BDirTable.java:499)
+   at com.tridium.workbench.file.BDirTable$Controller.cellDoubleClicked(BDirTable.java:481)
+   at javax.baja.ui.table.TableController.cellPressed(TableController.java:686)
+   at javax.baja.ui.table.TableController.mousePressed(TableController.java:261)
+   at javax.baja.ui.table.BTable.mousePressed(BTable.java:1517)
+   at javax.baja.ui.BWidget.fireMouseEvent(BWidget.java:1227)
+   at com.tridium.ui.awt.MouseManager.fire(MouseManager.java:325)
+   at com.tridium.ui.awt.MouseManager.fire(MouseManager.java:299)
+   at com.tridium.ui.awt.MouseManager.pressed(MouseManager.java:122)
+  javax.baja.xml.XException: Invalid Facets: 'units=u:second|precision=i:0|min=d:-inf|max=d:+inf' [33:91]
+     at javax.baja.io.ValueDocDecoder$BogDecoderPlugin.err(ValueDocDecoder.java:1367)
+     at javax.baja.io.ValueDocDecoder.decodeSimple(ValueDocDecoder.java:901)
+     at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:778)
+     at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+     at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+     at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+     at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+     at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+     at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+     at javax.baja.io.ValueDocDecoder.decode(ValueDocDecoder.java:290)
+     at javax.baja.io.ValueDocDecoder$BogDecoderPlugin.decodeDocument(ValueDocDecoder.java:1297)
+     at javax.baja.io.ValueDocDecoder.decodeDocument(ValueDocDecoder.java:273)
+     at javax.baja.io.ValueDocDecoder.decodeDocument(ValueDocDecoder.java:262)
+     at com.tridium.file.types.bog.BBogFile.doOpen(BBogFile.java:446)
+     at javax.baja.file.BSubSpaceFile.open(BSubSpaceFile.java:125)
+     at com.tridium.file.types.bog.BBogScheme.resolve(BBogScheme.java:56)
+     at javax.baja.naming.BOrdScheme.resolve(BOrdScheme.java:107)
+     at javax.baja.naming.BOrd.resolve(BOrd.java:274)
+     at com.tridium.workbench.shell.BNiagaraWbShell.resolve(BNiagaraWbShell.java:656)
+    java.io.IOException: second
+       at javax.baja.units.BUnit.decodeFromString(BUnit.java:515)
+       at javax.baja.data.DataUtil.unmarshal(DataUtil.java:96)
+       at javax.baja.sys.BFacets.decodeFromString(BFacets.java:1128)
+       at com.tridium.util.SimpleFactory.make(SimpleFactory.java:140)
+       at javax.baja.io.ValueDocDecoder.decodeSimple(ValueDocDecoder.java:897)
+       at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:778)
+       at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+       at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+       at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+       at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+       at javax.baja.io.ValueDocDecoder.parseSlots(ValueDocDecoder.java:564)
+       at javax.baja.io.ValueDocDecoder.parseSlot(ValueDocDecoder.java:826)
+       at javax.baja.io.ValueDocDecoder.decode(ValueDocDecoder.java:290)
+       at javax.baja.io.ValueDocDecoder$BogDecoderPlugin.decodeDocument(ValueDocDecoder.java:1297)
+       at javax.baja.io.ValueDocDecoder.decodeDocument(ValueDocDecoder.java:273)
+       at javax.baja.io.ValueDocDecoder.decodeDocument(ValueDocDecoder.java:262)
+       at com.tridium.file.types.bog.BBogFile.doOpen(BBogFile.java:446)
+       at javax.baja.file.BSubSpaceFile.open(BSubSpaceFile.java:125)
+       at com.tridium.file.types.bog.BBogScheme.resolve(BBogScheme.java:56)
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    Main function to build and save the advanced LeadLagRuntime Counter simulation.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to simulate a 4-chiller LeadLagRuntime with Counters."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("AdvancedLeadLagRuntime_CounterSim", debug=True)
+
+    print("--- Creating Top-Level I/O Components ---")
+
+    # --- Inputs & Outputs (at the root level) ---
+    builder.add_boolean_writable("Chiller_Enable", default_value=False)
+    
+    chiller_names = ["A", "B", "C", "D"]
+    for chiller in chiller_names:
+        builder.add_boolean_writable(f"Chiller_{chiller}_Cmd")
+        # Display the accumulated runtime in seconds
+        builder.add_numeric_writable(
+            f"Chiller_{chiller}_Runtime_Out", units="u:second", precision=0
+        )
+
+
+    # --- Logic Components (organized inside a sub-folder) ---
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
+
+    # Core LeadLag component with full properties
+    lead_lag_properties = {
+        "numberOutputs": 4,
+        "maxRuntime": "20s",
+        "feedbackDelay": "10s",
+        "clearAlarmTime": "1m",
+    }
+    builder.add_component(
+        "kitControl:LeadLagRuntime", "Chiller_LeadLag", properties=lead_lag_properties
+    )
+
+    # Feedback logic for four inputs
+    builder.add_component("kitControl:Or", "Feedback_Or")
+
+    # --- Runtime Accumulation Logic ---
+    for chiller in chiller_names:
+        builder.add_counter(f"Chiller_{chiller}_RuntimeCounter")
+        builder.add_component("kitControl:And", f"Chiller_{chiller}_RuntimeEnableGate")
+        builder.add_numeric_switch(f"Chiller_{chiller}_PulseSwitch")
+
+    # A timer that pulses every second
+    builder.add_component("kitControl:MultiVibrator", "OneSecondTimer", properties={"period": "1s"})
+    builder.add_component("kitControl:OneShot", "TimerPulse")
+    builder.add_component("kitControl:NumericConst", "Const_1", properties={"value": 1.0})
+
+
+    builder.end_sub_folder()
+    print("--- Exited 'Logic' sub-folder ---")
+
+
+    print("\n--- Wiring Components ---")
+
+    # Wire master enable
+    builder.add_link("Chiller_Enable", "out", "Chiller_LeadLag", "in")
+
+    # Wire feedback loop for all four chillers
+    builder.add_link("Chiller_A_Cmd", "out", "Feedback_Or", "inA")
+    builder.add_link("Chiller_B_Cmd", "out", "Feedback_Or", "inB")
+    builder.add_link("Chiller_C_Cmd", "out", "Feedback_Or", "inC")
+    builder.add_link("Chiller_D_Cmd", "out", "Feedback_Or", "inD")
+    builder.add_link("Feedback_Or", "out", "Chiller_LeadLag", "feedback")
+
+    # Wire timer
+    builder.add_link("OneSecondTimer", "out", "TimerPulse", "in")
+
+    # Wire logic for each chiller
+    for chiller in chiller_names:
+        # Wire lead/lag outputs to final commands
+        builder.add_link(f"Chiller_LeadLag", f"out{chiller}", f"Chiller_{chiller}_Cmd", "in16")
+
+        # Enable counter only when the pulse fires AND the chiller is commanded on
+        builder.add_link("TimerPulse", "out", f"Chiller_{chiller}_RuntimeEnableGate", "inA")
+        builder.add_link(f"Chiller_{chiller}_Cmd", "out", f"Chiller_{chiller}_RuntimeEnableGate", "inB")
+        
+        # When the gate is true, pass a '1' to the switch
+        builder.add_link(f"Chiller_{chiller}_RuntimeEnableGate", "out", f"Chiller_{chiller}_PulseSwitch", "inSwitch")
+        builder.add_link("Const_1", "out", f"Chiller_{chiller}_PulseSwitch", "inTrue")
+
+        # The switch output becomes the increment value for the counter
+        builder.add_link(f"Chiller_{chiller}_PulseSwitch", "out", f"Chiller_{chiller}_RuntimeCounter", "countIncrement")
+        
+        # The gate also triggers the 'countUp' slot to make the counter accumulate
+        builder.add_link(f"Chiller_{chiller}_RuntimeEnableGate", "out", f"Chiller_{chiller}_RuntimeCounter", "countUp")
+
+        # Wire Counter output (seconds) back to LeadLagRuntime input (milliseconds) with conversion
+        builder.add_link(f"Chiller_{chiller}_RuntimeCounter", "out", "Chiller_LeadLag", f"runtime{chiller}",
+                         link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+
+        # Wire the counter's output (accumulated seconds) directly for monitoring
+        builder.add_link(f"Chiller_{chiller}_RuntimeCounter", "out", f"Chiller_{chiller}_Runtime_Out", "in16")
+
+
+    # --- Save the .bog file ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print("Drag this file into Niagara Workbench to test the logic.")
+
+
+if __name__ == "__main__":
+    main()
+
+=== CODE END ===
+
 === FILE: bool_and_numeric_switch.py ===
 DIR: .
 === CODE START ===
@@ -280,6 +476,71 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     b.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: bool_delay_playground.py ===
+DIR: .
+=== CODE START ===
+"""
+Boolean Delay Playground (seconds-based, adjustable)
+----------------------------------------------------
+
+This playground creates a BooleanDelay component with its delay times wired to
+numeric writeables so you can adjust them interactively in Workbench.
+
+- Bool_Input (BooleanWritable)
+- OnDelay_Sec (NumericWritable, seconds)
+- OffDelay_Sec (NumericWritable, seconds)
+- Bool_Output (BooleanWritable result)
+
+The numeric writeables drive the onDelay/offDelay inputs dynamically.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="BooleanDelay playground with adjustable delays."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples",
+        help="Output directory for the .bog file."
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("BoolDelay_Playground", debug=True)
+
+    # --- Inputs / Outputs ---
+    builder.add_boolean_writable("Bool_Input", default_value=False)
+    builder.add_boolean_writable("Bool_Output")
+
+    # Numeric writeables to set delays (seconds).
+    builder.add_numeric_writable("OnDelay_Sec", default_value=5.0)
+    builder.add_numeric_writable("OffDelay_Sec", default_value=10.0)
+
+    # --- Delay block ---
+    # No fixed properties, inputs will be wired.
+    builder.add_component("kitControl:BooleanDelay", "BoolDelay")
+
+    # --- Wiring ---
+    builder.add_link("Bool_Input", "out", "BoolDelay", "in")
+    builder.add_link("OnDelay_Sec", "out", "BoolDelay", "onDelay")
+    builder.add_link("OffDelay_Sec", "out", "BoolDelay", "offDelay")
+    builder.add_link("BoolDelay", "out", "Bool_Output", "in16")
+
+    # --- Save ---
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, f"{script_filename}.bog")
+    builder.save(out_path)
+    print(f"Created Niagara .bog at: {out_path}")
 
 
 if __name__ == "__main__":
@@ -559,6 +820,159 @@ def main():
     out_path = os.path.join(args.output, "ConstComparisonTest.bog")
     b.save(out_path)
     print(f"Created {out_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: counter_playground.py ===
+DIR: .
+=== CODE START ===
+
+=== CODE END ===
+
+=== FILE: demand_based_chiller_enable.py ===
+DIR: .
+=== CODE START ===
+"""
+Please generate a BOG for a chiller enable/disable sequence that is driven by the 
+maximum cooling valve position across 10 AHUs. The logic should first chain the max 
+blocks together to determine the highest valve position. The chiller should enable 
+when this maximum valve exceeds 30 percent, and once enabled it should remain on 
+until the maximum valve falls below 15 percent, at which point it should disable. 
+This behavior should act like a latch: enabling above 30 percent and disabling 
+only after the value drops below 15 percent. To prevent short cycling, include 
+a 30-minute off-delay before enabling and a 15-minute on-delay before disabling. 
+The final output should drive a Boolean writable point that represents the chiller enable command.
+"""
+
+import os
+import argparse
+from pathlib import Path
+from bog_builder import BogFolderBuilder
+
+
+def build_bog(output_dir: Path, bog_filename: str) -> Path:
+    """Build the .bog and return the absolute path to the saved file."""
+    builder = BogFolderBuilder("ChillerEnableLogic", debug=False)
+
+    # --- Define Inputs and Final Output ---
+    # Create 10 numeric writable points to simulate AHU cooling valve positions.
+    input_names = []
+    for i in range(1, 11):
+        name = f"AHU_{i:02d}_Cooling_Valve"
+        input_names.append(name)
+        # Stagger default values for easier testing.
+        builder.add_numeric_writable(name, default_value=float(0))
+
+    builder.add_boolean_writable("Chiller_Enable_Command", default_value=True)
+
+    builder.add_reduction_block(
+        block_type="Maximum",
+        final_output_name="Max_Cooling_Valve",
+        input_names=input_names
+    )
+
+    # --- Core Control Logic Sub-Folder ---
+    builder.start_sub_folder("ControlLogic")
+
+    # Define the setpoints for enabling and disabling the chiller.
+    builder.add_component(
+        "kitControl:NumericConst",
+        "Enable_Setpoint",
+        properties={"value": 30.0}
+    )
+    builder.add_component(
+        "kitControl:NumericConst",
+        "Disable_Setpoint",
+        properties={"value": 15.0}
+    )
+
+    # Comparison blocks to check if the max valve position crosses the setpoints.
+    builder.add_component("kitControl:GreaterThan", "Check_Enable_Condition")
+    builder.add_component("kitControl:LessThan", "Check_Disable_Condition")
+
+    # Latching logic to hold the chiller request state.
+    builder.add_component("kitControl:Or", "State_Change_Trigger")
+    builder.add_component("kitControl:BooleanLatch", "Chiller_Request_Latch")
+
+    # offDelay: 30 minutes (1,800,000 ms) before disabling.
+    delay_properties = {
+        "offDelay": "1800000"
+    }
+    builder.add_component(
+        "kitControl:BooleanDelay",
+        "Anti_Short_Cycle_Delay",
+        properties=delay_properties
+    )
+
+    builder.end_sub_folder()
+
+    # --- Wiring the Logic ---
+
+    # Wire max valve and setpoints to comparison blocks.
+    builder.add_link("Max_Cooling_Valve", "out", "Check_Enable_Condition", "inA")
+    builder.add_link("Enable_Setpoint", "out", "Check_Enable_Condition", "inB")
+    builder.add_link("Max_Cooling_Valve", "out", "Check_Disable_Condition", "inA")
+    builder.add_link("Disable_Setpoint", "out", "Check_Disable_Condition", "inB")
+
+    # Wire comparison outputs to the latching logic.
+    builder.add_link("Check_Enable_Condition", "out", "State_Change_Trigger", "inA")
+    builder.add_link("Check_Disable_Condition", "out", "State_Change_Trigger", "inB")
+
+    builder.add_link("Check_Enable_Condition", "out", "Chiller_Request_Latch", "in")
+    builder.add_link("State_Change_Trigger", "out", "Chiller_Request_Latch", "clock")
+
+    # Wire the latched request to the time delay block.
+    builder.add_link("Chiller_Request_Latch", "out", "Anti_Short_Cycle_Delay", "in")
+
+    # Wire the final, time-delayed output to the command point.
+    builder.add_link("Anti_Short_Cycle_Delay", "out", "Chiller_Enable_Command", "in16")
+
+    # --- Save the .bog File ---
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / bog_filename
+    builder.save(str(out_path))
+
+    return out_path.resolve()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for chiller enable/disable logic driven by the max of 10 AHU cooling valve positions."
+    )
+    parser.add_argument(
+        "-o", "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file (default: %(default)s)."
+    )
+    parser.add_argument(
+        "-n", "--name",
+        default=None,
+        help="Base name for the .bog (default: script filename)."
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    # Derive script base name (without .py). Fallback to 'chiller_enable' if unknown.
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    base_name = args.name or (script_filename if script_filename else "chiller_enable")
+    bog_filename = f"{base_name}.bog"
+
+    output_dir = Path(args.output_dir)
+
+    print("[INFO] Building BOG ...")
+    print(f"[INFO]  output_dir = {output_dir}")
+    print(f"[INFO]  bog_name   = {bog_filename}")
+
+    out_path = build_bog(output_dir, bog_filename)
+
+    print("[SUCCESS] Successfully created Niagara .bog file.")
+    print(f"[SUCCESS] Full path: {out_path}")
 
 
 if __name__ == "__main__":
@@ -889,7 +1303,7 @@ hvac_g36_ahu_duct_static_reset.py
 
 Made and validated in field by pybog creator.
 
-Final version was a slow build off of ping pong, linear_reset_examples, 
+Final version was a slow build off of ping pong, linear_reset_examples,
 multivibrator_link_test, rate_of_change_limiter,
  and numeric_delay_playground examples.
 
@@ -918,8 +1332,11 @@ Algorithm Overview (matching the Java logic):
 import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
+
 def main():
-    p = argparse.ArgumentParser(description="Build a G36 Trim & Respond for duct pressure")
+    p = argparse.ArgumentParser(
+        description="Build a G36 Trim & Respond for duct pressure"
+    )
     p.add_argument("-o", "--output_dir", default="examples")
     args = p.parse_args()
 
@@ -930,7 +1347,7 @@ def main():
     b.add_numeric_writable("TotalRequests", default_value=0.0, precision=0)
     b.add_boolean_writable("Enabled", default_value=True)
     b.add_boolean_writable("ManualReset", default_value=False)
-    
+
     b.add_numeric_writable("SP0", default_value=1.0, precision=2)
     b.add_numeric_writable("SPmin", default_value=0.40, precision=2)
     b.add_numeric_writable("SPmax", default_value=1.25, precision=2)
@@ -941,15 +1358,17 @@ def main():
 
     b.add_numeric_writable("UpdateMinutes", default_value=2.0)
     b.add_numeric_writable("StartupDelayMinutes", default_value=10.0)
-    
+
     b.add_numeric_writable("Output", 0.0, precision=2)
 
     # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:And", "EnableGate") # NEW
+    b.add_component("kitControl:And", "EnableGate")  # NEW
     b.add_component("kitControl:BooleanDelay", "StartupDelay")
     b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component("kitControl:NumericConst", "Const_60000", properties={"value": 60000.0})
+    b.add_component(
+        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
+    )
     b.add_component("kitControl:Multiply", "Delay_ms_Calc")
 
     # Update Timer
@@ -961,11 +1380,11 @@ def main():
     # Trim vs Respond Logic
     b.add_component("kitControl:GreaterThan", "IsRespondCondition")
     b.add_component("kitControl:Subtract", "ExcessRequests")
-    
+
     b.start_sub_folder("RespondCappingLogic")
     b.add_component("kitControl:Multiply", "ProportionalResponse")
     b.add_component("kitControl:Minimum", "CappedResponse")
-    b.end_sub_folder() 
+    b.end_sub_folder()
 
     b.add_numeric_switch("AdjustmentSwitch")
 
@@ -976,7 +1395,7 @@ def main():
     b.add_component("kitControl:Maximum", "Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
     b.add_numeric_switch("FinalOutputSwitch")
-    
+
     # Latch Initialization Logic
     b.add_component("kitControl:OneShot", "InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
@@ -988,7 +1407,7 @@ def main():
     # start up values after startup delay expires
     b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
     b.add_numeric_writable("MaxStepSize", default_value=0.1, precision=2)
-    
+
     # dont define a properties={"": 0.5} for NumericDelay just
     # wire in a numeric writeable for that as shown below
     b.add_component("kitControl:NumericDelay", "MinClampDelay")
@@ -1007,15 +1426,21 @@ def main():
     b.add_link("EnableGate", "out", "StartupDelay", "in")
     b.add_link("StartupDelayMinutes", "out", "Delay_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
-    b.add_link("Delay_ms_Calc", "out", "StartupDelay", "onDelay",
-               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+    b.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
     b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
     b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
     # Timer
     b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
-    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period") 
+    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period")
     b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
     b.add_link("UpdatePulse", "out", "PulseGate", "inA")
     b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
@@ -1025,7 +1450,7 @@ def main():
     b.add_link("Ignore", "out", "IsRespondCondition", "inB")
     b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
     b.add_link("Ignore", "out", "ExcessRequests", "inB")
-    
+
     b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
     b.add_link("SPres", "out", "ProportionalResponse", "inB")
     b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
@@ -1052,14 +1477,22 @@ def main():
     # this correct some odd quark in flow programming to smooth
     # start up values after startup delay expires
     b.add_link("MaxStepSize", "out", "MinClampDelay", "maxStepSize")
-    b.add_link("MinClampDelay_ms_Calc", "out", "MinClampDelay", "updateTime",
-               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+    b.add_link(
+        "MinClampDelay_ms_Calc",
+        "out",
+        "MinClampDelay",
+        "updateTime",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
 
     # Clamp the new setpoint using the delayed minimum
     b.add_link("NewSetpoint_Unclamped", "out", "Clamp_Hi", "inA")
     b.add_link("SPmax", "out", "Clamp_Hi", "inB")
     b.add_link("Clamp_Hi", "out", "Clamp_Lo", "inA")
-    b.add_link("MinClampDelay", "out", "Clamp_Lo", "inB") # Use the output of the new delay
+    b.add_link(
+        "MinClampDelay", "out", "Clamp_Lo", "inB"
+    )  # Use the output of the new delay
 
     # Reset Logic
     b.add_link("Fan_Status", "out", "FanIsOff", "in")
@@ -1082,7 +1515,7 @@ def main():
     b.add_link("RunLogicEnable", "out", "FinalOutputSwitch", "inSwitch")
     b.add_link("ValueLatch", "out", "FinalOutputSwitch", "inTrue")
     b.add_link("SP0", "out", "FinalOutputSwitch", "inFalse")
-    
+
     # Wire to Viewer
     b.add_link("FinalOutputSwitch", "out", "Output", "in16")
 
@@ -1090,6 +1523,7 @@ def main():
     out = os.path.join(args.output_dir, "g36_duct_static_reset_tr.bog")
     b.save(out)
     print(f"Created {out}")
+
 
 if __name__ == "__main__":
     main()
@@ -1103,7 +1537,7 @@ hvac_g36_ahu_supply_temp_reset.py
 
 Made and validated in field by pybog creator.
 
-Final version was a slow build off of ping pong, linear_reset_examples, 
+Final version was a slow build off of ping pong, linear_reset_examples,
 multivibrator_link_test, rate_of_change_limiter,
  and numeric_delay_playground examples.
 
@@ -1134,12 +1568,15 @@ Algorithm Overview:
 import sys, os, argparse
 from bog_builder import BogFolderBuilder
 
+
 def main():
-    p = argparse.ArgumentParser(description="Build a G36 AHU SAT Trim & Respond .bog file.")
+    p = argparse.ArgumentParser(
+        description="Build a G36 AHU SAT Trim & Respond .bog file."
+    )
     p.add_argument("-o", "--output_dir", default="examples")
     args = p.parse_args()
 
-    b = BogFolderBuilder("G36AhuSupTempTrimAndRespond", debug=True) 
+    b = BogFolderBuilder("G36AhuSupTempTrimAndRespond", debug=True)
 
     sat_max = 70.0
 
@@ -1149,7 +1586,7 @@ def main():
     b.add_numeric_writable("OutsideAirTemp", default_value=72.0, precision=1)
     b.add_boolean_writable("Enabled", default_value=True)
     b.add_boolean_writable("ManualReset", default_value=False)
-    
+
     # SAT Reset Configuration
     b.add_numeric_writable("SatMin", default_value=55.0, precision=1)
     b.add_numeric_writable("SatMax", default_value=sat_max, precision=1)
@@ -1163,9 +1600,9 @@ def main():
     b.add_numeric_writable("Ignore", default_value=2.0, precision=0)
 
     # Timers
-    b.add_numeric_writable("UpdateMinutes", default_value=0.50)
-    b.add_numeric_writable("StartupDelayMinutes", default_value=0.50)
-    
+    b.add_numeric_writable("UpdateMinutes", default_value=2.0)
+    b.add_numeric_writable("StartupDelayMinutes", default_value=10.0)
+
     # Final Output
     b.add_numeric_writable("Output_SAT_Setpoint", default_value=sat_max, precision=2)
 
@@ -1174,7 +1611,9 @@ def main():
     b.add_component("kitControl:And", "EnableGate")
     b.add_component("kitControl:BooleanDelay", "StartupDelay")
     b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component("kitControl:NumericConst", "Const_60000", properties={"value": 60000.0})
+    b.add_component(
+        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
+    )
     b.add_component("kitControl:Multiply", "Delay_ms_Calc")
 
     # this correct some odd quark in flow programming to smooth
@@ -1191,9 +1630,11 @@ def main():
     # Trim vs Respond Logic
     b.add_component("kitControl:GreaterThan", "IsRespondCondition")
     b.add_component("kitControl:Subtract", "ExcessRequests")
-    
+
     b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_component("kitControl:Maximum", "CappedResponse") # Use Maximum for negative response cap
+    b.add_component(
+        "kitControl:Maximum", "CappedResponse"
+    )  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 
@@ -1203,7 +1644,7 @@ def main():
     b.add_component("kitControl:Minimum", "tMaxState_Clamp_Hi")
     b.add_component("kitControl:Maximum", "tMaxState_Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
-    
+
     # Latch Initialization Logic (like duct static version)
     b.add_component("kitControl:OneShot", "InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
@@ -1232,15 +1673,21 @@ def main():
     b.add_link("EnableGate", "out", "StartupDelay", "in")
     b.add_link("StartupDelayMinutes", "out", "Delay_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Delay_ms_Calc", "inB")
-    b.add_link("Delay_ms_Calc", "out", "StartupDelay", "onDelay",
-               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+    b.add_link(
+        "Delay_ms_Calc",
+        "out",
+        "StartupDelay",
+        "onDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
     b.add_link("Fan_Status", "out", "RunLogicEnable", "inA")
     b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
     # T&R Timer
     b.add_link("UpdateMinutes", "out", "Update_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "Update_ms_Calc", "inB")
-    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period") 
+    b.add_link("Update_ms_Calc", "out", "UpdateTimer", "Period")
     b.add_link("UpdateTimer", "out", "UpdatePulse", "in")
     b.add_link("UpdatePulse", "out", "PulseGate", "inA")
     b.add_link("RunLogicEnable", "out", "PulseGate", "inB")
@@ -1250,7 +1697,7 @@ def main():
     b.add_link("Ignore", "out", "IsRespondCondition", "inB")
     b.add_link("TotalRequests", "out", "ExcessRequests", "inA")
     b.add_link("Ignore", "out", "ExcessRequests", "inB")
-    
+
     b.add_link("ExcessRequests", "out", "ProportionalResponse", "inA")
     b.add_link("SPres", "out", "ProportionalResponse", "inB")
     b.add_link("ProportionalResponse", "out", "CappedResponse", "inA")
@@ -1265,22 +1712,29 @@ def main():
     b.add_link("AdjustmentSwitch", "out", "New_tMaxState_Unclamped", "inB")
     b.add_link("New_tMaxState_Unclamped", "out", "tMaxState_Clamp_Hi", "inA")
     b.add_link("SatMax", "out", "tMaxState_Clamp_Hi", "inB")
-    
+
     # Dynamic Minimum Clamp with Delay
     b.add_link("StartupDelay", "out", "MinClampSwitch", "inSwitch")
     b.add_link("SatMin", "out", "MinClampSwitch", "inTrue")
-    b.add_link("SatMax", "out", "MinClampSwitch", "inFalse") # During startup, min clamp is SatMax
+    b.add_link(
+        "SatMax", "out", "MinClampSwitch", "inFalse"
+    )  # During startup, min clamp is SatMax
     b.add_link("MinClampSwitch", "out", "MinClampDelay", "in")
     b.add_link("MinClampDelayMinutes", "out", "MinClampDelay_ms_Calc", "inA")
     b.add_link("Const_60000", "out", "MinClampDelay_ms_Calc", "inB")
 
-
     b.add_link("MaxStepSize", "out", "MinClampDelay", "maxStepSize")
-    b.add_link("MinClampDelay_ms_Calc", "out", "MinClampDelay", "updateTime",
-               link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
-    
+    b.add_link(
+        "MinClampDelay_ms_Calc",
+        "out",
+        "MinClampDelay",
+        "updateTime",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+
     b.add_link("tMaxState_Clamp_Hi", "out", "tMaxState_Clamp_Lo", "inA")
-    b.add_link("MinClampDelay", "out", "tMaxState_Clamp_Lo", "inB") # Use delayed min
+    b.add_link("MinClampDelay", "out", "tMaxState_Clamp_Lo", "inB")  # Use delayed min
 
     # Reset Logic for tMaxState
     b.add_link("Fan_Status", "out", "FanIsOff", "in")
@@ -1288,13 +1742,13 @@ def main():
     b.add_link("FanIsOff", "out", "ResetTrigger", "inB")
     b.add_link("ResetTrigger", "out", "ResetPulse", "in")
     b.add_link("ResetPulse", "out", "ResetSwitch", "inSwitch")
-    b.add_link("SatMax", "out", "ResetSwitch", "inTrue") 
+    b.add_link("SatMax", "out", "ResetSwitch", "inTrue")
     b.add_link("tMaxState_Clamp_Lo", "out", "ResetSwitch", "inFalse")
 
     # Latching the new tMaxState value with initialization
     b.add_link("RunLogicEnable", "out", "InitializeLatchPulse", "in")
     b.add_link("InitializeLatchPulse", "out", "LatchInputSwitch", "inSwitch")
-    b.add_link("SatMax", "out", "LatchInputSwitch", "inTrue") # Initialize to SatMax
+    b.add_link("SatMax", "out", "LatchInputSwitch", "inTrue")  # Initialize to SatMax
     b.add_link("ResetSwitch", "out", "LatchInputSwitch", "inFalse")
     b.add_link("LatchInputSwitch", "out", "tMaxState_Latch", "in")
     b.add_link("PulseGate", "out", "tMaxState_Latch", "clock")
@@ -1305,8 +1759,12 @@ def main():
     b.add_link("OutsideAirTemp", "out", "SAT_Reset_By_OAT", "inA")
     b.add_link("OatMin", "out", "SAT_Reset_By_OAT", "inputLowLimit")
     b.add_link("OatMax", "out", "SAT_Reset_By_OAT", "inputHighLimit")
-    b.add_link("tMaxState_Latch", "out", "SAT_Reset_By_OAT", "outputLowLimit")   # reverse mapping
-    b.add_link("SatMin", "out", "SAT_Reset_By_OAT", "outputHighLimit")          # reverse mapping
+    b.add_link(
+        "tMaxState_Latch", "out", "SAT_Reset_By_OAT", "outputLowLimit"
+    )  # reverse mapping
+    b.add_link(
+        "SatMin", "out", "SAT_Reset_By_OAT", "outputHighLimit"
+    )  # reverse mapping
 
     # Final Output
     b.add_link("SAT_Reset_By_OAT", "out", "Output_SAT_Setpoint", "in16")
@@ -1316,6 +1774,7 @@ def main():
     out = os.path.join(args.output_dir, "g36_supply_temp_reset_tr.bog")
     b.save(out)
     print(f"Created {out}")
+
 
 if __name__ == "__main__":
     main()
@@ -1603,6 +2062,292 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
+=== FILE: lead_lag_cycles_block_playground.py ===
+DIR: .
+=== CODE START ===
+"""
+kitControl:LeadLagCycles Advanced Pump Playground (with Sub-Folder)
+-------------------------------------------------------------------
+
+This script creates an advanced demonstration for the kitControl:LeadLagCycles
+component, configured for a four-pump sequencing application with realistic
+feedback and internal cycle counting.
+
+All the core calculation logic is organized into a 'Logic' sub-folder to
+keep the top-level view clean and focused on the main inputs and outputs.
+
+Use in Central Plant staging for chiller, boilers, pumps, etc.
+For sim purposes "maxRuntime": "20s" but real world weekly rotation
+is more typical.
+
+Algorithm:
+- A master 'Pump_Enable' signal is fed into the 'in' slot of the
+  LeadLagCycles block inside the 'Logic' folder.
+- The block is configured for four outputs ('numberOutputs' = 4).
+- The outputs of the block command four individual pumps (represented by
+  BooleanWritables at the top level).
+- Each pump command is also wired to the 'countUp' slot of a dedicated
+  'kitControl:Counter' block inside the 'Logic' folder.
+- The output of each counter is wired back into the corresponding 'cycleCount'
+  slot on the LeadLagCycles block.
+- The four pump commands are combined with an 'Or' block to create a single
+  'status' signal, which is wired back to the 'feedback' slot.
+- Configurable timers for 'maxRuntime', 'feedbackDelay', and 'clearAlarmTime'
+  are included as component properties.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    Main function to build and save the LeadLagCycles playground .bog file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build an advanced .bog file to demonstrate the kitControl:LeadLagCycles component with sub-folders."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("LeadLagCyclesPlayground", debug=True)
+
+    print("--- Creating Top-Level I/O Components ---")
+
+    # --- Inputs & Outputs (at the root level) ---
+    builder.add_boolean_writable("Pump_Enable", default_value=False)
+    pump_names = ["A", "B", "C", "D"]
+    for pump in pump_names:
+        # These are the final commands that would go to physical equipment.
+        builder.add_boolean_writable(f"Pump_{pump}_Cmd")
+
+    # --- Logic Components (organized inside a sub-folder) ---
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
+
+    # The LeadLagCycles component is the core of the logic.
+    lead_lag_properties = {
+        "numberOutputs": 4,
+        "maxRuntime": "20s",
+        "feedbackDelay": "10s",
+        "clearAlarmTime": "1m",
+    }
+    builder.add_component(
+        "kitControl:LeadLagCycles", "Pump_LeadLag", properties=lead_lag_properties
+    )
+
+    # The Counter for each pump is also part of the internal logic.
+    for pump in pump_names:
+        builder.add_counter(f"Pump_{pump}_Counter")
+
+    # The Feedback logic is internal to the calculation as well.
+    builder.add_component("kitControl:Or", "Feedback_Or")
+
+    builder.end_sub_folder()
+    print("--- Exited 'Logic' sub-folder ---")
+
+    print("\n--- Wiring Components (cross-folder links are handled automatically) ---")
+
+    # Wire the master enable signal from the root level to the logic block.
+    builder.add_link("Pump_Enable", "out", "Pump_LeadLag", "in")
+
+    # Wire the feedback loop from the root-level commands back to the logic folder.
+    builder.add_link("Pump_A_Cmd", "out", "Feedback_Or", "inA")
+    builder.add_link("Pump_B_Cmd", "out", "Feedback_Or", "inB")
+    builder.add_link("Pump_C_Cmd", "out", "Feedback_Or", "inC")
+    builder.add_link("Pump_D_Cmd", "out", "Feedback_Or", "inD")
+    builder.add_link("Feedback_Or", "out", "Pump_LeadLag", "feedback")
+
+    # Wire each pump's command, counter, and cycle count feedback.
+    for pump in pump_names:
+        # Wire from the logic block out to the final pump command at the root level.
+        builder.add_link(f"Pump_LeadLag", f"out{pump}", f"Pump_{pump}_Cmd", "in16")
+        
+        # Wire the logic block's output to its corresponding internal counter.
+        builder.add_link(f"Pump_LeadLag", f"out{pump}", f"Pump_{pump}_Counter", "countUp")
+        
+        # Wire the internal counter's value back to the logic block's cycle count input.
+        builder.add_link(f"Pump_{pump}_Counter", "out", f"Pump_LeadLag", f"cycleCount{pump}")
+
+
+    # --- Save the .bog file ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print("Drag this file into Niagara Workbench to test the logic.")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: lead_lag_runtime_block_playground.py ===
+DIR: .
+=== CODE START ===
+"""
+kitControl:LeadLagRuntime with Realistic Counter Simulation (4-Chiller)
+-----------------------------------------------------------------------
+
+This script creates an advanced, realistic demonstration for the
+kitControl:LeadLagRuntime component. It uses Counter blocks to accurately
+accumulate runtime, simulating a real-world application for sequencing four
+chillers in a central plant.
+
+All the core calculation logic is organized into a 'Logic' sub-folder.
+Use in Central Plant staging for chiller, boilers, pumps, etc.
+For sim purposes "maxRuntime": "20s" but real world weekly rotation
+is more typical.
+
+Algorithm:
+- A master 'Chiller_Enable' signal enables the LeadLagRuntime block.
+- The block is configured for four outputs and includes properties for
+  maxRuntime, feedbackDelay, and clearAlarmTime.
+- The outputs ('outA' through 'outD') command the chillers AND enable the
+  runtime accumulation logic for the active chiller.
+- A periodic timer pulses every second. This pulse is gated by the specific
+  chiller command and then increments a dedicated 'Counter' for that chiller.
+- The output of each Counter (total elapsed seconds) is converted to a
+  RelTime value (milliseconds) and linked back to the corresponding 'runtimeA',
+  'runtimeB', etc. slots on the LeadLagRuntime block.
+- The LeadLagRuntime block sequences its outputs based on this accumulated
+  runtime.
+- A feedback loop using an 'Or' block provides a combined status.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    Main function to build and save the advanced LeadLagRuntime Counter simulation.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to simulate a 4-chiller LeadLagRuntime with Counters."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("LeadLagRuntime_CounterSim", debug=True)
+
+    print("--- Creating Top-Level I/O Components ---")
+
+    # --- Inputs & Outputs (at the root level) ---
+    builder.add_boolean_writable("Chiller_Enable", default_value=False)
+    
+    chiller_names = ["A", "B", "C", "D"]
+    for chiller in chiller_names:
+        builder.add_boolean_writable(f"Chiller_{chiller}_Cmd")
+        builder.add_numeric_writable(f"Chiller_{chiller}_Runtime_Out_Seconds")
+
+
+    # --- Logic Components (organized inside a sub-folder) ---
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
+
+    # Core LeadLag component with full properties
+    lead_lag_properties = {
+        "numberOutputs": 4,
+        "maxRuntime": "20s",
+        "feedbackDelay": "10s",
+        "clearAlarmTime": "1m",
+    }
+    builder.add_component(
+        "kitControl:LeadLagRuntime", "Chiller_LeadLag", properties=lead_lag_properties
+    )
+
+    # Feedback logic for four inputs
+    builder.add_component("kitControl:Or", "Feedback_Or")
+
+    # --- Runtime Accumulation Logic ---
+    for chiller in chiller_names:
+        builder.add_counter(f"Chiller_{chiller}_RuntimeCounter")
+        builder.add_component("kitControl:And", f"Chiller_{chiller}_RuntimeEnableGate")
+        builder.add_numeric_switch(f"Chiller_{chiller}_PulseSwitch")
+
+    # A timer that pulses every second
+    builder.add_component("kitControl:MultiVibrator", "OneSecondTimer", properties={"period": "1s"})
+    builder.add_component("kitControl:OneShot", "TimerPulse")
+    builder.add_component("kitControl:NumericConst", "Const_1", properties={"value": 1.0})
+
+
+    builder.end_sub_folder()
+    print("--- Exited 'Logic' sub-folder ---")
+
+
+    print("\n--- Wiring Components ---")
+
+    # Wire master enable
+    builder.add_link("Chiller_Enable", "out", "Chiller_LeadLag", "in")
+
+    # Wire feedback loop for all four chillers
+    builder.add_link("Chiller_A_Cmd", "out", "Feedback_Or", "inA")
+    builder.add_link("Chiller_B_Cmd", "out", "Feedback_Or", "inB")
+    builder.add_link("Chiller_C_Cmd", "out", "Feedback_Or", "inC")
+    builder.add_link("Chiller_D_Cmd", "out", "Feedback_Or", "inD")
+    builder.add_link("Feedback_Or", "out", "Chiller_LeadLag", "feedback")
+
+    # Wire timer
+    builder.add_link("OneSecondTimer", "out", "TimerPulse", "in")
+
+    # Wire logic for each chiller
+    for chiller in chiller_names:
+        # Wire lead/lag outputs to final commands
+        builder.add_link(f"Chiller_LeadLag", f"out{chiller}", f"Chiller_{chiller}_Cmd", "in16")
+
+        # Enable counter only when the pulse fires AND the chiller is commanded on
+        builder.add_link("TimerPulse", "out", f"Chiller_{chiller}_RuntimeEnableGate", "inA")
+        builder.add_link(f"Chiller_{chiller}_Cmd", "out", f"Chiller_{chiller}_RuntimeEnableGate", "inB")
+        
+        # When the gate is true, pass a '1' to the switch
+        builder.add_link(f"Chiller_{chiller}_RuntimeEnableGate", "out", f"Chiller_{chiller}_PulseSwitch", "inSwitch")
+        builder.add_link("Const_1", "out", f"Chiller_{chiller}_PulseSwitch", "inTrue")
+
+        # The switch output becomes the increment value for the counter
+        builder.add_link(f"Chiller_{chiller}_PulseSwitch", "out", f"Chiller_{chiller}_RuntimeCounter", "countIncrement")
+        
+        # The gate also triggers the 'countUp' slot to make the counter accumulate
+        builder.add_link(f"Chiller_{chiller}_RuntimeEnableGate", "out", f"Chiller_{chiller}_RuntimeCounter", "countUp")
+
+        # Wire Counter output (seconds) back to LeadLagRuntime input (milliseconds) with conversion
+        builder.add_link(f"Chiller_{chiller}_RuntimeCounter", "out", "Chiller_LeadLag", f"runtime{chiller}",
+                         link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+
+        # Wire the counter's output (accumulated seconds) directly for monitoring
+        builder.add_link(f"Chiller_{chiller}_RuntimeCounter", "out", f"Chiller_{chiller}_Runtime_Out_Seconds", "in16")
+
+
+    # --- Save the .bog file ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print("Drag this file into Niagara Workbench to test the logic.")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
 === FILE: linear_reset_examples.py ===
 DIR: .
 === CODE START ===
@@ -1696,7 +2441,7 @@ def main():
         "inputHighLimit": {"value": 75.0},
         # Reverse acting mapping: low OAT -> SAT_MAX; high OAT -> SAT_MIN
         "outputLowLimit": {"value": 70.0},  # at OAT_LOW
-        "outputHighLimit": {"value": 55.0}, # at OAT_HIGH
+        "outputHighLimit": {"value": 55.0},  # at OAT_HIGH
     }
     b.add_component("kitControl:Reset", "SAT_Reset", properties=sat_props)
     b.end_sub_folder()
@@ -1730,24 +2475,24 @@ def main():
     b.add_link("OutsideAirTemp", "out", "HotWaterReset", "inA")
     b.add_link("HW_OAT_LOW", "out", "HotWaterReset", "inputLowLimit")
     b.add_link("HW_OAT_HIGH", "out", "HotWaterReset", "inputHighLimit")
-    b.add_link("HWST_HIGH", "out", "HotWaterReset", "outputLowLimit")   # reverse
-    b.add_link("HWST_LOW", "out", "HotWaterReset", "outputHighLimit")   # reverse
+    b.add_link("HWST_HIGH", "out", "HotWaterReset", "outputLowLimit")  # reverse
+    b.add_link("HWST_LOW", "out", "HotWaterReset", "outputHighLimit")  # reverse
     b.add_link("HotWaterReset", "out", "HotWaterSetpoint_Out", "in16")
 
     # 2) SAT Reset (reverse)
     b.add_link("OutsideAirTemp", "out", "SAT_Reset", "inA")
     b.add_link("SAT_OAT_LOW", "out", "SAT_Reset", "inputLowLimit")
     b.add_link("SAT_OAT_HIGH", "out", "SAT_Reset", "inputHighLimit")
-    b.add_link("SAT_MAX", "out", "SAT_Reset", "outputLowLimit")         # reverse
-    b.add_link("SAT_MIN", "out", "SAT_Reset", "outputHighLimit")        # reverse
+    b.add_link("SAT_MAX", "out", "SAT_Reset", "outputLowLimit")  # reverse
+    b.add_link("SAT_MIN", "out", "SAT_Reset", "outputHighLimit")  # reverse
     b.add_link("SAT_Reset", "out", "SAT_Setpoint_Out", "in16")
 
     # 3) Chilled Water Reset (direct)
     b.add_link("OutsideAirTemp", "out", "ChilledWaterReset", "inA")
     b.add_link("CHW_OAT_LOW", "out", "ChilledWaterReset", "inputLowLimit")
     b.add_link("CHW_OAT_HIGH", "out", "ChilledWaterReset", "inputHighLimit")
-    b.add_link("CHWST_LOW", "out", "ChilledWaterReset", "outputLowLimit")   # direct
-    b.add_link("CHWST_HIGH", "out", "ChilledWaterReset", "outputHighLimit") # direct
+    b.add_link("CHWST_LOW", "out", "ChilledWaterReset", "outputLowLimit")  # direct
+    b.add_link("CHWST_HIGH", "out", "ChilledWaterReset", "outputHighLimit")  # direct
     b.add_link("ChilledWaterReset", "out", "ChilledWaterSetpoint_Out", "in16")
 
     # Save
@@ -3207,17 +3952,14 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: simple_math_logic.py ===
+=== FILE: sub_folder_playground.py ===
 DIR: .
 === CODE START ===
 """
-This script tests the BogFolderBuilder with a multi-step algorithm
-that combines multiple math blocks to calculate the equation:
-Result = ((Input_A + Input_B) * Input_C) / Input_D. It demonstrates
-how to chain the output of one component to the input of another.
+
 """
 
-import sys
+
 import os
 import argparse
 
@@ -3225,110 +3967,36 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-    """
-    This script tests the BogFolderBuilder with a more complex algorithm
-    that combines multiple math blocks to calculate:
-    Result = ((Input_A + Input_B) * Input_C) / Input_D
-    """
-    parser = argparse.ArgumentParser(
-        description="Build a complex math logic .bog file with automatic layout."
-    )
+
+    parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
+        "-o",
+        "--output_dir",
     )
     args = parser.parse_args()
 
     script_filename = os.path.basename(__file__).replace(".py", "")
 
-    builder = BogFolderBuilder("ComplexMathEquation")
+    builder = BogFolderBuilder("BogSubFolderPlayground")
+    print("Creating top-level inputs and outputs...")
 
-    builder.start_sub_folder("CalculationLogic")
-
-    # --- Inputs ---
-    builder.add_numeric_writable(name="Input_A", default_value=20.0)
-    builder.add_numeric_writable(name="Input_B", default_value=10.0)
-    builder.add_numeric_writable(name="Input_C", default_value=2.0)
-    builder.add_numeric_writable(name="Input_D", default_value=3.0)
-
-    # --- Output ---
-    builder.add_numeric_writable(name="Result")
-
-    builder.add_component(comp_type="kitControl:Add", name="Add_AB")
-    builder.add_component(comp_type="kitControl:Multiply", name="Multiply_ABC")
-    builder.add_component(comp_type="kitControl:Divide", name="Divide_ABCD")
-
+    builder.start_sub_folder("One")
     builder.end_sub_folder()
 
-    builder.add_link("Input_A", "out", "Add_AB", "inA")
-    builder.add_link("Input_B", "out", "Add_AB", "inB")
-
-    builder.add_link("Add_AB", "out", "Multiply_ABC", "inA")
-    builder.add_link("Input_C", "out", "Multiply_ABC", "inB")
-
-    builder.add_link("Multiply_ABC", "out", "Divide_ABCD", "inA")
-    builder.add_link("Input_D", "out", "Divide_ABCD", "inB")
-
-    builder.add_link("Divide_ABCD", "out", "Result", "in16")
-
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
-=== FILE: subtract_simple.py ===
-DIR: .
-=== CODE START ===
-"""
-This script uses the BogFolderBuilder to create a simple wiresheet that
-subtracts one number from another (Input_A - Input_B). It is a basic
-demonstration of the `kitControl:Subtract` block.
-"""
-
-import sys
-import os
-import argparse
-
-from bog_builder import BogFolderBuilder
-
-
-def main():
-    """
-    This script uses the BogFolderBuilder to create a wiresheet that
-    subtracts one number from another (Input_A - Input_B).
-    """
-    parser = argparse.ArgumentParser(
-        description="Build a subtraction logic .bog file with automatic layout."
-    )
-    parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory."
-    )
-    args = parser.parse_args()
-
-    script_filename = os.path.basename(__file__).replace(".py", "")
-
-    builder = BogFolderBuilder("SubtractionLogic")
-
-    # --- Inputs ---
-    builder.add_numeric_writable(name="Input_A", default_value=100.0)
-    builder.add_numeric_writable(name="Input_B", default_value=40.0)
-
-    # --- Output ---
-    builder.add_numeric_writable(name="Difference")
-
-    builder.start_sub_folder("CalculationLogic")
-    builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
-
+    builder.start_sub_folder("Two")
     builder.end_sub_folder()
 
-    builder.add_link("Input_A", "out", "Subtract", "inA")
-    builder.add_link("Input_B", "out", "Subtract", "inB")
-    builder.add_link("Subtract", "out", "Difference", "in16")
+    builder.start_sub_folder("Three")
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Four")
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Five")
+    builder.end_sub_folder()
+
+
+
 
     bog_filename = f"{script_filename}.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
@@ -3439,169 +4107,6 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     b.save(output_path)
     print(f"\nCreated: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
-=== FILE: thermostat.py ===
-DIR: .
-=== CODE START ===
-"""
-thermostat.py
-
-Simple thermostat logic:
-- Modes: 0=Off, 1=Heat, 2=Cool  (numeric select)
-- Hysteresis applied on both heat/cool thresholds
-- Fan runs when heating or cooling, or when FanAuto is false (manual/override)
-
-Conventions:
-- Appends ../src to sys.path (no try/except)
-- Accepts -o/--output_dir
-- Saves to a hard-coded 'thermostat.bog' in that directory
-"""
-
-from __future__ import annotations
-
-import argparse
-import os
-import sys
-
-# Project import convention: append ../src then import the builder
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-from bog_builder import BogFolderBuilder  # noqa: E402
-
-SCRIPT_FOLDER_NAME = "Thermostat"
-SCRIPT_BOG_NAME = "thermostat.bog"
-
-
-def build_thermostat(builder: BogFolderBuilder) -> None:
-    """
-    Build thermostat logic using kitControl blocks.
-    """
-    # -------- Top-level “variables” --------
-    builder.add_numeric_writable("SpaceTemp", default_value=72.0)
-    builder.add_numeric_writable("HeatSP", default_value=68.0)
-    builder.add_numeric_writable("CoolSP", default_value=74.0)
-    builder.add_numeric_writable("Hysteresis", default_value=1.0)
-    # Mode: 0=Off, 1=Heat, 2=Cool
-    builder.add_numeric_writable("Mode", default_value=0.0)
-    # FanAuto = True means fan follows calls; False forces continuous fan
-    builder.add_boolean_writable("FanAuto", default_value=True)
-
-    # Outputs
-    builder.add_boolean_writable("Output_HeatCmd")
-    builder.add_boolean_writable("Output_CoolCmd")
-    builder.add_boolean_writable("Output_FanCmd")
-
-    # -------- Logic (sub-folder) --------
-    builder.start_sub_folder("ThermostatLogic")
-
-    # Constants (1 and 2) for Mode comparisons
-    builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
-    builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
-
-    # Mode == 1 (Heat): Mode ≥ 1 AND Mode ≤ 1
-    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
-    builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
-    builder.add_component("kitControl:And", "IsHeatMode")
-
-    # Mode == 2 (Cool): Mode ≥ 2 AND Mode ≤ 2
-    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
-    builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
-    builder.add_component("kitControl:And", "IsCoolMode")
-
-    # Sum blocks for hysteresis
-    builder.add_component("kitControl:Add", "SpacePlusHyst")
-    builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
-
-    # Threshold compares
-    builder.add_component(
-        "kitControl:LessThanEqual", "IsBelowHeat"
-    )  # Space+Hyst <= HeatSP
-    builder.add_component(
-        "kitControl:GreaterThanEqual", "IsAboveCool"
-    )  # Space >= CoolSP+Hyst
-
-    # Command gates
-    builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
-    builder.add_component("kitControl:And", "CoolCmdGate")  # IsCoolMode AND IsAboveCool
-
-    # Fan logic: (HeatCmd OR CoolCmd) OR (NOT FanAuto)
-    builder.add_component("kitControl:Or", "HeatOrCool")
-    builder.add_component("kitControl:Not", "FanAutoNot")
-    builder.add_component("kitControl:Or", "FanCmdGate")
-
-    # ---- Wiring: Mode == 1 (Heat) ----
-    builder.add_link("Mode", "out", "Mode_GE_1", "inA")
-    builder.add_link("Const1", "out", "Mode_GE_1", "inB")
-    builder.add_link("Mode", "out", "Mode_LE_1", "inA")
-    builder.add_link("Const1", "out", "Mode_LE_1", "inB")
-    builder.add_link("Mode_GE_1", "out", "IsHeatMode", "inA")
-    builder.add_link("Mode_LE_1", "out", "IsHeatMode", "inB")
-
-    # ---- Wiring: Mode == 2 (Cool) ----
-    builder.add_link("Mode", "out", "Mode_GE_2", "inA")
-    builder.add_link("Const2", "out", "Mode_GE_2", "inB")
-    builder.add_link("Mode", "out", "Mode_LE_2", "inA")
-    builder.add_link("Const2", "out", "Mode_LE_2", "inB")
-    builder.add_link("Mode_GE_2", "out", "IsCoolMode", "inA")
-    builder.add_link("Mode_LE_2", "out", "IsCoolMode", "inB")
-
-    # ---- Wiring: Hysteresis adds ----
-    builder.add_link("SpaceTemp", "out", "SpacePlusHyst", "inA")
-    builder.add_link("Hysteresis", "out", "SpacePlusHyst", "inB")
-    builder.add_link("CoolSP", "out", "CoolSP_plus_Hyst", "inA")
-    builder.add_link("Hysteresis", "out", "CoolSP_plus_Hyst", "inB")
-
-    # ---- Thresholds ----
-    builder.add_link("SpacePlusHyst", "out", "IsBelowHeat", "inA")
-    builder.add_link("HeatSP", "out", "IsBelowHeat", "inB")
-
-    builder.add_link("SpaceTemp", "out", "IsAboveCool", "inA")
-    builder.add_link("CoolSP_plus_Hyst", "out", "IsAboveCool", "inB")
-
-    # ---- Command gates ----
-    builder.add_link("IsHeatMode", "out", "HeatCmdGate", "inA")
-    builder.add_link("IsBelowHeat", "out", "HeatCmdGate", "inB")
-
-    builder.add_link("IsCoolMode", "out", "CoolCmdGate", "inA")
-    builder.add_link("IsAboveCool", "out", "CoolCmdGate", "inB")
-
-    # ---- Fan logic ----
-    builder.add_link("HeatCmdGate", "out", "HeatOrCool", "inA")
-    builder.add_link("CoolCmdGate", "out", "HeatOrCool", "inB")
-
-    builder.add_link("FanAuto", "out", "FanAutoNot", "in")
-    builder.add_link("HeatOrCool", "out", "FanCmdGate", "inA")
-    builder.add_link("FanAutoNot", "out", "FanCmdGate", "inB")
-
-    builder.end_sub_folder()
-
-    # Final outputs
-    builder.add_link("HeatCmdGate", "out", "Output_HeatCmd", "in16")
-    builder.add_link("CoolCmdGate", "out", "Output_CoolCmd", "in16")
-    builder.add_link("FanCmdGate", "out", "Output_FanCmd", "in16")
-
-
-def main() -> None:
-    p = argparse.ArgumentParser(description="Generate a thermostat .bog file.")
-    p.add_argument(
-        "-o",
-        "--output_dir",
-        default="examples",
-        help="Directory to write the .bog file.",
-    )
-    args = p.parse_args()
-
-    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=True)
-    build_thermostat(builder)
-
-    os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, SCRIPT_BOG_NAME)
-    builder.save(out_path)
-    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out_path)}")
 
 
 if __name__ == "__main__":
@@ -3761,6 +4266,279 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
     print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: tstat_block_playground.py ===
+DIR: .
+=== CODE START ===
+"""
+kitControl:Tstat Heating Playground
+------------------------------------
+
+This script creates a simple demonstration of the kitControl:Tstat component,
+configured for a common HVAC heating enable scenario.
+
+This is a VERY common block human controls techs like to use to
+enable equipment to run based on outdoor air temp compare to stp as
+it has a nice differential feature built inside. Use this block Vs
+hard coding comparaters and making your own hysteresis algorithm as the
+humans may not accept that code base purely because you didnt use the
+Tstat block which they are used to seeing.
+
+Algorithm:
+- An Outside Air Temperature (OAT) is used as the controlled variable (cv).
+- When the OAT drops below the HeatEnableSp (sp), the Tstat block's output
+  will turn on, enabling the heating system.
+- A fixed differential (diff) of 2.0 degrees provides a deadband to prevent
+  short-cycling.
+- The 'action' is set to reverse (True), which is typical for heating logic
+  (i.e., the output turns on as the input value falls).
+
+This serves as a clear, interactive example of the Tstat block's functionality.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+    """
+    Main function to build and save the Tstat playground .bog file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file to demonstrate the kitControl:Tstat component for heating."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+    builder = BogFolderBuilder("TstatHeatingPlayground", debug=True)
+
+    print("--- Creating Components for Tstat Playground ---")
+
+    # --- Inputs (User-adjustable points) ---
+    builder.add_numeric_writable("OAT", default_value=55.0, precision=1)
+    builder.add_numeric_writable("HeatEnableSp", default_value=50.0, precision=1)
+
+    # --- Configuration (Fixed constants) ---
+    builder.add_component(
+        "kitControl:NumericConst", "Differential", properties={"value": 2.0}
+    )
+    # Action=True corresponds to 'Reverse' for heating logic
+    builder.add_component(
+        "kitControl:BooleanConst", "Action_Reverse", properties={"value": True}
+    )
+    builder.add_component(
+        "kitControl:BooleanConst", "NullOnInControl_False", properties={"value": False}
+    )
+
+    # --- Core Logic Block ---
+    builder.add_component("kitControl:Tstat", "Tstat")
+
+    # --- Output ---
+    builder.add_boolean_writable("HeatCommand")
+
+    print("\n--- Wiring Components ---")
+
+    # Wire the main inputs to the Tstat block
+    builder.add_link("OAT", "out", "Tstat", "cv")
+    builder.add_link("HeatEnableSp", "out", "Tstat", "sp")
+    builder.add_link("Differential", "out", "Tstat", "diff")
+
+    # Wire the configuration constants
+    builder.add_link("Action_Reverse", "out", "Tstat", "action")
+    builder.add_link("NullOnInControl_False", "out", "Tstat", "nullOnInactive")
+
+    # Wire the final command to the output writable for viewing
+    builder.add_link("Tstat", "out", "HeatCommand", "in16")
+
+    # --- Save the .bog file ---
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print("Drag this file into Niagara Workbench to test the Tstat logic.")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: tstat_custom_logic.py ===
+DIR: .
+=== CODE START ===
+"""
+thermostat.py
+
+This is custom logic with bool comparaters. In General do not use
+this as humans controls techs prefer to visually see the Tstat
+block being used from kitControl because it is what they are
+used to seeing and they may reject logic that looks like
+this.
+
+Simple thermostat logic:
+- Modes: 0=Off, 1=Heat, 2=Cool  (numeric select)
+- Hysteresis applied on both heat/cool thresholds
+- Fan runs when heating or cooling, or when FanAuto is false (manual/override)
+
+Conventions:
+- Appends ../src to sys.path (no try/except)
+- Accepts -o/--output_dir
+- Saves to a hard-coded 'thermostat.bog' in that directory
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+# Project import convention: append ../src then import the builder
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+from bog_builder import BogFolderBuilder  # noqa: E402
+
+SCRIPT_FOLDER_NAME = "Thermostat"
+SCRIPT_BOG_NAME = "thermostat.bog"
+
+
+def build_thermostat(builder: BogFolderBuilder) -> None:
+    """
+    Build thermostat logic using kitControl blocks.
+    """
+    # -------- Top-level “variables” --------
+    builder.add_numeric_writable("SpaceTemp", default_value=72.0)
+    builder.add_numeric_writable("HeatSP", default_value=68.0)
+    builder.add_numeric_writable("CoolSP", default_value=74.0)
+    builder.add_numeric_writable("Hysteresis", default_value=1.0)
+    # Mode: 0=Off, 1=Heat, 2=Cool
+    builder.add_numeric_writable("Mode", default_value=0.0)
+    # FanAuto = True means fan follows calls; False forces continuous fan
+    builder.add_boolean_writable("FanAuto", default_value=True)
+
+    # Outputs
+    builder.add_boolean_writable("Output_HeatCmd")
+    builder.add_boolean_writable("Output_CoolCmd")
+    builder.add_boolean_writable("Output_FanCmd")
+
+    # -------- Logic (sub-folder) --------
+    builder.start_sub_folder("ThermostatLogic")
+
+    # Constants (1 and 2) for Mode comparisons
+    builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
+    builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
+
+    # Mode == 1 (Heat): Mode ≥ 1 AND Mode ≤ 1
+    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
+    builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
+    builder.add_component("kitControl:And", "IsHeatMode")
+
+    # Mode == 2 (Cool): Mode ≥ 2 AND Mode ≤ 2
+    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
+    builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
+    builder.add_component("kitControl:And", "IsCoolMode")
+
+    # Sum blocks for hysteresis
+    builder.add_component("kitControl:Add", "SpacePlusHyst")
+    builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
+
+    # Threshold compares
+    builder.add_component(
+        "kitControl:LessThanEqual", "IsBelowHeat"
+    )  # Space+Hyst <= HeatSP
+    builder.add_component(
+        "kitControl:GreaterThanEqual", "IsAboveCool"
+    )  # Space >= CoolSP+Hyst
+
+    # Command gates
+    builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
+    builder.add_component("kitControl:And", "CoolCmdGate")  # IsCoolMode AND IsAboveCool
+
+    # Fan logic: (HeatCmd OR CoolCmd) OR (NOT FanAuto)
+    builder.add_component("kitControl:Or", "HeatOrCool")
+    builder.add_component("kitControl:Not", "FanAutoNot")
+    builder.add_component("kitControl:Or", "FanCmdGate")
+
+    # ---- Wiring: Mode == 1 (Heat) ----
+    builder.add_link("Mode", "out", "Mode_GE_1", "inA")
+    builder.add_link("Const1", "out", "Mode_GE_1", "inB")
+    builder.add_link("Mode", "out", "Mode_LE_1", "inA")
+    builder.add_link("Const1", "out", "Mode_LE_1", "inB")
+    builder.add_link("Mode_GE_1", "out", "IsHeatMode", "inA")
+    builder.add_link("Mode_LE_1", "out", "IsHeatMode", "inB")
+
+    # ---- Wiring: Mode == 2 (Cool) ----
+    builder.add_link("Mode", "out", "Mode_GE_2", "inA")
+    builder.add_link("Const2", "out", "Mode_GE_2", "inB")
+    builder.add_link("Mode", "out", "Mode_LE_2", "inA")
+    builder.add_link("Const2", "out", "Mode_LE_2", "inB")
+    builder.add_link("Mode_GE_2", "out", "IsCoolMode", "inA")
+    builder.add_link("Mode_LE_2", "out", "IsCoolMode", "inB")
+
+    # ---- Wiring: Hysteresis adds ----
+    builder.add_link("SpaceTemp", "out", "SpacePlusHyst", "inA")
+    builder.add_link("Hysteresis", "out", "SpacePlusHyst", "inB")
+    builder.add_link("CoolSP", "out", "CoolSP_plus_Hyst", "inA")
+    builder.add_link("Hysteresis", "out", "CoolSP_plus_Hyst", "inB")
+
+    # ---- Thresholds ----
+    builder.add_link("SpacePlusHyst", "out", "IsBelowHeat", "inA")
+    builder.add_link("HeatSP", "out", "IsBelowHeat", "inB")
+
+    builder.add_link("SpaceTemp", "out", "IsAboveCool", "inA")
+    builder.add_link("CoolSP_plus_Hyst", "out", "IsAboveCool", "inB")
+
+    # ---- Command gates ----
+    builder.add_link("IsHeatMode", "out", "HeatCmdGate", "inA")
+    builder.add_link("IsBelowHeat", "out", "HeatCmdGate", "inB")
+
+    builder.add_link("IsCoolMode", "out", "CoolCmdGate", "inA")
+    builder.add_link("IsAboveCool", "out", "CoolCmdGate", "inB")
+
+    # ---- Fan logic ----
+    builder.add_link("HeatCmdGate", "out", "HeatOrCool", "inA")
+    builder.add_link("CoolCmdGate", "out", "HeatOrCool", "inB")
+
+    builder.add_link("FanAuto", "out", "FanAutoNot", "in")
+    builder.add_link("HeatOrCool", "out", "FanCmdGate", "inA")
+    builder.add_link("FanAutoNot", "out", "FanCmdGate", "inB")
+
+    builder.end_sub_folder()
+
+    # Final outputs
+    builder.add_link("HeatCmdGate", "out", "Output_HeatCmd", "in16")
+    builder.add_link("CoolCmdGate", "out", "Output_CoolCmd", "in16")
+    builder.add_link("FanCmdGate", "out", "Output_FanCmd", "in16")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description="Generate a thermostat .bog file.")
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Directory to write the .bog file.",
+    )
+    args = p.parse_args()
+
+    builder = BogFolderBuilder(SCRIPT_FOLDER_NAME, debug=True)
+    build_thermostat(builder)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, SCRIPT_BOG_NAME)
+    builder.save(out_path)
+    print(f"Successfully created Niagara .bog file at: {os.path.abspath(out_path)}")
 
 
 if __name__ == "__main__":

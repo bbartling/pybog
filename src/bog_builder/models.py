@@ -3,6 +3,18 @@
 This module centralises all validation logic used by the BogFolderBuilder.  Separating
 the models from the builder itself makes the code easier to test and maintain, and
 avoids repeated definitions when using the builder in different contexts.
+
+python -m bog_builder.analyzer analyze \
+  "/mnt/c/Users/ben/Niagara4.11/JENEsys/lead_lag_cycles_block_playground.bog" \
+  --format json > analysis.json
+
+python -m bog_builder.analyzer analyze \
+  "/mnt/c/Users/ben/Niagara4.11/JENEsys/lead_lag_cycles_block_playground.bog" \
+  --format table
+
+python -m bog_builder.analyzer analyze "/mnt/c/Users/ben/Niagara4.11/JENEsys/lead_lag_cycles_block_playground.bog" \
+  --ignore-ws-annotations --format table
+
 """
 
 from __future__ import annotations
@@ -37,9 +49,9 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:GreaterThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThan": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:LessThanEqual": {"inputs": ["inA", "inB"], "outputs": ["out"]},
-    "kitControl:Or": {"inputs": ["inA", "inB"], "outputs": ["out"]},
-    "kitControl:And": {"inputs": ["inA", "inB"], "outputs": ["out"]},
-    "kitControl:Xor": {"inputs": ["inA", "inB"], "outputs": ["out"]},
+    "kitControl:Or": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:And": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:Xor": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Not": {"inputs": ["in"], "outputs": ["out"]},
     "kitControl:Equal": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:NumericSwitch": {
@@ -93,7 +105,63 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
         ],
         "outputs": ["out"],
     },
-    # PID loop point: accepts a process variable, setpoint, enable, action and tuning constants
+    "kitControl:LeadLagCycles": {
+        "inputs": [
+            "in",
+            "feedback",
+            "cycleCountA",
+            "cycleCountB",
+            "cycleCountC",
+            "cycleCountD",
+            "cycleCountE",
+            "cycleCountF",
+            "cycleCountG",
+            "cycleCountH",
+            "cycleCountI",
+            "cycleCountJ",
+        ],
+        "outputs": [
+            "outA",
+            "outB",
+            "outC",
+            "outD",
+            "outE",
+            "outF",
+            "outG",
+            "outH",
+            "outI",
+            "outJ",
+        ],
+    },
+    "kitControl:LeadLagRuntime": {
+        "inputs": [
+            "in",
+            "maxRuntime",
+            "feedback",
+            "runtimeA",
+            "runtimeB",
+            "runtimeC",
+            "runtimeD",
+            "runtimeE",
+            "runtimeF",
+            "runtimeG",
+            "runtimeH",
+            "runtimeI",
+            "runtimeJ",
+        ],
+        "outputs": [
+            "outA",
+            "outB",
+            "outC",
+            "outD",
+            "outE",
+            "outF",
+            "outG",
+            "outH",
+            "outI",
+            "outJ",
+        ],
+    },
     "kitControl:LoopPoint": {
         "inputs": [
             "loopEnable",

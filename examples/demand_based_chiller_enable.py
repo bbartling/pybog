@@ -1,141 +1,155 @@
 """
-Please generate a BOG for a chiller enable/disable sequence that is driven by the 
-maximum cooling valve position across 10 AHUs. The logic should first chain the max 
-blocks together to determine the highest valve position. The chiller should enable 
-when this maximum valve exceeds 30 percent, and once enabled it should remain on 
-until the maximum valve falls below 15 percent, at which point it should disable. 
-This behavior should act like a latch: enabling above 30 percent and disabling 
-only after the value drops below 15 percent. To prevent short cycling, include 
-a 30-minute off-delay before enabling and a 15-minute on-delay before disabling. 
-The final output should drive a Boolean writable point that represents the chiller enable command.
+Demand Based Chiller Enable with Hysteresis
+---------------------------------------------
+This script builds a wiresheet for a chiller enable/disable sequence driven
+by the maximum cooling demand across 10 AHUs. This version replaces the
+BooleanLatch with a more direct and stable custom hysteresis logic,
+providing a clear Set/Reset (SR) latch behavior.
+
+Algorithm:
+- A series of chained 'Maximum' blocks finds the highest cooling valve
+  position from 10 AHU inputs.
+- An SR latch is constructed using basic logic gates to create a
+  'Raw_Chiller_Request'. The request is SET (turned ON) when the max valve
+  exceeds 30% and is RESET (turned OFF) only when it falls below 15%.
+  This creates the desired hysteresis.
+- This raw request signal is then passed through a 'BooleanDelay' block to
+  prevent short cycling of the equipment.
+- A 30-minute off-delay (1,800,000 ms) keeps the chiller running for a minimum
+  period before it can be shut down.
+- The final, time-delayed output drives the 'Chiller_Enable_Command'.
 """
 
 import os
 import argparse
-from pathlib import Path
+import sys
+
+# Per instructions, append to sys.path to find bog_builder
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from bog_builder import BogFolderBuilder
 
 
-def build_bog(output_dir: Path, bog_filename: str) -> Path:
-    """Build the .bog and return the absolute path to the saved file."""
-    builder = BogFolderBuilder("ChillerEnableLogic", debug=False)
+def main():
+    """
+    Main function to build and save the chiller enable logic.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for chiller enable logic with custom hysteresis."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
 
-    # --- Define Inputs and Final Output ---
-    # Create 10 numeric writable points to simulate AHU cooling valve positions.
-    input_names = []
+    builder = BogFolderBuilder("ChillerEnableWithHysteresis", debug=True)
+
+    print("--- Creating Top-Level I/O Components ---")
+
+    # --- Inputs & Outputs ---
     for i in range(1, 11):
         name = f"AHU_{i:02d}_Cooling_Valve"
-        input_names.append(name)
-        # Stagger default values for easier testing.
         builder.add_numeric_writable(name, default_value=float(0))
 
-    builder.add_boolean_writable("Chiller_Enable_Command", default_value=True)
+    builder.add_boolean_writable("Chiller_Enable_Command", default_value=False)
+    builder.add_numeric_writable("Max_Cooling_Valve")
 
-    builder.add_reduction_block(
-        block_type="Maximum",
-        final_output_name="Max_Cooling_Valve",
-        input_names=input_names
-    )
+    # --- Logic Components (organized inside a sub-folder) ---
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
 
-    # --- Core Control Logic Sub-Folder ---
-    builder.start_sub_folder("ControlLogic")
+    # --- Manual Maximum Calculation ---
+    builder.add_component("kitControl:Maximum", "Max1")
+    builder.add_component("kitControl:Maximum", "Max2")
+    builder.add_component("kitControl:Maximum", "Max3")
+    builder.add_component("kitControl:Maximum", "Max_Final")
 
-    # Define the setpoints for enabling and disabling the chiller.
+    # --- Hysteresis (SR Latch) Logic ---
     builder.add_component(
-        "kitControl:NumericConst",
-        "Enable_Setpoint",
-        properties={"value": 30.0}
+        "kitControl:NumericConst", "Enable_Setpoint", properties={"value": 30.0}
     )
     builder.add_component(
-        "kitControl:NumericConst",
-        "Disable_Setpoint",
-        properties={"value": 15.0}
+        "kitControl:NumericConst", "Disable_Setpoint", properties={"value": 15.0}
     )
+    builder.add_component("kitControl:GreaterThan", "Set_Condition")
+    builder.add_component("kitControl:LessThan", "Reset_Condition_Raw")
+    builder.add_component("kitControl:Not", "Reset_Condition")
+    builder.add_component("kitControl:Or", "Latch_Set_Logic")
+    builder.add_component("kitControl:And", "Raw_Chiller_Request")
 
-    # Comparison blocks to check if the max valve position crosses the setpoints.
-    builder.add_component("kitControl:GreaterThan", "Check_Enable_Condition")
-    builder.add_component("kitControl:LessThan", "Check_Disable_Condition")
-
-    # Latching logic to hold the chiller request state.
-    builder.add_component("kitControl:Or", "State_Change_Trigger")
-    builder.add_component("kitControl:BooleanLatch", "Chiller_Request_Latch")
-
-    # offDelay: 30 minutes (1,800,000 ms) before disabling.
-    delay_properties = {
-        "offDelay": "1800000"
-    }
+    # --- Anti-Short-Cycle Delay ---
+    builder.add_component("kitControl:BooleanDelay", "Anti_Short_Cycle_Delay")
     builder.add_component(
-        "kitControl:BooleanDelay",
-        "Anti_Short_Cycle_Delay",
-        properties=delay_properties
-    )
+        "kitControl:NumericConst", "Off_Delay_Constant", properties={"value": 1800000.0}
+    )  # 30 minutes
 
     builder.end_sub_folder()
 
-    # --- Wiring the Logic ---
+    print("\n--- Wiring Components ---")
 
-    # Wire max valve and setpoints to comparison blocks.
-    builder.add_link("Max_Cooling_Valve", "out", "Check_Enable_Condition", "inA")
-    builder.add_link("Enable_Setpoint", "out", "Check_Enable_Condition", "inB")
-    builder.add_link("Max_Cooling_Valve", "out", "Check_Disable_Condition", "inA")
-    builder.add_link("Disable_Setpoint", "out", "Check_Disable_Condition", "inB")
+    # --- Wire Manual Maximum Calculation ---
+    builder.add_link("AHU_01_Cooling_Valve", "out", "Max1", "inA")
+    builder.add_link("AHU_02_Cooling_Valve", "out", "Max1", "inB")
+    builder.add_link("AHU_03_Cooling_Valve", "out", "Max1", "inC")
+    builder.add_link("AHU_04_Cooling_Valve", "out", "Max1", "inD")
 
-    # Wire comparison outputs to the latching logic.
-    builder.add_link("Check_Enable_Condition", "out", "State_Change_Trigger", "inA")
-    builder.add_link("Check_Disable_Condition", "out", "State_Change_Trigger", "inB")
+    builder.add_link("AHU_05_Cooling_Valve", "out", "Max2", "inA")
+    builder.add_link("AHU_06_Cooling_Valve", "out", "Max2", "inB")
+    builder.add_link("AHU_07_Cooling_Valve", "out", "Max2", "inC")
+    builder.add_link("AHU_08_Cooling_Valve", "out", "Max2", "inD")
 
-    builder.add_link("Check_Enable_Condition", "out", "Chiller_Request_Latch", "in")
-    builder.add_link("State_Change_Trigger", "out", "Chiller_Request_Latch", "clock")
+    builder.add_link("AHU_09_Cooling_Valve", "out", "Max3", "inA")
+    builder.add_link("AHU_10_Cooling_Valve", "out", "Max3", "inB")
 
-    # Wire the latched request to the time delay block.
-    builder.add_link("Chiller_Request_Latch", "out", "Anti_Short_Cycle_Delay", "in")
+    builder.add_link("Max1", "out", "Max_Final", "inA")
+    builder.add_link("Max2", "out", "Max_Final", "inB")
+    builder.add_link("Max3", "out", "Max_Final", "inC")
+    builder.add_link("Max_Final", "out", "Max_Cooling_Valve", "in16")
 
-    # Wire the final, time-delayed output to the command point.
+    # --- Wire Hysteresis (SR Latch) Logic ---
+    # Set condition: Max_Cooling_Valve > 30
+    builder.add_link("Max_Cooling_Valve", "out", "Set_Condition", "inA")
+    builder.add_link("Enable_Setpoint", "out", "Set_Condition", "inB")
+
+    # Reset condition: Max_Cooling_Valve < 15
+    builder.add_link("Max_Cooling_Valve", "out", "Reset_Condition_Raw", "inA")
+    builder.add_link("Disable_Setpoint", "out", "Reset_Condition_Raw", "inB")
+    builder.add_link("Reset_Condition_Raw", "out", "Reset_Condition", "in")
+
+    # Latch logic: Output = (Set OR Output) AND (NOT Reset)
+    builder.add_link("Set_Condition", "out", "Latch_Set_Logic", "inA")
+    builder.add_link(
+        "Raw_Chiller_Request", "out", "Latch_Set_Logic", "inB"
+    )  # Feedback loop
+    builder.add_link("Latch_Set_Logic", "out", "Raw_Chiller_Request", "inA")
+    builder.add_link("Reset_Condition", "out", "Raw_Chiller_Request", "inB")
+
+    # --- Wire Final Command Logic with Delay ---
+    builder.add_link("Raw_Chiller_Request", "out", "Anti_Short_Cycle_Delay", "in")
+
+    builder.add_link(
+        "Off_Delay_Constant",
+        "out",
+        "Anti_Short_Cycle_Delay",
+        "offDelay",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusNumericToRelTime",
+    )
+
     builder.add_link("Anti_Short_Cycle_Delay", "out", "Chiller_Enable_Command", "in16")
 
-    # --- Save the .bog File ---
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / bog_filename
-    builder.save(str(out_path))
+    # --- Save the .bog file ---
+    bog_filename = "demand_based_chiller_enable_hysteresis.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
 
-    return out_path.resolve()
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build a .bog file for chiller enable/disable logic driven by the max of 10 AHU cooling valve positions."
+    print(
+        f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
     )
-    parser.add_argument(
-        "-o", "--output_dir",
-        default="examples",
-        help="Output directory for the .bog file (default: %(default)s)."
-    )
-    parser.add_argument(
-        "-n", "--name",
-        default=None,
-        help="Base name for the .bog (default: script filename)."
-    )
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-
-    # Derive script base name (without .py). Fallback to 'chiller_enable' if unknown.
-    script_filename = os.path.basename(__file__).replace(".py", "")
-    base_name = args.name or (script_filename if script_filename else "chiller_enable")
-    bog_filename = f"{base_name}.bog"
-
-    output_dir = Path(args.output_dir)
-
-    print("[INFO] Building BOG ...")
-    print(f"[INFO]  output_dir = {output_dir}")
-    print(f"[INFO]  bog_name   = {bog_filename}")
-
-    out_path = build_bog(output_dir, bog_filename)
-
-    print("[SUCCESS] Successfully created Niagara .bog file.")
-    print(f"[SUCCESS] Full path: {out_path}")
+    print("Drag this file into Niagara Workbench to test the logic.")
 
 
 if __name__ == "__main__":

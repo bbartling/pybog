@@ -304,9 +304,33 @@ class BogFolderBuilder:
         units: str = "u:null",
     ) -> None:
         """Add a NumericWritable with sensible default facets."""
-        facets_value = (
-            f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
-        )
+        # --- FIX: Add validation for the facets string ---
+        try:
+            if units == "u:null":
+                facets_value = (
+                    f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
+                )
+            else:
+                # For any other unit, do not include the extra semicolons.
+                facets_value = (
+                    f"units={units}|precision=i:{precision}|min=d:-inf|max=d:+inf"
+                )
+
+            # Simple validation: Check for balanced pipes and valid key=value pairs.
+            # This is not a full parser but catches the common error.
+            if "|" in facets_value:
+                parts = facets_value.split("|")
+                for part in parts:
+                    if "=" not in part:
+                        raise ValueError(f"Malformed facets part: '{part}'")
+        except Exception as e:
+            raise ValueError(
+                f"Failed to create valid facets string for units='{units}'. "
+                f"The unit '{units}' might be invalid or the format is incorrect. "
+                f"For non-null units, the builder creates a string like 'units=u:second|precision=i:0...'. "
+                f"Original error: {e}"
+            )
+
         self.add_component(
             "control:NumericWritable",
             name,
@@ -479,7 +503,27 @@ class BogFolderBuilder:
                 }
             )
             return
-        
+
+        if (
+            s_type in numeric_source_types
+            and t_type == "kitControl:Counter"
+            and target_slot.lower() == "countincrement"
+        ):
+            if self.debug:
+                print(
+                    f"[BOG BUILDER DEBUG] Applying StatusNumericToNumber conversion for Counter.countIncrement."
+                )
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": target_slot,
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToNumber",
+                }
+            )
+            return
 
         if (
             s_type in numeric_source_types
@@ -498,6 +542,27 @@ class BogFolderBuilder:
                     "target_slot": target_slot,
                     "link_type": "b:ConversionLink",
                     "converter_type": "conv:StatusNumericToRelTime",
+                }
+            )
+            return
+
+        if (
+            s_type == "kitControl:Counter"
+            and t_type == "kitControl:LeadLagCycles"
+            and target_slot.lower().startswith("cyclecount")
+        ):
+            if self.debug:
+                print(
+                    f"[BOG BUILDER DEBUG] Applying StatusNumericToNumber conversion for LeadLagCycles.{target_slot}."
+                )
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": target_slot,
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusNumericToNumber",
                 }
             )
             return
@@ -748,7 +813,6 @@ class BogFolderBuilder:
                 folder_element, folder_path_tuple + (sub_folder_name,)
             )
 
-
     def _position_top_level_interface(
         self, components: Dict[str, Dict], sub_folders: List[str]
     ) -> Dict[str, Tuple[int, int]]:
@@ -809,7 +873,7 @@ class BogFolderBuilder:
         # Calculate input start position after all folder columns
         num_folder_cols = len(sub_folders)
         input_x_start = folder_x_start + (num_folder_cols * self.X_COLUMN_WIDTH)
-        
+
         # Position Inputs with wrapping
         x = input_x_start
         y = self.START_Y
@@ -1494,6 +1558,46 @@ class BogFolderBuilder:
                             "v": str(dc_val),
                         },
                     )
+
+            elif data["type"] == "kitControl:LeadLagCycles":
+                props = data.get("properties", {})
+                for prop_name, prop_value in props.items():
+                    # Check for time-based properties and parse them correctly
+                    if prop_name.lower() in (
+                        "maxruntime",
+                        "feedbackdelay",
+                        "clearalarmtime",
+                    ):
+                        ms_val = _parse_time_to_ms(prop_value)
+                        ET.SubElement(
+                            element,
+                            "p",
+                            {"n": prop_name, "t": "b:RelTime", "v": ms_val},
+                        )
+                    else:
+                        ET.SubElement(
+                            element, "p", {"n": prop_name, "v": str(prop_value)}
+                        )
+
+            elif data["type"] == "kitControl:LeadLagRuntime":
+                props = data.get("properties", {})
+                for prop_name, prop_value in props.items():
+                    # Check for time-based properties and parse them correctly
+                    if prop_name.lower() in (
+                        "maxruntime",
+                        "feedbackdelay",
+                        "clearalarmtime",
+                    ):
+                        ms_val = _parse_time_to_ms(prop_value)
+                        ET.SubElement(
+                            element,
+                            "p",
+                            {"n": prop_name, "t": "b:RelTime", "v": ms_val},
+                        )
+                    else:
+                        ET.SubElement(
+                            element, "p", {"n": prop_name, "v": str(prop_value)}
+                        )
 
             elif data["type"] == "sch:BooleanSchedule":
                 self._build_schedule_xml(element, name, data, "Boolean", False)
