@@ -1,4 +1,3 @@
-addition_complicated.py	.
 average_min_max.py	.
 bad_parse_into_wb_example.py	.
 bool_and_numeric_switch.py	.
@@ -10,7 +9,6 @@ counter_playground.py	.
 demand_based_chiller_enable.py	.
 find_max_value.py	.
 find_second_highest_of_6.py	.
-four_in_add_logic.py	.
 hvac_g36_ahu_duct_static_reset.py	.
 hvac_g36_ahu_supply_temp_reset.py	.
 hvac_gl36_box_pressure_request_logic.py	.
