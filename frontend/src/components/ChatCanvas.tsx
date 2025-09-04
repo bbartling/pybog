@@ -143,6 +143,104 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       };
       
       flowNodes.push(node);
+
+      // If analysis, render mini nodes for I/O and blocks
+      if (nodeType === 'analysisMessage' && message.metadata?.analysisData) {
+        const analysis = message.metadata.analysisData as any;
+        const inputsRaw = analysis.inputs || analysis.io_points?.inputs || [];
+        const outputsRaw = analysis.outputs || analysis.io_points?.outputs || [];
+        const blocksRaw = analysis.blocks || analysis.functional_blocks || analysis.controlBlocks || [];
+
+        const norm = (arr: any[]) => arr.map((e: any) => typeof e === 'string' ? e : (e?.name || ''))
+                                        .filter((s: string) => !!s);
+        const inputs = norm(inputsRaw).slice(0, 10);
+        const outputs = norm(outputsRaw).slice(0, 10);
+        const blocks = (Array.isArray(blocksRaw) ? blocksRaw : []).map((b:any)=> typeof b==='string'?b:(b?.name||'Block')).slice(0, 8);
+
+        const colGap = 12;
+        const miniW = 220;
+        const miniH = 48;
+
+        // place inputs to the left stack
+        inputs.forEach((name, i) => {
+          const id = `${message.id}-in-${i}`;
+          const mini: Node = {
+            id,
+            type: 'statusMessage',
+            position: { x: xPosition - (miniW + 40), y: yPosition + i * (miniH + colGap) },
+            data: { content: name, kind: 'input' },
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            style: { width: miniW, border: '2px solid #93c5fd', borderRadius: '10px', background: '#fff', color: '#1e3a8a' },
+            draggable: false,
+          };
+          flowNodes.push(mini);
+          flowEdges.push({
+            id: `e-${message.id}-${id}`,
+            source: message.id,
+            target: id,
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: '#93c5fd', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#93c5fd', width: 12, height: 12 },
+          } as Edge);
+        });
+
+        // place outputs to the right stack
+        outputs.forEach((name, i) => {
+          const id = `${message.id}-out-${i}`;
+          const mini: Node = {
+            id,
+            type: 'statusMessage',
+            position: { x: xPosition + nodeWidth + 40, y: yPosition + i * (miniH + colGap) },
+            data: { content: name, kind: 'output' },
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            style: { width: miniW, border: '2px solid #86efac', borderRadius: '10px', background: '#fff', color: '#14532d' },
+            draggable: false,
+          };
+          flowNodes.push(mini);
+          flowEdges.push({
+            id: `e-${message.id}-${id}`,
+            source: message.id,
+            target: id,
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: '#86efac', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#86efac', width: 12, height: 12 },
+          } as Edge);
+        });
+
+        // place blocks below analysis node
+        blocks.forEach((name, i) => {
+          const rowSize = 3;
+          const id = `${message.id}-blk-${i}`;
+          const col = i % rowSize;
+          const row = Math.floor(i / rowSize);
+          const miniX = xPosition + col * (miniW + 20) - (rowSize-1)*(miniW+20)/2 + nodeWidth/2 - miniW/2;
+          const miniY = yPosition + 120 + row * (miniH + colGap);
+          const mini: Node = {
+            id,
+            type: 'statusMessage',
+            position: { x: miniX, y: miniY },
+            data: { content: name, kind: 'block' },
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            style: { width: miniW, border: '2px solid #f59e0b', borderRadius: '10px', background: '#fff', color: '#7c2d12' },
+            draggable: false,
+          };
+          flowNodes.push(mini);
+          flowEdges.push({
+            id: `e-${message.id}-${id}`,
+            source: message.id,
+            target: id,
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: '#f59e0b', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b', width: 12, height: 12 },
+          } as Edge);
+        });
+      }
       
       // Create curved edge to previous message for zigzag flow
       if (index > 0) {
@@ -192,24 +290,25 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     }
   }, [focusMessageId, nodes, setCenter]);
 
-  // Highlight analysis node when a specific tree item is selected
+  // Highlight node by tree item; fallback to analysis node
   useEffect(() => {
     if (!highlightTarget) return;
-    const analysisNode = nodes.find((n) => n.type === 'analysisMessage');
-    if (!analysisNode) return;
 
-    // center on analysis node and set temporary highlight flag
-    const centerX = analysisNode.position.x + 160;
-    const centerY = analysisNode.position.y + 80;
+    const targetNode = nodes.find((n) => (n.data as any)?.kind === highlightTarget.kind && (n.data as any)?.content === highlightTarget.label)
+      || nodes.find((n) => n.type === 'analysisMessage');
+    if (!targetNode) return;
+
+    const centerX = targetNode.position.x + 160;
+    const centerY = targetNode.position.y + 80;
     setCenter(centerX, centerY, { zoom: 1.1, duration: 400 });
 
-    setNodes((nds) => nds.map(n => n.id === analysisNode.id ? {
+    setNodes((nds) => nds.map(n => n.id === targetNode.id ? {
       ...n,
       data: { ...(n.data as any), processing: true, highlightLabel: highlightTarget.label }
     } : n));
 
     const t = setTimeout(() => {
-      setNodes((nds) => nds.map(n => n.id === analysisNode.id ? {
+      setNodes((nds) => nds.map(n => n.id === targetNode.id ? {
         ...n,
         data: { ...(n.data as any), processing: false, highlightLabel: undefined }
       } : n));
