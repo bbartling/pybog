@@ -17,6 +17,9 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
+.header-logo span { color: #1a202c; }
+.header-logo svg { color: #4a9eff; }
+
 .header-logo {
   display: flex;
   align-items: center;
@@ -62,6 +65,24 @@
   overflow-y: auto;
   flex-shrink: 0;
 }
+
+.sidebar-section h3 { color: #64748b; }
+
+.nav-section-header { color: #1e293b; }
+
+.nav-section-header:hover { background: #f1f5f9; }
+
+.nav-section-content { border-left-color: #e1e4e8; }
+
+.nav-file { color: #475569; }
+
+.nav-file:hover { background: #f8fafc; color: #1e293b; }
+
+.io-group-label { color: #64748b; }
+
+.nav-io-point.input { background: #dbeafe; color: #1e40af; }
+
+.nav-io-point.output { background: #dcfce7; color: #166534; }
 
 .sidebar-section {
   padding: 16px;
@@ -145,6 +166,67 @@
 .nav-file:hover {
   background: #f8fafc;
   color: #1e293b;
+}
+
+.nav-action {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.nav-action:hover {
+  background: #e2e8f0;
+}
+
+.nav-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.nav-session:hover {
+  background: #f8fafc;
+}
+
+.nav-session.active {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.session-name {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.session-time {
+  margin-left: auto;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.session-delete {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.session-delete:hover {
+  color: #ef4444;
 }
 
 /* I/O Points */
@@ -331,6 +413,16 @@
 .send-btn:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
+}
+
+/* Node pulse for processing */
+@keyframes nodePulse {
+  0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.25); }
+  50% { box-shadow: 0 0 0 6px rgba(59,130,246,0.10); }
+  100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.0); }
+}
+.rf-node-pulse {
+  animation: nodePulse 1.6s ease-in-out infinite;
 }
 
 /* Utility classes */

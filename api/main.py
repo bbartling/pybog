@@ -48,6 +48,50 @@ app.add_middleware(
 # Include modular conversation routes (approve/request-changes/messages)
 app.include_router(conversation_router)
 
+# ------------------------
+# Database helpers
+# ------------------------
+
+async def ensure_tables():
+    """Create minimal tables if they do not exist.
+    Flexible design so we can extend with extra columns/relations later.
+    Tables:
+      - sessions(session_id primary key, description, created_at, updated_at)
+      - session_files(id serial pk, session_id fk, filename, mime_type, size, path, uploaded_at)
+    """
+    db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+    conn = await asyncpg.connect(db_url)
+    try:
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            description TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """)
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS session_files (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT REFERENCES sessions(session_id) ON DELETE CASCADE,
+            filename TEXT NOT NULL,
+            mime_type TEXT,
+            size BIGINT,
+            path TEXT,
+            uploaded_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """)
+    finally:
+        await conn.close()
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        await ensure_tables()
+        logger.info("Database tables ensured")
+    except Exception as e:
+        logger.warning(f"Could not ensure database tables: {e}")
+
 # Storage paths
 OUTPUTS_DIR = Path("data/outputs")
 UPLOADS_DIR = Path("data/uploads")
@@ -401,8 +445,88 @@ async def pybog_generate(request: BogGenerationRequest):
     return await generate_bog(request)
 
 # ------------------------
-# Workflow Control Endpoints
+# Session and Workflow Control Endpoints
 # ------------------------
+
+class CreateSessionRequest(BaseModel):
+    session_id: str
+    description: Optional[str] = None
+
+@app.post("/api/sessions")
+async def create_session(request: CreateSessionRequest):
+    """Create or upsert a session row."""
+    try:
+        await ensure_tables()
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        conn = await asyncpg.connect(db_url)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO sessions(session_id, description)
+                VALUES($1, $2)
+                ON CONFLICT(session_id) DO UPDATE
+                SET description = COALESCE(EXCLUDED.description, sessions.description),
+                    updated_at = NOW()
+                """,
+                request.session_id,
+                request.description,
+            )
+            return {"session_id": request.session_id, "status": "ok"}
+        finally:
+            await conn.close()
+    except Exception as e:
+        logger.error(f"Create session failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi import Form
+
+@app.post("/api/sessions/{session_id}/upload")
+async def upload_session_file(session_id: str, file: UploadFile = File(...), session_id_form: Optional[str] = Form(None)):
+    """Store uploaded file under data/uploads/<session_id> and register in Postgres."""
+    try:
+        await ensure_tables()
+        # Align session id from form if provided
+        sid = session_id_form or session_id
+        # Ensure session row exists
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        conn = await asyncpg.connect(db_url)
+        try:
+            await conn.execute(
+                "INSERT INTO sessions(session_id) VALUES($1) ON CONFLICT(session_id) DO NOTHING",
+                sid,
+            )
+        finally:
+            await conn.close()
+
+        # Save file to disk
+        dest_dir = UPLOADS_DIR / sid
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / file.filename
+        content = await file.read()
+        with open(dest_path, 'wb') as f:
+            f.write(content)
+
+        # Insert file record
+        conn = await asyncpg.connect(db_url)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO session_files(session_id, filename, mime_type, size, path)
+                VALUES($1, $2, $3, $4, $5)
+                """,
+                sid,
+                file.filename,
+                file.content_type,
+                len(content),
+                str(dest_path)
+            )
+        finally:
+            await conn.close()
+
+        return {"session_id": sid, "filename": file.filename, "status": "stored"}
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sessions/{session_id}/state", response_model=SessionStateResponse)
 async def get_session_state(session_id: str):

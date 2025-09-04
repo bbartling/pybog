@@ -11,6 +11,7 @@ import ReactFlow, {
   MarkerType,
   Position,
   BackgroundVariant,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -48,6 +49,7 @@ interface ChatCanvasProps {
   onRequestChanges: (feedback: string) => void;
   workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
   sessionId: string;
+  focusMessageId?: string;
 }
 
 const ChatCanvas: React.FC<ChatCanvasProps> = ({
@@ -55,10 +57,12 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
   onApproveAnalysis,
   onRequestChanges,
   workflowState,
-  sessionId
+  sessionId,
+  focusMessageId,
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { setCenter } = useReactFlow();
 
   // Convert messages to ReactFlow nodes with zigzag pattern
   useEffect(() => {
@@ -111,6 +115,7 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           onApprove: nodeType === 'analysisMessage' ? onApproveAnalysis : undefined,
           onRequestChanges: nodeType === 'analysisMessage' ? onRequestChanges : undefined,
           approving: workflowState === 'generating',
+          processing: workflowState === 'analyzing' || workflowState === 'generating',
           // For artifact nodes
           downloadUrl: message.metadata?.downloadUrl,
           fileName: message.metadata?.downloadUrl ? 'bog_output.json' : undefined,
@@ -123,6 +128,8 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           border: '2px solid',
           borderColor: isUser ? '#7e5bef' : (isAnalysis ? '#3ccf8e' : (isArtifact ? '#f59e0b' : '#4a9eff')),
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          background: '#ffffff',
+          color: '#111827',
         },
         draggable: false,
       };
@@ -131,26 +138,23 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       
       // Create curved edge to previous message for zigzag flow
       if (index > 0) {
-        const prevMessage = messages[index - 1];
-        const isPrevUser = prevMessage.type === 'user';
-        
         const edge: Edge = {
           id: `e${messages[index - 1].id}-${message.id}`,
           source: messages[index - 1].id,
           target: message.id,
-          type: 'bezier',
+          type: 'smoothstep',
           animated: workflowState === 'analyzing' || workflowState === 'generating',
           style: {
             stroke: workflowState === 'analyzing' ? '#f59e0b' : 
-                   workflowState === 'generating' ? '#3ccf8e' : '#6b7280',
-            strokeWidth: 3,
-            strokeDasharray: workflowState === 'idle' ? '5,5' : '0',
+                   workflowState === 'generating' ? '#10b981' : '#64748b',
+            strokeWidth: 2,
+            strokeDasharray: workflowState === 'idle' ? '6,6' : '0',
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: '#6b7280',
-            width: 20,
-            height: 20,
+            color: '#64748b',
+            width: 16,
+            height: 16,
           },
           labelStyle: { fill: '#6b7280', fontWeight: 700 },
           labelBgStyle: { fill: '#f3f4f6', fillOpacity: 0.8 },
@@ -167,6 +171,18 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  // Focus viewport on a specific message/node when requested
+  useEffect(() => {
+    if (!focusMessageId) return;
+    const node = nodes.find((n) => n.id === focusMessageId);
+    if (node) {
+      // Center roughly on the node position; tweak offsets for better centering
+      const centerX = node.position.x + 160; // half of node width
+      const centerY = node.position.y + 80;  // approximate half of node height
+      setCenter(centerX, centerY, { zoom: 1.1, duration: 500 });
+    }
+  }, [focusMessageId, nodes, setCenter]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
@@ -185,10 +201,10 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
         attributionPosition="bottom-left"
       >
         <Background 
-          variant={BackgroundVariant.Dots} 
-          gap={20} 
-          size={2}
-          color="#d1d5db"
+          variant={BackgroundVariant.Lines} 
+          gap={24} 
+          size={1}
+          color="#ededed"
         />
         <Controls showInteractive={false} />
       </ReactFlow>

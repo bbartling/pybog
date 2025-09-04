@@ -2,10 +2,12 @@ import React, { useState, useRef } from 'react';
 import { 
   Send, Upload, FileText, CheckCircle, Loader2,
   ChevronRight, ChevronDown, Folder, FolderOpen,
-  Database, Clock, AlertCircle
+  Database, AlertCircle, Plus, Trash2, FolderTree
 } from 'lucide-react';
 import ChatCanvas, { ChatMessage } from './ChatCanvas';
 import './SimplifiedWorkbench.css';
+import { ReactFlowProvider } from 'reactflow';
+import ConfirmModal from './ConfirmModal';
 
 // ProjectFile interface may be used in future for file management
 
@@ -16,30 +18,64 @@ interface IOPoint {
   dataType: string;
 }
 
+interface SessionSummary {
+  id: string;
+  name: string;
+  createdAt: Date | string;
+}
+
 interface SimplifiedWorkbenchProps {
+  // session and analysis data
   messages: ChatMessage[];
   sessionId: string;
   isLoading: boolean;
+  workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
+  currentAnalysis?: any;
+  analysisMessageId?: string;
+  focusMessageId?: string;
+  
+  // actions
   onSendMessage: (text: string, files: File[]) => void;
   onApproveAnalysis: () => void;
   onRequestChanges: (feedback: string) => void;
-  workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
-  currentAnalysis?: any;
+  onNavigateToMessage: (messageId: string) => void;
+  
+  // session manager
+  sessions: SessionSummary[];
+  activeSessionId: string;
+  onCreateSession: () => void;
+  onSwitchSession: (id: string) => void;
+  onDeleteSession: (id: string) => void;
 }
 
 const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
+  // session and analysis data
   messages,
   sessionId,
   isLoading,
+  workflowState = 'idle',
+  currentAnalysis,
+  analysisMessageId,
+  focusMessageId,
+  
+  // actions
   onSendMessage,
   onApproveAnalysis,
   onRequestChanges,
-  workflowState = 'idle',
-  currentAnalysis
+  onNavigateToMessage,
+  
+  // session manager
+  sessions,
+  activeSessionId,
+  onCreateSession,
+  onSwitchSession,
+  onDeleteSession,
 }) => {
   const [inputText, setInputText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['files', 'io-points']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['sessions', 'files', 'project-tree']));
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set([activeSessionId]));
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; sessionId?: string}>({open: false});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = () => {
@@ -71,7 +107,7 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
     });
   };
 
-  // Extract files and IO points from messages
+  // Attach uploaded files to session list for tree
   const uploadedFiles = messages
     .filter(m => m.files && m.files.length > 0)
     .flatMap(m => m.files!)
@@ -82,53 +118,32 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
       uploadedAt: new Date()
     }));
 
+
+  // Normalize analysis I/O into IOPoint[]
   const ioPoints: IOPoint[] = [];
   if (currentAnalysis) {
-    // Extract IO points from analysis
-    if (currentAnalysis.inputs) {
-      Object.entries(currentAnalysis.inputs).forEach(([key, value]: [string, any]) => {
-        ioPoints.push({
-          id: `input-${key}`,
-          name: key,
-          type: 'input',
-          dataType: typeof value === 'object' ? value.type || 'unknown' : typeof value
-        });
-      });
-    }
-    if (currentAnalysis.outputs) {
-      Object.entries(currentAnalysis.outputs).forEach(([key, value]: [string, any]) => {
-        ioPoints.push({
-          id: `output-${key}`,
-          name: key,
-          type: 'output',
-          dataType: typeof value === 'object' ? value.type || 'unknown' : typeof value
-        });
-      });
-    }
-    // Also check for io_summary
-    if (currentAnalysis.io_summary) {
-      const ioSummary = currentAnalysis.io_summary;
-      if (ioSummary.total_inputs) {
-        for (let i = 0; i < Math.min(3, ioSummary.total_inputs); i++) {
-          ioPoints.push({
-            id: `input-auto-${i}`,
-            name: `Input_${i + 1}`,
-            type: 'input',
-            dataType: 'auto-detected'
-          });
+    const inputsRaw = currentAnalysis.inputs
+      || currentAnalysis.io_points?.inputs
+      || [];
+    const outputsRaw = currentAnalysis.outputs
+      || currentAnalysis.io_points?.outputs
+      || [];
+
+    const normalize = (arr: any[], kind: 'input' | 'output') => {
+      arr.forEach((entry: any, idx: number) => {
+        if (typeof entry === 'string') {
+          // Heuristic for dataType from name
+          const lower = entry.toLowerCase();
+          const dataType = lower.includes('temp') || lower.includes('pressure') || lower.includes('setpoint') ? 'Analog' : (lower.includes('status') || lower.includes('command') ? 'Binary' : 'Unknown');
+          ioPoints.push({ id: `${kind}-${idx}`, name: entry, type: kind, dataType });
+        } else if (entry && typeof entry === 'object') {
+          ioPoints.push({ id: `${kind}-${idx}`, name: entry.name || `Point_${idx + 1}`, type: kind, dataType: entry.type || 'Unknown' });
         }
-      }
-      if (ioSummary.total_outputs) {
-        for (let i = 0; i < Math.min(3, ioSummary.total_outputs); i++) {
-          ioPoints.push({
-            id: `output-auto-${i}`,
-            name: `Output_${i + 1}`,
-            type: 'output',
-            dataType: 'auto-detected'
-          });
-        }
-      }
-    }
+      });
+    };
+
+    normalize(inputsRaw, 'input');
+    normalize(outputsRaw, 'output');
   }
 
   return (
@@ -137,7 +152,8 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
       <div className="workbench-header">
         <div className="header-logo">
           <Database size={20} />
-          <span>PyBOG Control Builder</span>
+          <span>N4 Builder</span>
+          <span style={{ fontSize: 12, marginLeft: 8, color: '#94a3b8' }}>Powered by PyBOG</span>
         </div>
         <div className="header-status">
           {workflowState === 'analyzing' && (
@@ -172,11 +188,138 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
         <div className="workbench-sidebar">
           <div className="sidebar-section">
             <h3>Project Navigator</h3>
-            
-            {/* Session Info */}
-            <div className="nav-item">
-              <Clock size={14} />
-              <span className="nav-label">Session: {new Date().toLocaleTimeString()}</span>
+
+            {/* Session Manager - compact tree style */}
+            <div className="nav-section">
+              <div 
+                className="nav-section-header"
+                onClick={() => toggleSection('sessions')}
+              >
+                {expandedSections.has('sessions') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <FolderTree size={14} />
+                <span>Chat History</span>
+                <button 
+                  className="nav-action"
+                  onClick={(e) => { e.stopPropagation(); onCreateSession(); }}
+                  title="New session"
+                  aria-label="New session"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+              {expandedSections.has('sessions') && (
+                <div className="nav-section-content">
+                  {sessions.length === 0 ? (
+                    <div className="nav-empty">No sessions</div>
+                  ) : (
+                    sessions.map((s) => {
+                      const expanded = expandedSessionIds.has(s.id);
+                      const isActive = s.id === activeSessionId;
+                      const onToggle = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setExpandedSessionIds(prev => {
+                          const ns = new Set(prev);
+                          ns.has(s.id) ? ns.delete(s.id) : ns.add(s.id);
+                          return ns;
+                        });
+                      };
+                      return (
+                        <div key={s.id}>
+                          <div 
+                            className={`nav-session ${isActive ? 'active' : ''}`}
+                            onClick={() => onSwitchSession(s.id)}
+                          >
+                            <span onClick={onToggle} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                              <span className="session-name">{s.name || s.id}</span>
+                            </span>
+                            <span className="session-time">{new Date(s.createdAt).toLocaleString()}</span>
+                            <button 
+                              className="session-delete"
+                              title="Remove session"
+                              onClick={(e) => { e.stopPropagation(); setConfirmDelete({open: true, sessionId: s.id}); }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          {expanded && (
+                            <div className="nav-section-content">
+                              {/* Uploaded Files under this session */}
+                              <div className="nav-section">
+                                <div className="nav-section-header" onClick={(e) => e.stopPropagation()}>
+                                  <Folder size={14} />
+                                  <span>Uploads ({uploadedFiles.length})</span>
+                                </div>
+                                <div className="nav-section-content">
+                                  {uploadedFiles.length === 0 ? (
+                                    <div className="nav-empty">No files uploaded</div>
+                                  ) : (
+                                    uploadedFiles.map(file => (
+                                      <div key={file.id} className="nav-file">
+                                        <FileText size={12} />
+                                        <span>{file.name}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                              {/* Analysis tree for ACTIVE session only */}
+                              {s.id === activeSessionId && currentAnalysis && (
+                                <div className="nav-section">
+                                  <div className="nav-section-header" onClick={(e) => e.stopPropagation()}>
+                                    <Database size={14} />
+                                    <span>Analysis</span>
+                                  </div>
+                                  <div className="nav-section-content">
+                                    {/* I/O Points counts */}
+                                    <div className="io-group">
+                                      <span className="io-group-label">I/O Points</span>
+                                      <div className="nav-io-point input" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                                        <span className="io-indicator">●</span>
+                                        <span>Inputs</span>
+                                        <span className="io-type">{ioPoints.filter(p => p.type==='input').length}</span>
+                                      </div>
+                                      <div className="nav-io-point output" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                                        <span className="io-indicator">●</span>
+                                        <span>Outputs</span>
+                                        <span className="io-type">{ioPoints.filter(p => p.type==='output').length}</span>
+                                      </div>
+                                    </div>
+                                    {/* Functional Blocks */}
+                                    {(() => {
+                                      const blocks: any[] = (currentAnalysis?.blocks
+                                        || currentAnalysis?.functional_blocks
+                                        || currentAnalysis?.controlBlocks
+                                        || []);
+                                      return (
+                                        <div className="io-group">
+                                          <span className="io-group-label">Functional Blocks ({blocks?.length || 0})</span>
+                                          {(blocks || []).slice(0, 6).map((b: any, idx: number) => (
+                                            <div key={`blk-${idx}`} className="nav-io-point" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                                              <span className="io-indicator">■</span>
+                                              <span>{typeof b === 'string' ? b : (b?.name || 'Block')}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                    {/* BOG Files placeholder */}
+                                    <div className="io-group">
+                                      <span className="io-group-label">BOG Files</span>
+                                      <div className="nav-empty">No files yet</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Uploaded Files */}
@@ -205,45 +348,74 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
               )}
             </div>
 
-            {/* I/O Points */}
+            {/* Project Tree (Post-Analysis) */}
             {currentAnalysis && (
               <div className="nav-section">
                 <div 
                   className="nav-section-header"
-                  onClick={() => toggleSection('io-points')}
+                  onClick={() => toggleSection('project-tree')}
                 >
-                  {expandedSections.has('io-points') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {expandedSections.has('project-tree') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   <Database size={14} />
-                  <span>I/O Points ({ioPoints.length})</span>
+                  <span>N4 Builder</span>
+                  <span className="nav-subtle" style={{ marginLeft: 6, fontStyle: 'italic', color: '#94a3b8', fontSize: 11 }}>Powered by PyBOG</span>
                 </div>
-                {expandedSections.has('io-points') && (
+                {expandedSections.has('project-tree') && (
                   <div className="nav-section-content">
-                    {ioPoints.length === 0 ? (
-                      <div className="nav-empty">No I/O points detected</div>
-                    ) : (
-                      <>
-                        <div className="io-group">
-                          <span className="io-group-label">Inputs</span>
-                          {ioPoints.filter(p => p.type === 'input').map(point => (
-                            <div key={point.id} className="nav-io-point input">
-                              <span className="io-indicator">→</span>
-                              <span>{point.name}</span>
-                              <span className="io-type">{point.dataType}</span>
+                    {/* Title */}
+                    <div className="nav-subtle">Project: {uploadedFiles[0]?.name || 'Current Session'}</div>
+
+                    {/* Inputs */}
+                    <div className="io-group">
+                      <span className="io-group-label">Inputs (AI/BI)</span>
+                      {ioPoints.filter(p => p.type === 'input').length === 0 ? (
+                        <div className="nav-empty">No inputs detected</div>
+                      ) : (
+                        ioPoints.filter(p => p.type === 'input').map(point => (
+                          <div key={point.id} className="nav-io-point input" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                            <span className="io-indicator">→</span>
+                            <span>{point.name}</span>
+                            <span className="io-type">{point.dataType}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Outputs */}
+                    <div className="io-group">
+                      <span className="io-group-label">Outputs (AO/BO)</span>
+                      {ioPoints.filter(p => p.type === 'output').length === 0 ? (
+                        <div className="nav-empty">No outputs detected</div>
+                      ) : (
+                        ioPoints.filter(p => p.type === 'output').map(point => (
+                          <div key={point.id} className="nav-io-point output" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                            <span className="io-indicator">←</span>
+                            <span>{point.name}</span>
+                            <span className="io-type">{point.dataType}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Functional Blocks */}
+                    {(() => {
+                      const blocks: any[] = (currentAnalysis?.blocks
+                        || currentAnalysis?.functional_blocks
+                        || currentAnalysis?.controlBlocks
+                        || []);
+                      if (!blocks || blocks.length === 0) return null;
+                      return (
+                        <div className="io-group" style={{ marginTop: 8 }}>
+                          <span className="io-group-label">Functional Blocks</span>
+                          {blocks.map((b: any, idx: number) => (
+                            <div key={`block-${idx}`} className="nav-io-point" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
+                              <span className="io-indicator">■</span>
+                              <span>{typeof b === 'string' ? b : (b?.name || 'Block')}</span>
                             </div>
                           ))}
                         </div>
-                        <div className="io-group">
-                          <span className="io-group-label">Outputs</span>
-                          {ioPoints.filter(p => p.type === 'output').map(point => (
-                            <div key={point.id} className="nav-io-point output">
-                              <span className="io-indicator">←</span>
-                              <span>{point.name}</span>
-                              <span className="io-type">{point.dataType}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -279,15 +451,28 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
           </div>
         </div>
 
+        {/* Confirm delete modal */}
+        <ConfirmModal
+          isOpen={confirmDelete.open}
+          title="Remove Session"
+          message="Are you sure you want to delete this session? This will remove its messages from the current view."
+          confirmLabel="Delete"
+          onConfirm={() => { if (confirmDelete.sessionId) { onDeleteSession(confirmDelete.sessionId); } setConfirmDelete({open:false}); }}
+          onCancel={() => setConfirmDelete({open:false})}
+        />
+
         {/* Main Canvas */}
         <div className="workbench-canvas">
-          <ChatCanvas
-            messages={messages}
-            sessionId={sessionId}
-            onApproveAnalysis={onApproveAnalysis}
-            onRequestChanges={onRequestChanges}
-            workflowState={workflowState}
-          />
+          <ReactFlowProvider>
+            <ChatCanvas
+              messages={messages}
+              sessionId={sessionId}
+              onApproveAnalysis={onApproveAnalysis}
+              onRequestChanges={onRequestChanges}
+              workflowState={workflowState}
+              focusMessageId={focusMessageId}
+            />
+          </ReactFlowProvider>
         </div>
       </div>
 
