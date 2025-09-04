@@ -1,11 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Download, Upload, Send, FileText, CheckCircle, XCircle, Loader2,
-  ChevronRight, ChevronDown, Folder, Package, Cpu, Settings, AlertCircle
-} from 'lucide-react';
 import apiService, { ChatMessage } from './services/apiService';
-import { AnalysisData } from './components/AnalysisBlock';
-import N4WorkbenchLayout from './components/N4WorkbenchLayout';
+import { AnalysisData } from './types/analysis';
+import SimplifiedWorkbench from './components/SimplifiedWorkbench';
 
 interface Message {
   id: string;
@@ -32,14 +28,6 @@ interface WebSocketMessage {
 }
 
 
-interface UploadedDocument {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  uploadDate: Date;
-  content?: string;
-}
 
 interface BogFile {
   id: string;
@@ -55,7 +43,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId] = useState(() => `session_${Date.now()}`);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [bogFiles, setBogFiles] = useState<BogFile[]>([]);
   const [currentWorkflowState, setCurrentWorkflowState] = useState<'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete'>('idle');
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisData | null>(null);
   
@@ -159,7 +146,49 @@ Upload HVAC control sequence documents or describe your control requirements to 
     }]);
 
     checkSystemHealth();
-  }, []);
+
+    // Load session history from Postgres and map to UI messages
+    (async () => {
+      try {
+        const hist = await apiService.getSessionHistory(currentSessionId, 100);
+        const mapped: Message[] = (hist.messages || []).map((rec: any) => {
+          const m = rec.message || {};
+          const ts = rec.created_at ? new Date(rec.created_at) : new Date();
+          if ((m.status || '').toLowerCase() === 'ready_for_review' && m.analysis) {
+            return {
+              id: `hist-analysis-${ts.getTime()}`,
+              type: 'assistant',
+              messageType: 'analysis',
+              content: 'HVAC System Analysis Complete',
+              timestamp: ts,
+              metadata: { analysisData: m.analysis }
+            } as Message;
+          }
+          if ((m.status || '').toLowerCase() === 'generation_complete' && (m.downloadUrl || m.download_url)) {
+            return {
+              id: `hist-artifact-${ts.getTime()}`,
+              type: 'assistant',
+              messageType: 'artifact',
+              content: m.message || 'BOG file generated successfully!',
+              timestamp: ts,
+              metadata: { downloadUrl: m.downloadUrl || m.download_url }
+            } as Message;
+          }
+          return {
+            id: `hist-msg-${ts.getTime()}`,
+            type: 'assistant',
+            content: m.message || JSON.stringify(m),
+            timestamp: ts
+          } as Message;
+        });
+        if (mapped.length) {
+          setMessages(prev => [prev[0], ...mapped]);
+        }
+      } catch (e) {
+        console.warn('No history available yet for session', currentSessionId);
+      }
+    })();
+  }, [currentSessionId]);
 
   const checkSystemHealth = async () => {
     try {
@@ -202,7 +231,7 @@ Please check N8N service and try again.`
     setMessages(prev => [...prev, message]);
   };
 
-  const sendMessage = async () => {
+  const sendMessage = async () => { // Legacy function - kept for compatibility
     if (!inputText.trim() && uploadedFiles.length === 0) return;
 
     const userMessage: Message = {
@@ -262,19 +291,6 @@ Please check N8N service and try again.`
         displayText = result;
       } else if (result.response || result.message) {
         displayText = result.response || result.message;
-        
-        // Check for BOG file generation
-        if (displayText.toLowerCase().includes('bog') && displayText.toLowerCase().includes('generated')) {
-          const newBog: BogFile = {
-            id: `bog_${Date.now()}`,
-            name: `Generated_${currentInput.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_')}.bog`,
-            generatedDate: new Date(),
-            downloadUrl: result.download_url || `#download_${Date.now()}`,
-            componentCount: Math.floor(Math.random() * 30) + 5,
-            status: 'ready'
-          };
-          setBogFiles(prev => [...prev, newBog]);
-        }
       } else if (result.success === false) {
         displayText = `❌ N8N Processing Error: ${result.error || result.message || 'Unknown error occurred'}`;
       } else if (Object.keys(result).length === 0) {
@@ -282,6 +298,24 @@ Please check N8N service and try again.`
       } else {
         displayText = `🔧 Processing Result:\n${JSON.stringify(result, null, 2)}`;
       }
+
+      // If structured analysis returned, notify backend to broadcast via WS
+      try {
+        if (result?.status === 'ready_for_review' && result?.analysis) {
+          await fetch('http://localhost:8000/api/analysis-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: currentSessionId,
+              status: 'ready_for_review',
+              analysis: result.analysis
+            })
+          });
+        }
+      } catch (e) {
+        // Non-fatal; WS update is optional
+      }
+
       // Add AI response as system message
       const assistantMessage: Message = {
         id: `assistant_${Date.now()}`,
@@ -302,11 +336,7 @@ Please check N8N service and try again.`
         const downloadMessage: Message = {
           id: `download_${Date.now()}`,
           type: 'assistant',
-          content: `✅ BOG File Generated Successfully!
-
-📥 Download: ${downloadUrl}
-
-Import this BOG file into Niagara Workbench to use the generated control logic wiresheet.`,
+          content: `✅ BOG File Generated Successfully!\n\n📥 Download: ${downloadUrl}\n\nImport this BOG file into Niagara Workbench to use the generated control logic wiresheet.`,
           timestamp: new Date()
         };
         addMessage(downloadMessage);
@@ -335,7 +365,8 @@ Please ensure:
   };
 
 
-  // Helper function to determine message type
+  // Legacy helper - no longer used
+  /*
   const getMessageType = (message: Message): string => {
     if (message.messageType) {
       return message.messageType;
@@ -355,6 +386,7 @@ Please ensure:
     
     return 'system-status';
   };
+  */
 
   // Approval handlers for AnalysisBlock
   const handleApproveAnalysis = async () => {
@@ -364,32 +396,48 @@ Please ensure:
       setCurrentWorkflowState('generating');
       setIsLoading(true);
       
-      // Call API to approve analysis
-      const response = await fetch(`http://localhost:8000/api/sessions/${currentSessionId}/approve`, {
+      // Call API to approve analysis (prefers new /api/session route)
+      const response = await fetch(`http://localhost:8000/api/session/${currentSessionId}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: currentSessionId,
-          approved: true
+          feedback: ''
         })
       });
       
       if (!response.ok) {
         throw new Error('Failed to approve analysis');
       }
-      
-      // Add status message
-      const statusMessage: Message = {
-        id: `status-${Date.now()}`,
-        type: 'assistant',
-        messageType: 'status',
-        content: '✅ Analysis approved! Generating BOG file...',
-        timestamp: new Date()
-      };
-      
-      addMessage(statusMessage);
+
+      const respJson = await response.json().catch(() => ({} as any));
+      const body = respJson?.result?.body || respJson?.workflow_response || respJson;
+      // const status = body?.status || body?.data?.status;
+      const downloadUrl = body?.downloadUrl || body?.download_url || body?.data?.downloadUrl;
+
+      if (downloadUrl) {
+        setCurrentWorkflowState('complete');
+        const artifactMsg: Message = {
+          id: `artifact-${Date.now()}`,
+          type: 'assistant',
+          messageType: 'artifact',
+          content: 'BOG file generated successfully.',
+          timestamp: new Date(),
+          metadata: { downloadUrl }
+        };
+        addMessage(artifactMsg);
+      } else {
+        // Add status message while generation continues
+        const statusMessage: Message = {
+          id: `status-${Date.now()}`,
+          type: 'assistant',
+          messageType: 'status',
+          content: '✅ Analysis approved! Generating BOG file...',
+          timestamp: new Date()
+        };
+        addMessage(statusMessage);
+      }
       
     } catch (error) {
       console.error('Error approving analysis:', error);
@@ -415,8 +463,8 @@ Please ensure:
     try {
       setCurrentWorkflowState('idle');
       
-      // Call API to submit feedback
-      const response = await fetch(`http://localhost:8000/api/sessions/${currentSessionId}/feedback`, {
+      // Call API to submit feedback (new request-changes endpoint)
+      const response = await fetch(`http://localhost:8000/api/session/${currentSessionId}/request-changes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -467,7 +515,8 @@ Please ensure:
   };
 
 
-  // Convert messages for WorkbenchLayout
+  // Legacy conversion - no longer used
+  /*
   const workbenchMessages = messages.map(msg => ({
     id: msg.id,
     type: msg.type as 'user' | 'assistant' | 'system',
@@ -478,8 +527,10 @@ Please ensure:
                msg.messageType === 'artifact' ? 'bool-writable' as const :
                'enum-writable' as const
   }));
+  */
 
-  // Convert BOG files for WorkbenchLayout
+  // Legacy conversion - no longer used
+  /*
   const workbenchBogFiles = bogFiles.map(bog => ({
     id: bog.id,
     name: bog.name,
@@ -487,6 +538,7 @@ Please ensure:
     timestamp: bog.generatedDate,
     status: bog.status as 'ready' | 'generating'
   }));
+  */
 
   const handleSendMessage = async (text: string, files: File[]) => {
     if (!text.trim() && files.length === 0) return;
@@ -590,15 +642,15 @@ Please ensure:
   };
 
   return (
-    <N4WorkbenchLayout
+    <SimplifiedWorkbench
       messages={messages}
+      sessionId={currentSessionId}
       isLoading={isLoading}
-      bogFiles={workbenchBogFiles}
-      onSendMessage={sendMessage}
+      onSendMessage={handleSendMessage}
       onApproveAnalysis={handleApproveAnalysis}
       onRequestChanges={handleRequestChanges}
       workflowState={currentWorkflowState}
-      currentAnalysis={currentAnalysis}
+      currentAnalysis={currentAnalysis || undefined}
     />
   );
 };

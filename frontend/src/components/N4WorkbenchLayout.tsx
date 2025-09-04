@@ -5,7 +5,9 @@ import {
   Package, Terminal, AlertCircle, Clock, Play, Pause, Settings,
   Database, Activity, Layers, GitBranch, Zap
 } from 'lucide-react';
-import AnalysisBlock, { AnalysisData } from './AnalysisBlock';
+import AnalysisNode from './Nodes/AnalysisNode';
+import { AnalysisData } from '../types/analysis';
+import ProjectNavigator from './ProjectNavigator';
 import './N4WorkbenchLayout.css';
 
 interface Message {
@@ -227,33 +229,22 @@ const N4WorkbenchLayout: React.FC<N4WorkbenchLayoutProps> = ({
         <div className="node-body">
           {message.metadata?.analysisData ? (
             <div className="analysis-preview">
-              <div className="stat">
-                <span className="label">Inputs:</span>
-                <span className="value">{message.metadata.analysisData.inputs?.length || 0}</span>
-              </div>
-              <div className="stat">
-                <span className="label">Outputs:</span>
-                <span className="value">{message.metadata.analysisData.outputs?.length || 0}</span>
-              </div>
-              <div className="stat">
-                <span className="label">Blocks:</span>
-                <span className="value">{message.metadata.analysisData.blocks?.length || 0}</span>
-              </div>
-              {workflowState === 'awaiting_approval' && (
-                <div className="node-actions">
-                  <button className="approve-btn" onClick={onApproveAnalysis}>
-                    <CheckCircle size={12} /> Approve
-                  </button>
-                  <button className="changes-btn" onClick={() => onRequestChanges?.('Changes needed')}>
-                    <X size={12} /> Changes
-                  </button>
-                </div>
-              )}
+              <AnalysisNode
+                id="analysis-node"
+                type="analysis"
+                data={{
+                  sessionId: String(message.id),
+                  analysis: message.metadata.analysisData as any,
+                  onApprove: () => onApproveAnalysis?.(),
+                  onRequestChanges: (fb: string) => onRequestChanges?.(fb),
+                  approving: workflowState === 'generating'
+                }}
+              />
             </div>
           ) : message.metadata?.downloadUrl ? (
             <div className="download-preview">
               <FileCode size={32} />
-              <button className="download-btn">
+              <button className="download-btn" onClick={() => window.open(message.metadata?.downloadUrl!, '_blank')}>
                 <Download size={14} /> Download BOG
               </button>
             </div>
@@ -349,6 +340,16 @@ const N4WorkbenchLayout: React.FC<N4WorkbenchLayoutProps> = ({
           </div>
           
           <div className="tree-view">
+            <ProjectNavigator
+              analysis={currentAnalysis || null}
+              onNavigate={(_id: string) => {
+                // Scroll to first analysis node
+                const el = document.querySelector('.niagara-node.analysis-node') as HTMLElement | null;
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
+            />
             {/* Chat History */}
             <div className="tree-item">
               <div 

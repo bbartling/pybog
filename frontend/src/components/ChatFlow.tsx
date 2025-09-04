@@ -4,7 +4,8 @@ import {
   MessageCircle, User, Bot, X, RefreshCw,
   Activity, Cpu, FolderOpen, CheckCircle, AlertCircle
 } from 'lucide-react';
-import AnalysisBlock, { AnalysisData } from './AnalysisBlock';
+import AnalysisNode from './Nodes/AnalysisNode';
+import { AnalysisData } from '../types/analysis';
 import './ZebraTheme.css';
 
 interface Message {
@@ -119,12 +120,16 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
     if (message.messageType === 'analysis' && message.metadata?.analysisData) {
       return (
         <div className="analysis-content">
-          <AnalysisBlock
-            analysis={message.metadata.analysisData}
-            onApprove={onApproveAnalysis}
-            onRequestChanges={onRequestChanges}
-            status={currentWorkflowState === 'awaiting_approval' ? 'pending' : 
-                   currentWorkflowState === 'generating' ? 'approved' : 'idle'}
+          <AnalysisNode
+            id="analysis-node"
+            type="analysis"
+            data={{
+              sessionId: String(message.id),
+              analysis: message.metadata.analysisData as any,
+              onApprove: () => onApproveAnalysis(),
+              onRequestChanges: (fb: string) => onRequestChanges(fb),
+              approving: currentWorkflowState === 'generating'
+            }}
           />
         </div>
       );

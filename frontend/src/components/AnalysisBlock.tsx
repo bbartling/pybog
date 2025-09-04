@@ -4,14 +4,8 @@ import {
   Cpu, ArrowRight, ArrowLeft, Settings 
 } from 'lucide-react';
 
-export interface AnalysisData {
-  sessionId: string;
-  inputs: Array<{name: string; type: string; pin: number}>;
-  outputs: Array<{name: string; type: string; pin: number}>;
-  blocks: Array<{name: string; type: string; logic: string}>;
-  pseudocode: string[];
-  ready_for_review: boolean;
-}
+// Using unified type from types/analysis.ts
+import { AnalysisData } from '../types/analysis';
 
 interface AnalysisBlockProps {
   analysis: AnalysisData;

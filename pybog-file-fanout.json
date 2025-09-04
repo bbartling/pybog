@@ -1,0 +1,41 @@
+{
+  "name": "PyBOG - File Fan-out for Extraction",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "79e73d8e-8f19-436b-acf0-24adbde24d3a",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-1200, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan-out: produce one item per uploaded file\nconst item = $input.first();\nconst files = (item.json?.files || []);\nconst out = [];\n\nif (files.length) {\n  for (const f of files) {\n    const key = f.binaryKey;\n    if (key && item.binary?.[key]) {\n      out.push({\n        json: { ...item.json, binaryKey: key, fileName: f.filename, mimeType: f.mimeType },\n        binary: { [key]: item.binary[key] }\n      });\n    }\n  }\n} else if (item.binary && Object.keys(item.binary).length) {\n  // Fallback if files[] is missing: split all binary keys found\n  for (const key of Object.keys(item.binary)) {\n    out.push({\n      json: { ...item.json, binaryKey: key },\n      binary: { [key]: item.binary[key] }\n    });\n  }\n} else {\n  // If there are no files, just pass original through\n  out.push(item);\n}\n\nreturn out;"
+      },
+      "id": "a1d3f318-95c3-4b2b-975c-2f2cf31c9e36",
+      "name": "Split Files for Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-960, 0]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Split Files for Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+

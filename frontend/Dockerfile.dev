@@ -1,0 +1,20 @@
+# Development stage with hot reload
+FROM node:18
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Set environment variables
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+ENV WDS_SOCKET_HOST=127.0.0.1
+ENV WDS_SOCKET_PORT=3001
+
+# Expose development port
+EXPOSE 3000
+
+# Start development server
+CMD ["npm", "start"]

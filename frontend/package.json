@@ -9,9 +9,11 @@
     "@types/react": "^18.2.6",
     "@types/react-dom": "^18.2.4",
     "lucide-react": "^0.263.1",
+    "pybog-workbench-frontend": "file:",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "^5.0.1",
+    "reactflow": "^11.10.1",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },

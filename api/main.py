@@ -22,6 +22,8 @@ import asyncio
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from bog_builder import BogFolderBuilder
+from .routes.conversation import router as conversation_router
+from .n8n_resume import store_resume_url, append_message
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +44,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include modular conversation routes (approve/request-changes/messages)
+app.include_router(conversation_router)
 
 # Storage paths
 OUTPUTS_DIR = Path("data/outputs")
@@ -189,7 +194,8 @@ async def root():
             "generate": "/api/generate-bog",
             "validate": "/api/validate-schema",
             "download": "/api/download/{session_id}/{filename}",
-            "health": "/api/health"
+            "health": "/api/health",
+            "n8n_webhook": "/api/n8n/webhook/{path}"
         }
     }
 
@@ -400,50 +406,95 @@ async def pybog_generate(request: BogGenerationRequest):
 
 @app.get("/api/sessions/{session_id}/state", response_model=SessionStateResponse)
 async def get_session_state(session_id: str):
-    """Get current state of a session from database"""
+    """Get current state of a session from database (hvac_chat_memory)."""
     try:
-        # Get database connection from environment
         db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
-        
         conn = await asyncpg.connect(db_url)
         try:
-            # Query the session state
+            # Prefer unified message storage (session_id/message)
             query = """
-                SELECT sessionId, state, data, result_data, created_at, updated_at
-                FROM hvac_chat_memory 
-                WHERE sessionId = $1 
-                ORDER BY created_at DESC 
+                SELECT session_id, message, created_at, updated_at
+                FROM hvac_chat_memory
+                WHERE session_id = $1
+                ORDER BY created_at DESC
                 LIMIT 1
             """
-            
             row = await conn.fetchrow(query, session_id)
-            
             if not row:
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-            
-            # Parse analysis data if available
+
+            state = 'UNKNOWN'
             analysis_data = None
-            if row['data']:
-                analysis_data = row['data'] if isinstance(row['data'], dict) else json.loads(row['data'])
-            elif row['result_data']:
-                analysis_data = row['result_data'] if isinstance(row['result_data'], dict) else json.loads(row['result_data'])
-            
+
+            try:
+                msg = row['message'] if isinstance(row['message'], dict) else json.loads(row['message'])
+            except Exception:
+                msg = {}
+
+            status = (msg.get('status') or '').lower()
+            if status in ('ready_for_review', 'ready'):
+                state = 'AWAITING_APPROVAL'
+                analysis_data = msg.get('analysis')
+            elif status in ('generation_complete', 'generated'):
+                state = 'DONE'
+            elif status in ('processing', 'analyzing'):
+                state = 'PROCESSING'
+            else:
+                state = 'UPLOADED'
+
             return SessionStateResponse(
-                session_id=row['sessionid'],
-                state=row['state'],
+                session_id=row['session_id'],
+                state=state,
                 analysis_data=analysis_data,
-                created_at=row['created_at'].isoformat(),
-                updated_at=row['updated_at'].isoformat()
+                created_at=row['created_at'].isoformat() if row.get('created_at') else datetime.utcnow().isoformat(),
+                updated_at=row['updated_at'].isoformat() if row.get('updated_at') else datetime.utcnow().isoformat(),
             )
-            
         finally:
             await conn.close()
-            
     except asyncpg.PostgresError as e:
         logger.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
     except Exception as e:
         logger.error(f"Error getting session state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sessions/{session_id}/history")
+async def get_session_history(session_id: str, limit: int = 100):
+    """Return conversation history from hvac_chat_memory for a session."""
+    try:
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        conn = await asyncpg.connect(db_url)
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT message, created_at
+                FROM hvac_chat_memory
+                WHERE session_id = $1
+                ORDER BY created_at ASC
+                LIMIT $2
+                """,
+                session_id,
+                limit,
+            )
+            out = []
+            for r in rows:
+                try:
+                    msg = r['message'] if isinstance(r['message'], dict) else json.loads(r['message'])
+                except Exception:
+                    msg = {"raw": r['message']}
+                out.append({
+                    "message": msg,
+                    "created_at": (r['created_at'].isoformat() if r.get('created_at') else datetime.utcnow().isoformat()),
+                })
+            return {"sessionId": session_id, "messages": out}
+        finally:
+            await conn.close()
+    except asyncpg.PostgresError as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    except Exception as e:
+        logger.error(f"Error getting session history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/sessions/{session_id}/approve")
@@ -519,6 +570,37 @@ async def analysis_complete(analysis_data: dict):
                 logger.error(f"Failed to parse analysis data: {analysis_parsed}")
                 analysis_parsed = {}
         
+        # Normalize common field names from various workflow variants
+        if 'blocks' not in analysis_parsed:
+            if 'control_blocks' in analysis_parsed:
+                analysis_parsed['blocks'] = analysis_parsed.get('control_blocks')
+            elif 'controlBlocks' in analysis_parsed:
+                analysis_parsed['blocks'] = analysis_parsed.get('controlBlocks')
+
+        # Store resume webhook URL if provided by n8n Wait node
+        resume_url = (
+            analysis_data.get('resumeWebhookUrl')
+            or analysis_data.get('resume_url')
+            or analysis_data.get('resumeWebhook')
+        )
+        if resume_url:
+            await store_resume_url(session_id, resume_url)
+            logger.info(f"Stored resume webhook URL for session {session_id}")
+        
+        # Append structured message for polling fallback
+        try:
+            await append_message(session_id, {
+                "type": "ai_analysis",
+                "status": analysis_data.get('status', 'ready_for_review'),
+                "inputs": analysis_parsed.get('inputs', []),
+                "outputs": analysis_parsed.get('outputs', []),
+                "pseudocode": analysis_parsed.get('pseudocode', []),
+                "component_name": analysis_parsed.get('component_name'),
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+        except Exception as e:
+            logger.warning(f"Failed to append analysis message for session {session_id}: {e}")
+        
         # Send to frontend via WebSocket
         await manager.send_analysis_complete(session_id, {
             "sessionId": session_id,
@@ -549,6 +631,17 @@ async def bog_generated(generation_data: dict):
         
         download_url = generation_data.get('downloadUrl', '')
         message = generation_data.get('message', 'BOG file generated successfully!')
+        
+        # Append artifact message for polling fallback
+        try:
+            await append_message(session_id, {
+                "type": "artifact",
+                "fileUrl": download_url,
+                "message": message,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+        except Exception as e:
+            logger.warning(f"Failed to append artifact message for session {session_id}: {e}")
         
         # Send to frontend via WebSocket
         await manager.send_bog_generated(session_id, download_url, message)

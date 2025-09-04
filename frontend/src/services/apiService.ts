@@ -212,6 +212,20 @@ class ApiService {
     }
   }
 
+  // Get full session history from Postgres (hvac_chat_memory)
+  async getSessionHistory(sessionId: string, limit = 100): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/history?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get session history:', error);
+      throw error;
+    }
+  }
+
   // Approve analysis and continue workflow
   async approveAnalysis(sessionId: string, approved: boolean, feedback?: string): Promise<any> {
     try {
@@ -294,6 +308,54 @@ class ApiService {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+  }
+
+  // Create a new session
+  async createSession(sessionId: string, description: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          description
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to create session:', error);
+      throw error;
+    }
+  }
+
+  // Upload file for session
+  async uploadSessionFile(sessionId: string, file: File): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', sessionId);
+      
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+      throw error;
+    }
   }
 }
 

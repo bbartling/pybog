@@ -5,7 +5,7 @@ import {
   FileText, FolderOpen, ArrowRight, ArrowLeft
 } from 'lucide-react';
 
-import { AnalysisData } from './AnalysisBlock';
+import { AnalysisData } from '../types/analysis';
 
 interface ProjectNavigatorProps {
   analysis: AnalysisData | null;

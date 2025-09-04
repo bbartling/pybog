@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine as build
+FROM node:18 as build
 WORKDIR /app
 
 # Copy package files
