@@ -1,203 +1,105 @@
-# PyBOG Workbench - Quick Start Guide
+# PyBOG Control Builder
 
-## 🚀 Quick Start
+HVAC Control Sequence to Niagara BOG File Generator
 
-### Prerequisites
-- Docker and Docker Compose
-- OpenAI API Key
-- 8GB+ RAM recommended
+## Overview
 
-### 1. Environment Setup
-```bash
-# Copy environment template
-cp .env.example .env
+PyBOG Control Builder is a dockerized application that converts HVAC control sequence documents into Niagara Workbench BOG (Building Object Graph) files using AI-powered analysis.
 
-# Edit .env file and add your OpenAI API key
-# OPENAI_API_KEY=your_openai_api_key_here
-```
-
-### 2. Start All Services
-```bash
-# Build and start all containers
-docker-compose up --build -d
-
-# Check service status
-docker-compose ps
-```
-
-### 3. Access Applications
-- **PyBOG Workbench**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-- **N8N Workflow Engine**: http://localhost:5678
-
-### 4. Import N8N Workflow
-1. Open N8N at http://localhost:5678
-2. Go to Workflows -> Import from file
-3. Import: `workflow_data/pybog-enhanced-agent-v3.json`
-4. Activate the workflow
-
-### 5. Test the System
-```bash
-# Run integration tests
-python test_integration.py
-```
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  React Frontend │    │   FastAPI       │    │  N8N Workflow   │
-│  (Port 3000)    │◄──►│   API Server    │◄──►│  Engine         │
-│                 │    │  (Port 8000)    │    │  (Port 5678)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                        │                        │
-         └────────────────────────┼────────────────────────┘
-                                  ▼
-                    ┌─────────────────────┐
-                    │   PostgreSQL DB     │
-                    │   (Port 5432)       │
-                    └─────────────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Frontend  │────▶│   Backend   │────▶│     n8n     │
+│   (React)   │     │   (FastAPI) │     │  (Workflow) │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                   │                    │
+       └───────────────────┴────────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │  PostgreSQL  │
+                    │   + Redis    │
+                    └──────────────┘
 ```
 
-## 🎯 Features
+## Quick Start
 
-### Frontend (Niagara Workbench Style)
-- **Industrial Design**: Matches Tridium N4 Workbench appearance
-- **Control Point Messages**: Chat bubbles styled like control components
-- **Zebra Striping**: Familiar workbench table styling
-- **Document Management**: Upload and manage HVAC sequences
-- **BOG File Palette**: Download generated control files
-- **Real-time Chat**: Interactive AI assistant
+1. **Prerequisites**
+   - Docker Desktop
+   - OpenAI API Key
 
-### Backend (PyBOG API)
-- **BOG Generation**: Create Niagara-compatible control files
-- **Schema Validation**: Verify HVAC component definitions
-- **Document Processing**: Extract control sequences from PDFs/DOCX
-- **RESTful API**: Clean, documented endpoints
+2. **Environment Setup**
+   ```bash
+   # Create .env file with:
+   OPENAI_API_KEY=your-api-key-here
+   ```
 
-### Workflow Engine (N8N)
-- **AI Integration**: OpenAI GPT for document analysis
-- **Document Processing**: PDF/DOCX text extraction
-- **Control Logic**: Intelligent sequence generation
-- **Extensible**: Add custom nodes and integrations
+3. **Start Application**
+   ```bash
+   docker-compose up -d
+   ```
 
-## 📁 Project Structure
+4. **Access Application**
+   - Frontend: http://localhost:3001
+   - API: http://localhost:8000/docs
+   - n8n: http://localhost:5678
 
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 3001 | React UI with health monitoring |
+| API | 8000 | FastAPI backend service |
+| n8n | 5678 | Workflow automation engine |
+| PostgreSQL | 5432 | Primary database |
+| Redis | 6379 | Cache layer |
+
+## Features
+
+- 📄 **Document Upload** - Process PDF/TXT HVAC control documents
+- 🤖 **AI Analysis** - Extract control sequences, I/O points, and logic
+- ✅ **Review & Approval** - Interactive review process with feedback
+- 🏗️ **BOG Generation** - Generate Niagara-compatible BOG files
+- 📊 **Health Monitoring** - Real-time service status
+- 🔍 **Debug Console** - Built-in logging and debugging
+
+## Development
+
+### Project Structure
 ```
 pybog/
-├── frontend/              # React Workbench Interface
-│   ├── src/
-│   │   ├── App.tsx       # Main Workbench component
-│   │   ├── App.css       # Niagara styling
-│   │   └── services/     # API integration
-│   ├── public/           # Static assets
-│   └── Dockerfile        # Frontend container
-│
-├── api/                  # FastAPI Backend
-│   └── main.py          # Core API endpoints
-│
-├── bog_builder/          # PyBOG Core Library
-│   ├── builder.py       # BOG file builder
-│   ├── models.py        # Pydantic validation
-│   └── analyzer.py      # BOG analyzer
-│
-├── workflow_data/        # N8N Workflows
-│   └── pybog-enhanced-agent-v3.json
-│
-├── data/
-│   ├── outputs/         # Generated BOG files
-│   └── uploads/         # Document uploads
-│
-├── docker-compose.yml   # Service orchestration
-└── test_integration.py  # System tests
+├── api/               # Backend FastAPI service
+├── bog_builder/       # BOG file generation logic
+├── frontend/          # React frontend
+├── data/             # File storage
+├── docker-compose.yml # Service orchestration
+└── README.md         # This file
 ```
 
-## 🔧 Development
-
-### Frontend Development
+### Development Mode
 ```bash
-cd frontend
-npm install
-npm start
+# Frontend with hot reload
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+# View logs
+docker-compose logs -f [service-name]
 ```
 
-### API Development
-```bash
-pip install -r requirements.txt
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-```
+## Usage Workflow
 
-### Testing
-```bash
-# Test API endpoints
-python test_integration.py
+1. **Upload Document** - Upload HVAC control sequence PDF or text file
+2. **AI Analysis** - System extracts control points and logic
+3. **Review** - Review extracted information, request changes if needed
+4. **Generate** - Approve to generate BOG file
+5. **Download** - Download generated BOG for Niagara Workbench
 
-# Test BOG generation
-python test_core_functionality.py
-```
+## Troubleshooting
 
-## 🐛 Troubleshooting
+- **Services not starting**: Check Docker Desktop is running
+- **API errors**: Verify OPENAI_API_KEY in .env file
+- **Frontend not loading**: Clear browser cache, check port 3001
+- **n8n webhook errors**: Ensure workflow is active in n8n interface
 
-### Common Issues
+## License
 
-**Services not starting:**
-```bash
-docker-compose down -v
-docker-compose up --build
-```
-
-**N8N workflow not working:**
-- Check OpenAI API key in environment
-- Verify workflow is activated
-- Check webhook endpoint is accessible
-
-**Frontend not connecting to API:**
-- Verify API is running on port 8000
-- Check CORS settings in API
-- Verify network configuration
-
-**BOG generation failing:**
-- Check input/output definitions
-- Verify component names are valid
-- Check logs: `docker-compose logs api`
-
-### Logs
-```bash
-# View all service logs
-docker-compose logs
-
-# View specific service logs
-docker-compose logs frontend
-docker-compose logs api
-docker-compose logs n8n
-```
-
-## 📖 API Documentation
-
-Visit http://localhost:8000/docs for interactive API documentation.
-
-### Key Endpoints
-
-- `GET /api/health` - System health check
-- `POST /api/validate-schema` - Validate HVAC schema
-- `POST /api/generate-bog` - Generate BOG file
-- `GET /api/download/{session_id}/{filename}` - Download BOG file
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes
-4. Test with `test_integration.py`
-5. Submit pull request
-
-## 📄 License
-
-MIT License - See LICENSE file for details.
-
-## 🆘 Support
-
-For issues and support:
-1. Check troubleshooting section
-2. Review logs for errors
-3. Create GitHub issue with details
+Proprietary - All rights reserved
