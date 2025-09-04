@@ -14,6 +14,9 @@ import ReactFlow, {
   BackgroundVariant,
   useReactFlow,
 } from 'reactflow';
+import { Swimlanes } from './flow/Swimlanes';
+import './flow/canvas.css';
+import { nearestLaneX, quantize } from '../flow/lanes';
 import 'reactflow/dist/style.css';
 
 // Import our custom nodes
@@ -59,6 +62,12 @@ interface ChatCanvasProps {
   highlightTarget?: HighlightTarget;
 }
 
+const defaultEdgeOptions = {
+  type: 'smoothstep',
+  style: { strokeWidth: 1.25, stroke: 'rgba(100,116,139,0.9)' },
+  markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'rgba(100,116,139,0.9)' },
+} as const;
+
 const ChatCanvas: React.FC<ChatCanvasProps> = ({
   messages,
   onApproveAnalysis,
@@ -89,14 +98,14 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       const isAnalysis = message.metadata?.analysisData;
       const isArtifact = message.metadata?.downloadUrl;
       
-      // Zigzag pattern: user right, system left, analysis/artifacts center
+      // Lane placement: system (left), tool (center), user (right)
       let xPosition: number;
       if (isAnalysis || isArtifact) {
-        xPosition = horizontalSpacing; // Center
+        xPosition = horizontalSpacing; // tool lane (center)
       } else if (isUser) {
-        xPosition = viewportWidth - nodeWidth - 40; // Right margin tighter
+        xPosition = viewportWidth - nodeWidth - 40; // user lane (right)
       } else {
-        xPosition = 40; // Left margin tighter
+        xPosition = 40; // system lane (left)
       }
       
       // Determine node type based on message
@@ -251,14 +260,14 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           id: `e${messages[index - 1].id}-${message.id}`,
           source: messages[index - 1].id,
           target: message.id,
-          type: 'bezier',
+          type: 'smoothstep',
           animated: isProcessing && (isLastLink || index === messages.length - 2),
           style: {
             stroke: workflowState === 'analyzing' ? '#f59e0b' : 
                    workflowState === 'generating' ? '#10b981' : '#6b7280',
-            strokeWidth: 2.25,
-            strokeDasharray: isProcessing ? '5,5' : '0',
-            opacity: isLastLink ? 1 : 0.8,
+            strokeWidth: 2,
+            strokeDasharray: isProcessing ? '6 4' : '0',
+            opacity: isLastLink ? 1 : 0.9,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -281,6 +290,15 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  // Magnetic drag to nearest lane + grid
+  const onNodeDragStop = useCallback((_evt: any, node: Node) => {
+    setNodes((nds) => nds.map((n) => {
+      if (n.id !== node.id) return n;
+      const laneX = nearestLaneX(node.position.x);
+      return { ...n, position: { x: laneX, y: quantize(node.position.y) } };
+    }));
+  }, [setNodes]);
 
   // Focus viewport on a specific message/node when requested
   useEffect(() => {
@@ -353,14 +371,17 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
   }, [highlightTarget, setCenter, setNodes, nodes]);
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <Swimlanes />
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
+        defaultEdgeOptions={defaultEdgeOptions}
         fitView
         fitViewOptions={{ padding: 0.08, maxZoom: 1.3 }}
         defaultViewport={{ x: 0, y: 0, zoom: 1.0 }}

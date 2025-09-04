@@ -1,0 +1,9 @@
+@keyframes rfPulse {
+  0% { transform: translateY(0px); box-shadow: 0 0 0 rgba(0,0,0,0.0); }
+  50% { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.10); }
+  100% { transform: translateY(0px); box-shadow: 0 0 0 rgba(0,0,0,0.0); }
+}
+
+.rf-node-pulse {
+  animation: rfPulse 1.2s ease-in-out infinite;
+}
