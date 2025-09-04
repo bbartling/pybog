@@ -4,6 +4,7 @@
   "description": "Niagara Workbench-style interface for PyBOG HVAC Control Builder",
   "private": true,
   "dependencies": {
+    "@tisoap/react-flow-smart-edge": "^3.0.0",
     "@types/jest": "^27.5.2",
     "@types/node": "^16.18.34",
     "@types/react": "^18.2.6",

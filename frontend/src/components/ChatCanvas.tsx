@@ -16,7 +16,8 @@ import ReactFlow, {
 } from 'reactflow';
 import { Swimlanes } from './flow/Swimlanes';
 import './flow/canvas.css';
-import { nearestLaneX, quantize } from '../flow/lanes';
+import { nearestLaneX, quantize, LANES } from '../flow/lanes';
+import { SmartStepEdge } from '@tisoap/react-flow-smart-edge';
 import 'reactflow/dist/style.css';
 
 // Import our custom nodes
@@ -62,8 +63,10 @@ interface ChatCanvasProps {
   highlightTarget?: HighlightTarget;
 }
 
+const edgeTypes = { smart: SmartStepEdge } as const;
+
 const defaultEdgeOptions = {
-  type: 'smoothstep',
+  type: 'smart',
   style: { strokeWidth: 1.25, stroke: 'rgba(100,116,139,0.9)' },
   markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'rgba(100,116,139,0.9)' },
 } as const;
@@ -86,27 +89,22 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
   useEffect(() => {
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
-    
-    // Calculate viewport width for proper spacing (match compact 240px sidebar + padding)
-    const viewportWidth = window.innerWidth - 260; // Subtract sidebar width
-    const nodeWidth = 320;
-    const horizontalSpacing = (viewportWidth - nodeWidth) / 2;
-    
+
+    // Lane-based Y rhythm (independent stacks)
+    const laneRow: Record<'system'|'tool'|'user', number> = { system: 0, tool: 0, user: 0 };
+    const rowGap = 160;
+    const topPad = 120;
+
     messages.forEach((message, index) => {
-      const yPosition = 120 + (index * 160); // Vertical spacing
       const isUser = message.type === 'user';
       const isAnalysis = message.metadata?.analysisData;
       const isArtifact = message.metadata?.downloadUrl;
-      
-      // Lane placement: system (left), tool (center), user (right)
-      let xPosition: number;
-      if (isAnalysis || isArtifact) {
-        xPosition = horizontalSpacing; // tool lane (center)
-      } else if (isUser) {
-        xPosition = viewportWidth - nodeWidth - 40; // user lane (right)
-      } else {
-        xPosition = 40; // system lane (left)
-      }
+
+      // Lane: system | tool | user
+      const lane: 'system' | 'tool' | 'user' = isUser ? 'user' : (isAnalysis || isArtifact) ? 'tool' : 'system';
+      const xPosition = LANES[lane] - 170; // center card in lane column (~340px width)
+      const yPosition = topPad + laneRow[lane] * rowGap; // independent vertical rhythm
+      laneRow[lane] += 1;
       
       // Determine node type based on message
       let nodeType = 'statusMessage';
@@ -260,14 +258,15 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           id: `e${messages[index - 1].id}-${message.id}`,
           source: messages[index - 1].id,
           target: message.id,
-          type: 'smoothstep',
+          type: 'smart',
           animated: isProcessing && (isLastLink || index === messages.length - 2),
+          data: { margin: 16, cornerRadius: 10 },
           style: {
             stroke: workflowState === 'analyzing' ? '#f59e0b' : 
                    workflowState === 'generating' ? '#10b981' : '#6b7280',
             strokeWidth: 2,
             strokeDasharray: isProcessing ? '6 4' : '0',
-            opacity: isLastLink ? 1 : 0.9,
+            opacity: isLastLink ? 1 : 0.95,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -379,8 +378,10 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDrag={(e, n) => onNodeDragStop(e as any, n)}
         onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         fitView
         fitViewOptions={{ padding: 0.08, maxZoom: 1.3 }}
