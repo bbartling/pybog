@@ -29,8 +29,11 @@ COPY --from=build /app/build /usr/share/nginx/html
 # Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Create runtime config - using environment variables or defaults
-RUN echo 'window.RUNTIME_CONFIG = { API_URL: "http://localhost:8765", N8N_URL: "http://localhost:5789" };' > /usr/share/nginx/html/config.js
+# Generate runtime config at container start via nginx entrypoint hook
+# This script will generate /usr/share/nginx/html/config.js using env vars
+COPY docker-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+# Normalize line endings and ensure executable
+RUN sed -i 's/\r$//' /docker-entrypoint.d/40-runtime-config.sh && chmod +x /docker-entrypoint.d/40-runtime-config.sh
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

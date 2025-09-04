@@ -113,15 +113,27 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
   };
 
   // Attach uploaded files to session list for tree
-  const uploadedFiles = messages
-    .filter(m => m.files && m.files.length > 0)
-    .flatMap(m => m.files!)
-    .map((file, idx) => ({
-      id: `file-${idx}`,
-      name: file.name,
-      type: file.name.endsWith('.pdf') ? 'pdf' as const : 'txt' as const,
-      uploadedAt: new Date()
-    }));
+  const uploadedFiles = [
+    // Files attached directly to messages
+    ...messages
+      .filter(m => m.files && m.files.length > 0)
+      .flatMap(m => m.files!)
+      .map((file, idx) => ({
+        id: `file-${idx}`,
+        name: file.name,
+        type: file.name.endsWith('.pdf') ? 'pdf' as const : 'txt' as const,
+        uploadedAt: new Date()
+      })),
+    // Files persisted via backend (system messages with metadata.filePersisted)
+    ...messages
+      .filter(m => (m.metadata as any)?.filePersisted)
+      .map((m, idx) => ({
+        id: `persisted-${idx}`,
+        name: (m.metadata as any).filePersisted.name,
+        type: ((m.metadata as any).filePersisted.name || '').endsWith('.pdf') ? 'pdf' as const : 'txt' as const,
+        uploadedAt: m.timestamp
+      })),
+  ];
 
   // Collect BOG artifacts produced in this session
   const bogFiles = messages

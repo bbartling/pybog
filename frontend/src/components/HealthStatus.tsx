@@ -18,39 +18,44 @@ const HealthStatus: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
+    const cfg = (window as any).RUNTIME_CONFIG || {};
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const n8nBase = cfg.N8N_URL || process.env.REACT_APP_N8N_URL || 'http://localhost:5678';
+
     const checkServices = async () => {
       const newStatuses = [...services];
-      
-      // Check API health
+      // API + DB
       try {
-        const apiResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/health`);
-        if (apiResponse.ok) {
-          const data = await apiResponse.json();
+        const apiResp = await fetch(`${apiBase}/api/health`, { cache: 'no-store' });
+        if (apiResp.ok) {
+          const data = await apiResp.json();
           newStatuses[0] = { ...newStatuses[0], status: 'online', message: 'API Connected' };
-          // Database status is part of API health
           newStatuses[1] = { ...newStatuses[1], status: data.database ? 'online' : 'offline', message: data.database ? 'PostgreSQL Connected' : 'Database Offline' };
         } else {
-          newStatuses[0] = { ...newStatuses[0], status: 'error', message: 'API Error' };
+          newStatuses[0] = { ...newStatuses[0], status: 'error', message: `API ${apiResp.status}` };
+          newStatuses[1] = { ...newStatuses[1], status: 'offline', message: 'Database Unknown' };
         }
-      } catch (error) {
+      } catch (e) {
         newStatuses[0] = { ...newStatuses[0], status: 'offline', message: 'API Unreachable' };
+        newStatuses[1] = { ...newStatuses[1], status: 'offline', message: 'Database Unknown' };
       }
-      
-      // Check n8n health
+
+      // n8n reachability: treat 404 as OK (GET to POST-only webhook)
       try {
-        await fetch(`${process.env.REACT_APP_N8N_URL || 'http://localhost:5678'}/healthz`, {
-          mode: 'no-cors'
-        });
-        // With no-cors, we can't read the response, but if it doesn't throw, the service is up
-        newStatuses[2] = { ...newStatuses[2], status: 'online', message: 'n8n Connected' };
-      } catch (error) {
+        const resp = await fetch(`${n8nBase}/webhook/pybog-analyze`, { method: 'GET' });
+        if (resp.ok || [401,403,404].includes(resp.status)) {
+          newStatuses[2] = { ...newStatuses[2], status: 'online', message: 'n8n Reachable' };
+        } else {
+          newStatuses[2] = { ...newStatuses[2], status: 'error', message: `n8n ${resp.status}` };
+        }
+      } catch (e) {
         newStatuses[2] = { ...newStatuses[2], status: 'offline', message: 'n8n Unreachable' };
       }
-      
-      // Check WebSocket
-      const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8000';
+
+      // WebSocket check based on API URL
       try {
-        const ws = new WebSocket(`${wsUrl}/ws/test`);
+        const wsBase = apiBase.replace(/^http/i, 'ws');
+        const ws = new WebSocket(`${wsBase}/ws/test`);
         ws.onopen = () => {
           newStatuses[3] = { ...newStatuses[3], status: 'online', message: 'WebSocket Connected' };
           ws.close();
@@ -60,19 +65,15 @@ const HealthStatus: React.FC = () => {
           newStatuses[3] = { ...newStatuses[3], status: 'offline', message: 'WebSocket Error' };
           setServices([...newStatuses]);
         };
-      } catch (error) {
+      } catch (e) {
         newStatuses[3] = { ...newStatuses[3], status: 'offline', message: 'WebSocket Failed' };
       }
-      
+
       setServices(newStatuses);
     };
-    
-    // Check immediately
+
     checkServices();
-    
-    // Then check every 30 seconds
     const interval = setInterval(checkServices, 30000);
-    
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
@@ -162,6 +163,13 @@ const HealthStatus: React.FC = () => {
               <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>
                 {service.name}
               </span>
+              {/* Quick links */}
+              {service.name === 'API' && (
+                <a href={(window as any).RUNTIME_CONFIG?.API_URL?.replace(/\/$/, '') + '/docs'} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#3b82f6' }}>Docs</a>
+              )}
+              {service.name === 'n8n' && (
+                <a href={(window as any).RUNTIME_CONFIG?.N8N_URL || 'http://localhost:5678'} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#3b82f6' }}>Open</a>
+              )}
               {getStatusIcon(service.status)}
               <span style={{ 
                 fontSize: 10, 

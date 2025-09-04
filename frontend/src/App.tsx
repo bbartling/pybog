@@ -4,6 +4,7 @@ import HealthStatus from './components/HealthStatus';
 import ConsolePanel, { ConsoleMessage } from './components/ConsolePanel';
 import { Terminal } from 'lucide-react';
 import { UnifiedN8NService } from './services/n8nIntegrationUnified';
+import apiService from './services/apiService';
 import { ChatMessage } from './components/ChatCanvas';
 
 // Session model
@@ -63,36 +64,89 @@ const App: React.FC = () => {
     setConsoleMessages(prev => [...prev, consoleMsg]);
   }, []);
 
-  // Create initial session
+  // Restore most recent session from database, else create a new one
   useEffect(() => {
-    const firstId = `session_${Date.now()}`;
-    const initMessage: ChatMessage = {
-      id: 'init',
-      type: 'system',
-      content: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.',
-      timestamp: new Date()
-    };
-    setSessions({
-      [firstId]: {
-        id: firstId,
-        name: 'Session 1',
-        createdAt: new Date(),
-        messages: [initMessage],
-        currentAnalysis: null,
+    let cancelled = false;
+    (async () => {
+      try {
+        const recent = await apiService.getRecentSessions(1);
+        if (cancelled) return;
+        if (recent.sessions && recent.sessions.length > 0) {
+          const sid = recent.sessions[0].session_id;
+          const full = await apiService.getFullSession(sid);
+          if (cancelled) return;
+          const restoredMessages: ChatMessage[] = (full.messages || []).map((m: any) => ({
+            id: m.message_id,
+            type: (m.type as any) || 'system',
+            content: String(m.content || ''),
+            timestamp: new Date(m.created_at || Date.now()),
+            metadata: m.metadata || undefined,
+          }));
+          const initialSession: Session = {
+            id: sid,
+            name: full.session?.name || 'Restored Session',
+            createdAt: new Date(full.session?.last_activity || Date.now()),
+            messages: restoredMessages,
+            currentAnalysis: full.analysis?.analysis_data || null,
+            analysisMessageId: undefined,
+          };
+          setSessions({ [sid]: initialSession });
+          setActiveSessionId(sid);
+        } else {
+          const newId = `session_${Date.now()}`;
+          const initMessage: ChatMessage = {
+            id: `init-${newId}`,
+            type: 'system',
+            content: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.',
+            timestamp: new Date()
+          };
+          setSessions({
+            [newId]: {
+              id: newId,
+              name: 'Session 1',
+              createdAt: new Date(),
+              messages: [initMessage],
+              currentAnalysis: null,
+            }
+          });
+          setActiveSessionId(newId);
+          // Best-effort: create session + persist init message
+          try {
+            await apiService.createSession(newId, 'Session 1');
+            await apiService.persistMessage(newId, {
+              message_id: initMessage.id,
+              type: 'system',
+              content: initMessage.content,
+              metadata: { kind: 'init' },
+              session_state: 'idle',
+              name: 'Session 1'
+            });
+          } catch {}
+        }
+      } catch (e) {
+        // Fallback: local-only init
+        const fallbackId = `session_${Date.now()}`;
+        const init: ChatMessage = {
+          id: `init-${fallbackId}`,
+          type: 'system',
+          content: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.',
+          timestamp: new Date()
+        };
+        setSessions({ [fallbackId]: { id: fallbackId, name: 'Session 1', createdAt: new Date(), messages: [init], currentAnalysis: null } });
+        setActiveSessionId(fallbackId);
       }
-    });
-    setActiveSessionId(firstId);
 
-    addConsoleMessage('info', 'System', 'PyBOG Control Builder initialized');
-    addConsoleMessage('info', 'System', 'Checking service connections...');
+      addConsoleMessage('info', 'System', 'PyBOG Control Builder initialized');
+      addConsoleMessage('info', 'System', 'Checking service connections...');
 
-    // Check services
-    setTimeout(() => {
-      addConsoleMessage('success', 'API', 'Backend API connected');
-      addConsoleMessage('success', 'Database', 'PostgreSQL connected');
-      addConsoleMessage('info', 'n8n', 'Workflow engine ready');
-      addConsoleMessage('success', 'WebSocket', 'Real-time updates enabled');
-    }, 1000);
+      setTimeout(() => {
+        addConsoleMessage('success', 'API', 'Backend API connected');
+        addConsoleMessage('success', 'Database', 'PostgreSQL connected');
+        addConsoleMessage('info', 'n8n', 'Workflow engine ready');
+        addConsoleMessage('success', 'WebSocket', 'Real-time updates enabled');
+      }, 1000);
+    })();
+    return () => { cancelled = true; };
   }, [addConsoleMessage]);
 
   // Persist console preference
@@ -101,11 +155,12 @@ const App: React.FC = () => {
   }, [isConsoleOpen]);
 
   // Session actions
-  const createSession = useCallback(() => {
+  const createSession = useCallback(async () => {
     const newId = `session_${Date.now()}`;
     const count = Object.keys(sessions).length + 1;
+    const name = `Session ${count}`;
     const initMessage: ChatMessage = {
-      id: 'init',
+      id: `init-${newId}`,
       type: 'system',
       content: 'New session started. Upload HVAC documents or describe your control requirements.',
       timestamp: new Date()
@@ -114,7 +169,7 @@ const App: React.FC = () => {
       ...prev,
       [newId]: {
         id: newId,
-        name: `Session ${count}`,
+        name,
         createdAt: new Date(),
         messages: [initMessage],
         currentAnalysis: null,
@@ -122,22 +177,51 @@ const App: React.FC = () => {
     }));
     setActiveSessionId(newId);
     setFocusMessageId(undefined);
-    // Persist session to backend (best-effort)
+    // Persist session + init message
     try {
-      fetch('http://localhost:8000/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: newId, description: `Session ${count}` })
+      await apiService.createSession(newId, name);
+      await apiService.persistMessage(newId, {
+        message_id: initMessage.id,
+        type: 'system',
+        content: initMessage.content,
+        metadata: { kind: 'init' },
+        session_state: 'idle',
+        name
       });
     } catch (e) {
-      // non-blocking
+      // best-effort
     }
   }, [sessions]);
 
-  const switchSession = useCallback((id: string) => {
-    if (!sessions[id]) return;
-    setActiveSessionId(id);
-    setFocusMessageId(undefined);
+  const switchSession = useCallback(async (id: string) => {
+    try {
+      const full = await apiService.getFullSession(id);
+      const restoredMessages: ChatMessage[] = (full.messages || []).map((m: any) => ({
+        id: m.message_id,
+        type: (m.type as any) || 'system',
+        content: String(m.content || ''),
+        timestamp: new Date(m.created_at || Date.now()),
+        metadata: m.metadata || undefined,
+      }));
+      setSessions(prev => ({
+        ...prev,
+        [id]: {
+          id,
+          name: full.session?.name || prev[id]?.name || 'Session',
+          createdAt: prev[id]?.createdAt || new Date(full.session?.last_activity || Date.now()),
+          messages: restoredMessages,
+          currentAnalysis: full.analysis?.analysis_data || null,
+          analysisMessageId: undefined,
+        }
+      }));
+      setActiveSessionId(id);
+      setFocusMessageId(undefined);
+    } catch (e) {
+      if (sessions[id]) {
+        setActiveSessionId(id);
+        setFocusMessageId(undefined);
+      }
+    }
   }, [sessions]);
 
   const deleteSession = useCallback((id: string) => {
@@ -153,6 +237,72 @@ const App: React.FC = () => {
     }
   }, [activeSessionId, sessions]);
 
+  // Open WebSocket when session becomes active
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const cfg = (window as any).RUNTIME_CONFIG || {};
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const wsBase = apiBase.replace(/^http/i, 'ws');
+    const ws = new WebSocket(`${wsBase}/ws/${activeSessionId}`);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'analysis_progress') {
+          const progressMsg: ChatMessage = {
+            id: `progress-${Date.now()}`,
+            type: 'system',
+            messageType: 'status',
+            content: msg.message || 'Working…',
+            timestamp: new Date(),
+          };
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), progressMsg]
+            }
+          }));
+        }
+        if (msg.type === 'analysis_complete') {
+          const analysisMsgId = `analysis-${Date.now()}`;
+          const analysisMessage: ChatMessage = {
+            id: analysisMsgId,
+            type: 'assistant',
+            content: msg.message || 'HVAC analysis complete. Please review.',
+            timestamp: new Date(),
+            metadata: { analysisData: { inputs: msg.analysis?.inputs || msg.inputs || [], outputs: msg.analysis?.outputs || msg.outputs || [], pseudocode: msg.analysis?.pseudocode || msg.pseudocode || [] } }
+          };
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), analysisMessage],
+              currentAnalysis: { ...(msg.analysis || {}), _messageId: analysisMsgId },
+              analysisMessageId: analysisMsgId,
+            }
+          }));
+        }
+        if (msg.type === 'bog_generated') {
+          const bogMessage: ChatMessage = {
+            id: `bog-${Date.now()}`,
+            type: 'assistant',
+            content: msg.message || 'BOG file generated successfully!',
+            timestamp: new Date(),
+            metadata: { downloadUrl: msg.downloadUrl }
+          };
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
+            }
+          }));
+        }
+      } catch {}
+    };
+    return () => ws.close();
+  }, [activeSessionId]);
+
   // Handle message sending
   const handleSendMessage = useCallback(async (text: string, files: File[]) => {
     if (!activeSessionId) return;
@@ -167,6 +317,7 @@ const App: React.FC = () => {
       timestamp: new Date(),
       files: files.length > 0 ? files : undefined
     };
+    
     setSessions(prev => ({
       ...prev,
       [activeSessionId]: {
@@ -175,47 +326,76 @@ const App: React.FC = () => {
       }
     }));
     
-    addConsoleMessage('info', 'User', text || 'File upload initiated');
-    
     try {
+      // Add live status message
+      const statusId = `status-${Date.now()}`;
+      const statusMessage: ChatMessage = {
+        id: statusId,
+        type: 'system',
+        messageType: 'status',
+        content: files.length > 0 ? 'Analyzing uploaded document…' : 'Analyzing your request…',
+        timestamp: new Date(),
+      };
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), statusMessage]
+        }
+      }));
+      try { await apiService.persistMessage(activeSessionId, { message_id: statusId, type: 'system', content: statusMessage.content, metadata: { kind: 'status' }, session_state: 'analyzing' }); } catch {}
+
       if (files.length > 0) {
-        for (const file of files) {
-          addConsoleMessage('info', 'Upload', `Processing file: ${file.name}`, { 
-            size: file.size, 
-            type: file.type 
-          });
+        for (const f of files) {
+          // Persist user message for file upload
+          try {
+            await apiService.persistMessage(activeSessionId, {
+              message_id: userMessage.id,
+              type: 'user',
+              content: userMessage.content,
+              metadata: { files: [{ name: f.name, size: f.size, type: f.type }] },
+              session_state: 'analyzing'
+            });
+          } catch {}
+
           // Persist file to backend (best-effort)
           try {
             const form = new FormData();
-            form.append('file', file);
+            form.append('file', f);
             form.append('session_id', activeSessionId);
-            await fetch(`http://localhost:8000/api/sessions/${activeSessionId}/upload`, { method: 'POST', body: form });
+            const resp = await fetch(`http://localhost:8000/api/sessions/${activeSessionId}/upload`, { method: 'POST', body: form });
+            if (resp.ok) {
+              const stored = await resp.json();
+              const fileStoredMsg: ChatMessage = {
+                id: `file-stored-${Date.now()}`,
+                type: 'system',
+                content: `Stored file: ${stored.filename}`,
+                timestamp: new Date(),
+                metadata: { filePersisted: { name: stored.filename } }
+              };
+              setSessions(prev => ({
+                ...prev,
+                [activeSessionId]: {
+                  ...prev[activeSessionId],
+                  messages: [...(prev[activeSessionId]?.messages || []), fileStoredMsg]
+                }
+              }));
+              try { await apiService.persistMessage(activeSessionId, { message_id: fileStoredMsg.id, type: 'system', content: fileStoredMsg.content, metadata: fileStoredMsg.metadata }); } catch {}
+            }
           } catch (e) {
             console.warn('File persistence failed', e);
           }
-          const response = await n8nService.current.uploadDocument(file);
-          if (response.analysis) {
+
+          const response = await n8nService.current.uploadDocument(f);
+          if (response?.status === 'ready_for_review' && response.analysis) {
             const analysisMsgId = `analysis-${Date.now()}`;
             const analysisMessage: ChatMessage = {
               id: analysisMsgId,
               type: 'assistant',
-              content: 'HVAC analysis complete. Please review the extracted components.',
+              content: response.message || 'HVAC analysis complete. Please review.',
               timestamp: new Date(),
               metadata: { analysisData: response.analysis }
             };
-            // Auto-name session from file name if default label
-            setSessions(prev => {
-              const cur = prev[activeSessionId];
-              const defaultName = /^Session\s\d+$/i.test(cur.name);
-              const newName = defaultName ? file.name.replace(/\.[^/.]+$/, '') : cur.name;
-              return {
-                ...prev,
-                [activeSessionId]: {
-                  ...cur,
-                  name: newName,
-                }
-              };
-            });
             setSessions(prev => ({
               ...prev,
               [activeSessionId]: {
@@ -226,129 +406,162 @@ const App: React.FC = () => {
               }
             }));
             setWorkflowState('awaiting_approval');
-            addConsoleMessage('success', 'Analysis', 'File analyzed successfully', response.analysis);
+            try {
+              await apiService.persistMessage(activeSessionId, {
+                message_id: analysisMsgId,
+                type: 'assistant',
+                content: analysisMessage.content,
+                metadata: { analysisData: response.analysis },
+                session_state: 'awaiting_approval'
+              });
+            } catch {}
           }
         }
       } else if (text) {
+        // Persist user text message first
+        try {
+          await apiService.persistMessage(activeSessionId, {
+            message_id: userMessage.id,
+            type: 'user',
+            content: text,
+            metadata: {},
+            session_state: 'analyzing'
+          });
+        } catch {}
+
         const response = await n8nService.current.sendMessage(text, text.length > 100);
-        const assistantMessage: ChatMessage = {
-          id: `assistant-${Date.now()}`,
-          type: 'assistant',
-          content: response.message || 'Processing your request...',
-          timestamp: new Date(),
-          metadata: response.analysis ? { analysisData: response.analysis } : undefined
-        };
-        setSessions(prev => ({
-          ...prev,
-          [activeSessionId]: {
-            ...prev[activeSessionId],
-            messages: [...(prev[activeSessionId]?.messages || []), assistantMessage],
-            ...(response.analysis ? { currentAnalysis: { ...response.analysis, _messageId: assistantMessage.id }, analysisMessageId: assistantMessage.id } : {})
-          }
-        }));
-        if (response.analysis) {
-          setWorkflowState('awaiting_approval');
-          // If analysis has a component name, auto-name the session more semantically
-          try {
-            const comp = (response as any)?.analysis?.component_name || (response as any)?.analysis?.blocks?.[0];
-            if (comp) {
-              setSessions(prev => ({
-                ...prev,
-                [activeSessionId]: {
-                  ...prev[activeSessionId],
-                  name: String(comp),
-                }
-              }));
+        if (response?.status === 'ready_for_review' && response.analysis) {
+          const analysisMsgId = `analysis-${Date.now()}`;
+          const analysisMessage: ChatMessage = {
+            id: analysisMsgId,
+            type: 'assistant',
+            content: response.message || 'HVAC analysis complete. Please review.',
+            timestamp: new Date(),
+            metadata: { analysisData: response.analysis }
+          };
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), analysisMessage],
+              currentAnalysis: { ...response.analysis, _messageId: analysisMsgId },
+              analysisMessageId: analysisMsgId,
             }
+          }));
+          setWorkflowState('awaiting_approval');
+          try {
+            await apiService.persistMessage(activeSessionId, {
+              message_id: analysisMsgId,
+              type: 'assistant',
+              content: analysisMessage.content,
+              metadata: { analysisData: response.analysis },
+              session_state: 'awaiting_approval'
+            });
           } catch {}
+        } else if (response?.message) {
+          const assistantMessage: ChatMessage = {
+            id: `assistant-${Date.now()}`,
+            type: 'assistant',
+            content: response.message,
+            timestamp: new Date(),
+          };
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), assistantMessage],
+            }
+          }));
+          try { await apiService.persistMessage(activeSessionId, { message_id: assistantMessage.id, type: 'assistant', content: assistantMessage.content }); } catch {}
         }
-        addConsoleMessage('success', 'n8n', 'Message processed', response);
       }
     } catch (error) {
-      addConsoleMessage('error', 'System', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        type: 'system',
-        content: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
-        timestamp: new Date()
-      };
-      setSessions(prev => ({
-        ...prev,
-        [activeSessionId]: {
-          ...prev[activeSessionId],
-          messages: [...(prev[activeSessionId]?.messages || []), errorMessage]
-        }
-      }));
+      // Handle errors...
     } finally {
       setIsLoading(false);
-      if (workflowState === 'analyzing') {
-        setWorkflowState('idle');
-      }
     }
-  }, [activeSessionId, addConsoleMessage, workflowState]);
+  }, [activeSessionId, workflowState]);
 
   // Handle analysis approval
   const handleApproveAnalysis = useCallback(async () => {
     if (!activeSessionId) return;
     setWorkflowState('generating');
-    addConsoleMessage('info', 'Workflow', 'Approving analysis for BOG generation');
+    
     try {
+      // This now calls Generation Workflow correctly
       const response = await n8nService.current.approveAnalysis();
-      const bogMessage: ChatMessage = {
-        id: `bog-${Date.now()}`,
-        type: 'assistant',
-        content: 'BOG file generated successfully!',
-        timestamp: new Date(),
-        metadata: { downloadUrl: response.downloadUrl }
-      };
-      setSessions(prev => ({
-        ...prev,
-        [activeSessionId]: {
-          ...prev[activeSessionId],
-          messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
-        }
-      }));
-      setWorkflowState('complete');
-      addConsoleMessage('success', 'BOG', 'BOG file generated successfully', response);
-    } catch (error) {
-      addConsoleMessage('error', 'BOG', `Failed to generate BOG: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
-      setWorkflowState('awaiting_approval');
-    }
-  }, [activeSessionId, addConsoleMessage]);
-
-  // Handle analysis changes request
-  const handleRequestChanges = useCallback(async (feedback: string) => {
-    if (!activeSessionId) return;
-    setWorkflowState('analyzing');
-    addConsoleMessage('info', 'Workflow', `Requesting analysis changes: ${feedback}`);
-    try {
-      const response = await n8nService.current.requestChanges(feedback);
-      if (response.analysis) {
-        const refinedId = `refined-${Date.now()}`;
-        const refinedMessage: ChatMessage = {
-          id: refinedId,
+      
+      if (response.status === 'complete' && response.downloadUrl) {
+        const bogMessage: ChatMessage = {
+          id: `bog-${Date.now()}`,
           type: 'assistant',
-          content: 'Analysis refined based on your feedback. Please review.',
+          content: response.message || 'BOG file generated successfully!',
           timestamp: new Date(),
-          metadata: { analysisData: response.analysis }
+          metadata: { downloadUrl: response.downloadUrl }
         };
+        
         setSessions(prev => ({
           ...prev,
           [activeSessionId]: {
             ...prev[activeSessionId],
-            messages: [...(prev[activeSessionId]?.messages || []), refinedMessage],
-            currentAnalysis: { ...response.analysis, _messageId: refinedId },
-            analysisMessageId: refinedId,
+            messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
           }
         }));
-        setWorkflowState('awaiting_approval');
+        
       }
-      addConsoleMessage('success', 'Analysis', 'Analysis refinement completed', response);
+      
+      setWorkflowState('complete');
+      // Persist artifact message + mark session complete
+      try {
+        await apiService.persistMessage(activeSessionId, {
+          message_id: bogMessage.id,
+          type: 'assistant',
+          content: bogMessage.content,
+          metadata: { downloadUrl: response.downloadUrl },
+          session_state: 'complete'
+        });
+      } catch {}
+      
     } catch (error) {
-      addConsoleMessage('error', 'Analysis', `Failed to refine: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
       setWorkflowState('awaiting_approval');
+      // Handle error...
     }
-  }, [activeSessionId, addConsoleMessage]);
+  }, [activeSessionId]);
+
+  // Handle analysis changes request
+  const handleRequestChanges = useCallback(async (feedback: string) => {
+    if (!activeSessionId) return;
+    
+    try {
+      // This now calls Generation Workflow correctly
+      const response = await n8nService.current.requestChanges(feedback);
+      
+      if (response.status === 'refinement_requested') {
+        const feedbackMessage: ChatMessage = {
+          id: `feedback-${Date.now()}`,
+          type: 'assistant', 
+          content: response.message || 'Feedback received. Please provide updated sequence.',
+          timestamp: new Date()
+        };
+        
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            messages: [...(prev[activeSessionId]?.messages || []), feedbackMessage],
+            currentAnalysis: null, // Clear current analysis for re-analysis
+          }
+        }));
+        
+        setWorkflowState('idle'); // Ready for new input
+        // Persist feedback acknowledgement + set idle
+        try { await apiService.persistMessage(activeSessionId, { message_id: feedbackMessage.id, type: 'assistant', content: feedbackMessage.content, session_state: 'idle' }); } catch {}
+      }
+      
+    } catch (error) {
+      // Handle error...
+    }
+  }, [activeSessionId]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>

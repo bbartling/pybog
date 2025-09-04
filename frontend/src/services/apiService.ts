@@ -198,6 +198,37 @@ class ApiService {
     });
   }
 
+  // Get recent sessions for switcher
+  async getRecentSessions(limit = 20): Promise<{ sessions: Array<{session_id: string, name: string, current_state: string, last_activity: string}> }>{
+    const res = await fetch(`${this.baseUrl}/api/sessions/recent?limit=${limit}`);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  // Get full session restoration payload
+  async getFullSession(sessionId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/full`);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  // Persist a message and optionally update session state
+  async persistMessage(sessionId: string, payload: { message_id: string, type: string, content: string, metadata?: any, session_state?: string, name?: string }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+    return res.json();
+  }
+
   // Get session state from database
   async getSessionState(sessionId: string): Promise<any> {
     try {
@@ -286,6 +317,31 @@ class ApiService {
     };
     
     return setInterval(poll, 2000); // Poll every 2 seconds
+  }
+
+  // Subscribe to live session events via SSE
+  subscribeToSessionEvents(
+    sessionId: string,
+    onEvent: (payload: any) => void,
+    onError?: (err: any) => void
+  ): { close: () => void } {
+    const url = `${this.baseUrl}/api/session/${encodeURIComponent(sessionId)}/events`;
+    const es = new EventSource(url, { withCredentials: false });
+
+    es.onmessage = (evt) => {
+      try {
+        const data = evt.data ? JSON.parse(evt.data) : null;
+        if (data) onEvent(data);
+      } catch (e) {
+        console.warn('SSE parse error:', e);
+      }
+    };
+
+    es.onerror = (err) => {
+      if (onError) onError(err);
+    };
+
+    return { close: () => es.close() };
   }
 
   // Stop session polling

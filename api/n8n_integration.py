@@ -24,8 +24,7 @@ class N8NIntegration:
         history: list = None
     ) -> Dict[str, Any]:
         """
-        Send document to N8N Workflow 1 - Ingestion
-        This workflow expects multipart/form-data with actual binary files
+        Send document to N8N ingestion (if used). Keeps payload keys camelCase.
         """
         try:
             # Prepare the multipart form data
@@ -40,7 +39,8 @@ class N8NIntegration:
                 'history': json.dumps(history or [])
             }
             
-            webhook_url = f"{self.n8n_url}/webhook/ingest-doc"
+            # If you later add a dedicated ingestion webhook, update the path here
+            webhook_url = f"{self.n8n_url}/webhook/pybog-analyze"
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -49,7 +49,7 @@ class N8NIntegration:
                     data=data
                 )
                 
-                if response.status_code == 200:
+                if 200 <= response.status_code < 300:
                     return {
                         "success": True,
                         "data": response.json(),
@@ -86,18 +86,17 @@ class N8NIntegration:
         conversation_history: list = None
     ) -> Dict[str, Any]:
         """
-        Trigger Workflow 2 - AnalysisChat for text analysis
+        Trigger the live Analysis workflow via /webhook/pybog-analyze.
         """
         try:
             payload = {
                 "sessionId": session_id,
-                "text": text,
+                "message": text,
                 "extracted_text": extracted_text,
                 "conversationHistory": conversation_history or []
             }
             
-            # Try the webhook trigger endpoint
-            webhook_url = f"{self.n8n_url}/webhook-test/E0he1nElaKknBqib"  # Using workflow ID
+            webhook_url = f"{self.n8n_url}/webhook/pybog-analyze"
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -105,7 +104,7 @@ class N8NIntegration:
                     json=payload
                 )
                 
-                if response.status_code == 200:
+                if 200 <= response.status_code < 300:
                     return {
                         "success": True,
                         "data": response.json(),
@@ -129,18 +128,23 @@ class N8NIntegration:
     async def approve_and_generate_bog(
         self,
         session_id: str,
-        approved: bool = True
+        approved: bool = True,
+        feedback: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Trigger the resume-chat webhook to approve analysis and generate BOG
+        Call the live Generation workflow webhook (pybog-approve).
+        If approved=True, action='approve'; otherwise action='refine'.
         """
         try:
+            action = "approve" if approved else "refine"
             payload = {
                 "sessionId": session_id,
-                "approved": approved
+                "action": action,
             }
+            if feedback:
+                payload["feedback"] = feedback
             
-            webhook_url = f"{self.n8n_url}/webhook/resume-chat"
+            webhook_url = f"{self.n8n_url}/webhook/pybog-approve"
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -148,14 +152,14 @@ class N8NIntegration:
                     json=payload
                 )
                 
-                if response.status_code == 200:
+                if 200 <= response.status_code < 300:
                     return {
                         "success": True,
                         "data": response.json(),
-                        "message": "BOG generation initiated"
+                        "message": "BOG generation initiated" if approved else "Refinement submitted"
                     }
                 else:
-                    logger.error(f"Resume webhook returned {response.status_code}: {response.text}")
+                    logger.error(f"Generation webhook returned {response.status_code}: {response.text}")
                     return {
                         "success": False,
                         "error": f"Workflow error: {response.status_code}",
@@ -163,10 +167,10 @@ class N8NIntegration:
                     }
                     
         except Exception as e:
-            logger.error(f"Failed to trigger BOG generation: {e}")
+            logger.error(f"Failed to call generation workflow: {e}")
             return {
                 "success": False,
-                "error": "Failed to trigger BOG generation",
+                "error": "Failed to call generation workflow",
                 "details": str(e)
             }
 

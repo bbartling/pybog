@@ -109,6 +109,8 @@ services:
     environment:
       - REACT_APP_API_URL=http://localhost:8000
       - REACT_APP_N8N_URL=http://localhost:5678
+      - RUNTIME_API_URL=http://localhost:8000
+      - RUNTIME_N8N_URL=http://localhost:5678
     depends_on:
       - api
       - n8n

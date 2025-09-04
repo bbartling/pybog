@@ -245,11 +245,36 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint with DB probe and optional n8n reachability."""
+    db_ok = False
+    try:
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        conn = await asyncpg.connect(db_url)
+        try:
+            row = await conn.fetchval("SELECT 1")
+            db_ok = (row == 1)
+        finally:
+            await conn.close()
+    except Exception:
+        db_ok = False
+
+    # Optional: n8n reachability (do not fail health if not reachable)
+    n8n_ok = False
+    try:
+        n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            # GET to analyze webhook (expect 404 if not POST, still proves reachability)
+            resp = await client.get(f"{n8n_url}/webhook/pybog-analyze")
+            n8n_ok = resp.status_code in (200, 401, 403, 404)
+    except Exception:
+        n8n_ok = False
+
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "service": "pybog-api",
+        "database": db_ok,
+        "n8n_reachable": n8n_ok,
         "storage": {
             "outputs": str(OUTPUTS_DIR),
             "uploads": str(UPLOADS_DIR)
@@ -466,7 +491,8 @@ async def create_session(request: CreateSessionRequest):
                 VALUES($1, $2)
                 ON CONFLICT(session_id) DO UPDATE
                 SET description = COALESCE(EXCLUDED.description, sessions.description),
-                    updated_at = NOW()
+                    updated_at = NOW(),
+                    last_activity = NOW()
                 """,
                 request.session_id,
                 request.description,
@@ -527,6 +553,246 @@ async def upload_session_file(session_id: str, file: UploadFile = File(...), ses
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sessions/recent")
+async def get_recent_sessions(limit: int = 20):
+    """List recent sessions for switcher."""
+    db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+    conn = await asyncpg.connect(db_url)
+    try:
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT session_id,
+                       COALESCE(name, description, 'New Session') AS name,
+                       COALESCE(current_state, 'idle') AS current_state,
+                       COALESCE(last_activity, updated_at, created_at, NOW()) AS last_activity
+                FROM sessions
+                ORDER BY last_activity DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+        except Exception:
+            # Fallback if columns don't exist
+            rows = await conn.fetch(
+                """
+                SELECT session_id,
+                       COALESCE(description, 'New Session') AS name,
+                       'idle' AS current_state,
+                       COALESCE(updated_at, created_at, NOW()) AS last_activity
+                FROM sessions
+                ORDER BY last_activity DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+                LIMIT $1
+                """,
+                limit,
+            )
+        return {
+            "sessions": [
+                {
+                    "session_id": r["session_id"],
+                    "name": r["name"],
+                    "current_state": r.get("current_state", "idle"),
+                    "last_activity": (r.get("last_activity") or datetime.utcnow()).isoformat(),
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        await conn.close()
+
+class PersistMessageRequest(BaseModel):
+    message_id: str
+    type: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+    session_state: Optional[str] = None
+    name: Optional[str] = None
+
+@app.post("/api/sessions/{session_id}/messages")
+async def persist_message(session_id: str, req: PersistMessageRequest):
+    """Persist a chat message and optionally update session state/name."""
+    db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+    conn = await asyncpg.connect(db_url)
+    try:
+        # Ensure base tables
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_messages (
+                id SERIAL PRIMARY KEY,
+                session_id VARCHAR(255) REFERENCES sessions(session_id) ON DELETE CASCADE,
+                message_id VARCHAR(255) UNIQUE NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                content TEXT NOT NULL,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            """
+        )
+        # Ensure session exists
+        await conn.execute(
+            "INSERT INTO sessions(session_id) VALUES($1) ON CONFLICT(session_id) DO NOTHING",
+            session_id,
+        )
+        # Insert message
+        await conn.execute(
+            """
+            INSERT INTO session_messages(session_id, message_id, type, content, metadata)
+            VALUES($1, $2, $3, $4, $5)
+            ON CONFLICT(message_id) DO NOTHING
+            """,
+            session_id,
+            req.message_id,
+            req.type,
+            req.content,
+            json.dumps(req.metadata or {}),
+        )
+        # Update session metadata
+        updates = []
+        params = []
+        if req.name:
+            updates.append("name = $%d" % (len(params)+1))
+            params.append(req.name)
+        if req.session_state:
+            updates.append("current_state = $%d" % (len(params)+1))
+            params.append(req.session_state)
+        updates.append("last_activity = NOW()")
+        if updates:
+            query = f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = $%d" % (len(params)+1)
+            params.append(session_id)
+            await conn.execute(query, *params)
+        return {"status": "ok"}
+    finally:
+        await conn.close()
+
+@app.get("/api/sessions/{session_id}/full")
+async def get_full_session(session_id: str):
+    """Return complete session restoration payload."""
+    db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+    conn = await asyncpg.connect(db_url)
+    try:
+        # Session row
+        try:
+            sess = await conn.fetchrow(
+                """
+                SELECT session_id,
+                       COALESCE(name, description, 'New Session') AS name,
+                       COALESCE(current_state, 'idle') AS current_state,
+                       COALESCE(last_activity, updated_at, created_at, NOW()) AS last_activity
+                FROM sessions
+                WHERE session_id = $1
+                """,
+                session_id,
+            )
+        except Exception:
+            sess = await conn.fetchrow(
+                """
+                SELECT session_id,
+                       COALESCE(description, 'New Session') AS name,
+                       'idle' AS current_state,
+                       COALESCE(updated_at, created_at, NOW()) AS last_activity
+                FROM sessions
+                WHERE session_id = $1
+                """,
+                session_id,
+            )
+        if not sess:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        # Messages
+        try:
+            msg_rows = await conn.fetch(
+                "SELECT message_id, type, content, metadata, created_at FROM session_messages WHERE session_id=$1 ORDER BY created_at ASC",
+                session_id,
+            )
+            messages = [
+                {
+                    "message_id": r["message_id"],
+                    "type": r["type"],
+                    "content": r["content"],
+                    "metadata": r.get("metadata") or {},
+                    "created_at": (r.get("created_at") or datetime.utcnow()).isoformat(),
+                }
+                for r in msg_rows
+            ]
+        except Exception:
+            messages = []
+        # Files
+        file_rows = await conn.fetch(
+            "SELECT id, filename, mime_type, size, path, uploaded_at FROM session_files WHERE session_id=$1 ORDER BY uploaded_at ASC",
+            session_id,
+        )
+        files = [
+            {
+                "id": r["id"],
+                "filename": r["filename"],
+                "mime_type": r["mime_type"],
+                "size": r["size"],
+                "path": r["path"],
+                "uploaded_at": (r.get("uploaded_at") or datetime.utcnow()).isoformat(),
+            }
+            for r in file_rows
+        ]
+        # Analysis latest
+        try:
+            ha = await conn.fetchrow(
+                """
+                SELECT id, state, analysis_data, bog_data, feedback, created_at, updated_at
+                FROM hvac_analysis_state
+                WHERE session_id=$1
+                ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                """,
+                session_id,
+            )
+            analysis = {
+                "id": ha["id"],
+                "state": ha["state"],
+                "analysis_data": ha.get("analysis_data") or {},
+                "bog_data": ha.get("bog_data") or {},
+                "feedback": ha.get("feedback"),
+                "created_at": (ha.get("created_at") or datetime.utcnow()).isoformat(),
+                "updated_at": (ha.get("updated_at") or datetime.utcnow()).isoformat(),
+            } if ha else None
+        except Exception:
+            analysis = None
+        # BOG files
+        try:
+            bog_rows = await conn.fetch(
+                """
+                SELECT id, bog_name, file_path, download_url, generated_at, metadata
+                FROM session_bog_files
+                WHERE session_id=$1
+                ORDER BY generated_at DESC
+                """,
+                session_id,
+            )
+            bog_files = [
+                {
+                    "id": r["id"],
+                    "bog_name": r["bog_name"],
+                    "file_path": r["file_path"],
+                    "download_url": r["download_url"],
+                    "generated_at": (r.get("generated_at") or datetime.utcnow()).isoformat(),
+                    "metadata": r.get("metadata") or {},
+                }
+                for r in bog_rows
+            ]
+        except Exception:
+            bog_files = []
+        return {
+            "session": {
+                "session_id": sess["session_id"],
+                "name": sess["name"],
+                "current_state": sess.get("current_state", "idle"),
+                "last_activity": (sess.get("last_activity") or datetime.utcnow()).isoformat(),
+            },
+            "messages": messages,
+            "files": files,
+            "analysis": analysis,
+            "bog_files": bog_files,
+        }
+    finally:
+        await conn.close()
 
 @app.get("/api/sessions/{session_id}/state", response_model=SessionStateResponse)
 async def get_session_state(session_id: str):
@@ -675,6 +941,70 @@ async def submit_feedback(session_id: str, feedback: str):
         logger.error(f"Error submitting feedback: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/analysis-progress")
+async def analysis_progress(progress: dict):
+    """Receive analysis progress updates from n8n and forward to frontend via WebSocket.
+    Expected payload: { sessionId, step: 'started'|'parsed'|'ai_processing'|'waiting_review', message? }
+    """
+    try:
+        session_id = progress.get('sessionId')
+        if not session_id:
+            raise HTTPException(status_code=400, detail="sessionId is required")
+
+        step = progress.get('step', 'started')
+        message = progress.get('message') or {
+            'started': 'Analysis started…',
+            'parsed': 'Document parsed…',
+            'ai_processing': 'AI processing…',
+            'waiting_review': 'Ready for review'
+        }.get(step, 'Working…')
+
+        # Persist as session message (best effort)
+        try:
+            db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+            conn = await asyncpg.connect(db_url)
+            try:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS session_messages (
+                        id SERIAL PRIMARY KEY,
+                        session_id VARCHAR(255) REFERENCES sessions(session_id) ON DELETE CASCADE,
+                        message_id VARCHAR(255) UNIQUE NOT NULL,
+                        type VARCHAR(50) NOT NULL,
+                        content TEXT NOT NULL,
+                        metadata JSONB DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                    """
+                )
+                msg_id = f"progress_{int(datetime.utcnow().timestamp()*1000)}"
+                await conn.execute(
+                    """
+                    INSERT INTO session_messages(session_id, message_id, type, content, metadata)
+                    VALUES($1, $2, 'system', $3, $4)
+                    ON CONFLICT(message_id) DO NOTHING
+                    """,
+                    session_id, msg_id, message, json.dumps({ 'step': step })
+                )
+            finally:
+                await conn.close()
+        except Exception:
+            pass
+
+        # Broadcast to WebSocket
+        await manager.send_message(session_id, {
+            'type': 'analysis_progress',
+            'sessionId': session_id,
+            'step': step,
+            'message': message,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        return { 'status': 'ok' }
+    except Exception as e:
+        logger.error(f"Error processing analysis progress: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/analysis-complete")
 async def analysis_complete(analysis_data: dict):
     """Receive analysis from n8n and send to frontend via WebSocket"""
@@ -725,6 +1055,21 @@ async def analysis_complete(analysis_data: dict):
         except Exception as e:
             logger.warning(f"Failed to append analysis message for session {session_id}: {e}")
         
+        # Update session state to awaiting approval
+        try:
+            db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+            conn = await asyncpg.connect(db_url)
+            try:
+                await conn.execute(
+                    "UPDATE sessions SET current_state=$1, last_activity=NOW() WHERE session_id=$2",
+                    'awaiting_approval',
+                    session_id,
+                )
+            finally:
+                await conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to update session state for {session_id}: {e}")
+
         # Send to frontend via WebSocket
         await manager.send_analysis_complete(session_id, {
             "sessionId": session_id,
@@ -766,6 +1111,59 @@ async def bog_generated(generation_data: dict):
             })
         except Exception as e:
             logger.warning(f"Failed to append artifact message for session {session_id}: {e}")
+
+        # Track BOG file in session_bog_files and mark session complete
+        try:
+            db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+            conn = await asyncpg.connect(db_url)
+            try:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS session_bog_files (
+                        id SERIAL PRIMARY KEY,
+                        session_id VARCHAR(255) REFERENCES sessions(session_id) ON DELETE CASCADE,
+                        analysis_id INTEGER,
+                        bog_name VARCHAR(255) NOT NULL,
+                        file_path TEXT NOT NULL,
+                        download_url TEXT,
+                        generated_at TIMESTAMPTZ DEFAULT NOW(),
+                        metadata JSONB DEFAULT '{}'::jsonb
+                    );
+                    """
+                )
+                # Derive bog_name and file_path heuristically
+                bog_name = None
+                file_path = None
+                try:
+                    if download_url:
+                        # If it's a path like /api/download/{session}/{filename}
+                        parts = str(download_url).split('/')
+                        if len(parts) >= 2:
+                            bog_name = parts[-1]
+                except Exception:
+                    pass
+                bog_name = bog_name or f"hvac_control_{session_id}"
+                file_path = file_path or ''
+                await conn.execute(
+                    """
+                    INSERT INTO session_bog_files(session_id, bog_name, file_path, download_url, metadata)
+                    VALUES($1, $2, $3, $4, $5)
+                    """,
+                    session_id,
+                    bog_name,
+                    file_path,
+                    download_url,
+                    json.dumps({"message": message}),
+                )
+                await conn.execute(
+                    "UPDATE sessions SET current_state=$1, last_activity=NOW() WHERE session_id=$2",
+                    'complete',
+                    session_id,
+                )
+            finally:
+                await conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to record BOG file for {session_id}: {e}")
         
         # Send to frontend via WebSocket
         await manager.send_bog_generated(session_id, download_url, message)

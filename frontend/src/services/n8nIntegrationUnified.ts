@@ -1,10 +1,18 @@
 // n8nIntegrationUnified.ts - Unified n8n workflow integration for PyBOG
 import { useState, useCallback, useEffect } from 'react';
-import apiService from './apiService';
 
 // Unified response interface for all workflow operations
 interface WorkflowResponse {
-  status: 'extraction_complete' | 'analysis_complete' | 'ready_for_review' | 'generation_complete' | 'chat_response' | 'ready' | 'error';
+  status:
+    | 'extraction_complete'
+    | 'analysis_complete'
+    | 'ready_for_review'
+    | 'generation_complete'
+    | 'complete'
+    | 'refinement_requested'
+    | 'chat_response'
+    | 'ready'
+    | 'error';
   sessionId: string;
   message: string;
   extractedText?: string;
@@ -12,10 +20,13 @@ interface WorkflowResponse {
   analysis?: {
     inputs: string[];
     outputs: string[];
-    controlBlocks: string[];
-    pseudocode: Array<{block: string, logic: string[]}>;
+    control_blocks?: string[];
+    controlBlocks?: string[];
+    pseudocode: Array<{ block: string; logic: string[] }>;
     issues: string[];
   };
+  actions?: any;
+  success?: boolean;
   downloadUrl?: string;
   bogFilePath?: string;
   components?: {
@@ -47,7 +58,8 @@ interface SessionData {
 export class UnifiedN8NService {
   private baseUrl: string;
   private n8nUrl: string;
-  private unifiedWebhookPath: string = '/webhook/pybog-main';  // Direct n8n webhook path
+  private analysisWebhookPath: string = '/webhook/pybog-analyze';    // NEW: Analysis workflow
+  private approvalWebhookPath: string = '/webhook/pybog-approve';    // NEW: Generation/approval workflow
   private sessionId: string | null = null;
   private chatHistory: ChatMessage[] = [];
   private currentAnalysis: WorkflowResponse['analysis'] | null = null;
@@ -62,46 +74,33 @@ export class UnifiedN8NService {
    * Upload and process a document through the unified workflow
    */
   async uploadDocument(file: File): Promise<WorkflowResponse> {
-    // Generate new session if needed
     if (!this.sessionId) {
       this.sessionId = this.generateSessionId();
     }
 
-    // Ensure a session row exists (optional, for history completeness)
-    try { 
-      await apiService.createSession(this.sessionId!, `Uploading document: ${file.name}`);
-    } catch (error) {
-      // Session might already exist, that's ok
-      console.log('Session creation skipped:', error);
-    }
-
     try {
-      // 1) Convert file to text first
-      const extractedText = await apiService.fileToText(file);
-      this.addToChat('system', `Document "${file.name}" processed.`);
+      // Create FormData with binary file support
+      const formData = new FormData();
+      formData.append('files', file);
+      formData.append('sessionId', this.sessionId);
+      formData.append('message', `Analyze HVAC sequence from: ${file.name}`);
+      formData.append('action', 'analyze');
 
-      // 2) Trigger unified workflow with extracted text
-      const payload = {
-        sessionId: this.sessionId,
-        action: 'analyze',
-        message: `Analyze HVAC control sequence from uploaded document: ${file.name}`,
-        extractedText: extractedText || ''
-      };
-
-      const response = await fetch(`${this.n8nUrl}${this.unifiedWebhookPath}`, {
+      // Call Analysis Workflow (NEW ENDPOINT)
+      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: formData
       });
 
       if (!response.ok) {
-        throw new Error(`Workflow trigger failed: ${response.statusText}`);
+        throw new Error(`Analysis workflow failed: ${response.statusText}`);
       }
 
       const data: WorkflowResponse = await response.json();
 
-      if ((data.status === 'analysis_complete' || data.status === 'ready_for_review') && data.analysis) {
+      if (data.status === 'ready_for_review' && data.analysis) {
         this.currentAnalysis = data.analysis;
+        if (data.message) this.addToChat('assistant', data.message);
       }
 
       this.saveSession(data);
@@ -131,31 +130,28 @@ export class UnifiedN8NService {
     };
 
     try {
-      const response = await fetch(`${this.n8nUrl}${this.unifiedWebhookPath}`, {
+      // Call Analysis Workflow (NEW ENDPOINT)
+      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error(`Request failed: ${response.statusText}`);
+        throw new Error(`Analysis workflow failed: ${response.statusText}`);
       }
 
       const data: WorkflowResponse = await response.json();
-      
-      // Add response to chat
+
       if (data.message) {
         this.addToChat('assistant', data.message);
       }
-      
-      // Store analysis results
-      if ((data.status === 'analysis_complete' || data.status === 'ready_for_review') && data.analysis) {
+
+      if (data.status === 'ready_for_review' && data.analysis) {
         this.currentAnalysis = data.analysis;
         this.saveSession(data);
       }
-      
+
       return data;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -168,31 +164,29 @@ export class UnifiedN8NService {
    * Approve the current analysis and generate BOG
    */
   async approveAnalysis(): Promise<WorkflowResponse> {
-    if (!this.sessionId || !this.currentAnalysis) {
-      throw new Error('No analysis to approve');
+    if (!this.sessionId) {
+      throw new Error('No session available');
     }
-    
+
     const payload = {
       sessionId: this.sessionId,
-      action: 'approve',
-      analysis: this.currentAnalysis
+      action: 'approve'
     };
-    
+
     try {
-      const response = await fetch(`${this.n8nUrl}${this.unifiedWebhookPath}`, {
+      // Call Generation Workflow (NEW ENDPOINT)
+      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       if (!response.ok) {
-        throw new Error(`Approval failed: ${response.statusText}`);
+        throw new Error(`Generation workflow failed: ${response.statusText}`);
       }
-      
+
       const data: WorkflowResponse = await response.json();
-      this.addToChat('system', 'Generating BOG file...');
+      this.addToChat('assistant', data.message || 'BOG generation started...');
       return data;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -205,38 +199,30 @@ export class UnifiedN8NService {
    * Request changes to the analysis with feedback
    */
   async requestChanges(feedback: string): Promise<WorkflowResponse> {
-    if (!this.sessionId || !this.currentAnalysis) {
-      throw new Error('No analysis to refine');
+    if (!this.sessionId) {
+      throw new Error('No session available');
     }
-    
+
     const payload = {
       sessionId: this.sessionId,
       action: 'refine',
-      feedback: feedback,
-      priorAnalysis: this.currentAnalysis,
-      message: feedback
+      feedback: feedback
     };
-    
+
     try {
-      const response = await fetch(`${this.n8nUrl}${this.unifiedWebhookPath}`, {
+      // Call Generation Workflow (NEW ENDPOINT)
+      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       if (!response.ok) {
-        throw new Error(`Refinement failed: ${response.statusText}`);
+        throw new Error(`Refinement workflow failed: ${response.statusText}`);
       }
-      
+
       const data: WorkflowResponse = await response.json();
-      
-      if (data.analysis) {
-        this.currentAnalysis = data.analysis;
-        this.addToChat('system', 'Analysis refined based on your feedback.');
-      }
-      
+      this.addToChat('assistant', data.message || 'Refinement processed...');
       return data;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -257,7 +243,7 @@ export class UnifiedN8NService {
     };
 
     try {
-      const response = await fetch(`${this.n8nUrl}${this.unifiedWebhookPath}`, {
+      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -289,20 +275,19 @@ export class UnifiedN8NService {
    * Generate BOG file from current analysis
    */
   async generateBOG(): Promise<WorkflowResponse> {
-    if (!this.sessionId || !this.currentAnalysis) {
-      throw new Error('No analysis available. Please upload and analyze a document first.');
+    if (!this.sessionId) {
+      throw new Error('No session available');
     }
 
     this.addToChat('user', 'Generate BOG file from analysis');
 
     const payload = {
       sessionId: this.sessionId,
-      action: 'generate',
-      ...this.currentAnalysis  // Include analysis data
+      action: 'approve'
     };
 
     try {
-      const response = await fetch(`${this.baseUrl}${this.unifiedWebhookPath}`, {
+      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -316,7 +301,7 @@ export class UnifiedN8NService {
 
       const data: WorkflowResponse = await response.json();
       
-      if (data.status === 'generation_complete' && data.downloadUrl) {
+      if (data.status === 'complete' && data.downloadUrl) {
         this.addToChat('system', `BOG file generated successfully! [Download](${data.downloadUrl})`);
         this.saveSession(data);
       }

@@ -8,8 +8,9 @@ from pydantic import BaseModel
 
 import os
 import httpx
+from fastapi.responses import StreamingResponse
 
-from ..n8n_resume import resume_workflow, list_messages, append_message
+from ..n8n_resume import resume_workflow, list_messages, append_message, event_stream
 
 router = APIRouter(prefix="/api", tags=["conversation"])
 
@@ -37,9 +38,9 @@ async def approve_session(session_id: str, payload: FeedbackPayload | None = Non
         {"action": "approved", "feedback": feedback, "sessionId": session_id},
     )
     if not result.get("success"):
-        # Fallback: call main webhook with approve action if no resume URL is stored
+        # Fallback: call live generation webhook with approve action if no resume URL is stored
         n8n_url = os.getenv("N8N_URL", "http://n8n:5678")
-        webhook = f"{n8n_url}/webhook/pybog-main"
+        webhook = f"{n8n_url}/webhook/pybog-approve"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(webhook, json={
                 "sessionId": session_id,
@@ -71,9 +72,9 @@ async def request_changes(session_id: str, payload: FeedbackPayload | None = Non
         {"action": "changes_requested", "feedback": feedback, "sessionId": session_id},
     )
     if not result.get("success"):
-        # Fallback: call main webhook with refine action
+        # Fallback: call live generation webhook with refine action
         n8n_url = os.getenv("N8N_URL", "http://n8n:5678")
-        webhook = f"{n8n_url}/webhook/pybog-main"
+        webhook = f"{n8n_url}/webhook/pybog-approve"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(webhook, json={
                 "sessionId": session_id,
@@ -91,3 +92,21 @@ async def get_session_messages(session_id: str, limit: int = Query(100, ge=1, le
     """Polling fallback to retrieve recent chat messages for a session."""
     msgs = await list_messages(session_id, limit=limit)
     return {"sessionId": session_id, "messages": msgs}
+
+
+@router.get("/session/{session_id}/events")
+async def stream_session_events(session_id: str):
+    """Server-Sent Events stream for live workflow progress/messages."""
+    return StreamingResponse(event_stream(session_id), media_type="text/event-stream")
+
+
+@router.post("/session/{session_id}/events")
+async def post_session_event(session_id: str, payload: dict):
+    """Allow n8n or the API to push progress events that stream to clients."""
+    # Normalize minimal shape
+    payload = {
+        **payload,
+        "timestamp": payload.get("timestamp") or datetime.utcnow().isoformat(),
+    }
+    await append_message(session_id, payload)
+    return {"ok": True, "sessionId": session_id}
