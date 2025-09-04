@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [workflowState, setWorkflowState] = useState<'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete'>('idle');
   const [focusMessageId, setFocusMessageId] = useState<string | undefined>(undefined);
+  const [highlightTarget, setHighlightTarget] = useState<{kind:'analysis'|'block'|'input'|'output', label?: string}|undefined>(undefined);
 
   const n8nService = useRef(new UnifiedN8NService());
   
@@ -351,12 +352,14 @@ const App: React.FC = () => {
         currentAnalysis={currentAnalysis}
         analysisMessageId={analysisMessageId}
         focusMessageId={focusMessageId}
+        highlightTarget={highlightTarget}
         
         // actions
         onSendMessage={handleSendMessage}
         onApproveAnalysis={handleApproveAnalysis}
         onRequestChanges={handleRequestChanges}
         onNavigateToMessage={(id) => setFocusMessageId(id)}
+        onNavigateToItem={(target) => { setFocusMessageId(analysisMessageId || ''); setHighlightTarget(target); }}
         
         // session manager
         sessions={Object.values(sessions).map(s => ({ id: s.id, name: s.name, createdAt: s.createdAt }))}

@@ -43,6 +43,11 @@ export interface ChatMessage {
   };
 }
 
+interface HighlightTarget {
+  kind: 'analysis' | 'block' | 'input' | 'output';
+  label?: string;
+}
+
 interface ChatCanvasProps {
   messages: ChatMessage[];
   onApproveAnalysis: () => void;
@@ -50,6 +55,7 @@ interface ChatCanvasProps {
   workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
   sessionId: string;
   focusMessageId?: string;
+  highlightTarget?: HighlightTarget;
 }
 
 const ChatCanvas: React.FC<ChatCanvasProps> = ({
@@ -59,10 +65,12 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
   workflowState,
   sessionId,
   focusMessageId,
+  highlightTarget,
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { setCenter } = useReactFlow();
+  const HIGHLIGHT_MS = 1200;
 
   // Convert messages to ReactFlow nodes with zigzag pattern
   useEffect(() => {
@@ -138,12 +146,13 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       
       // Create curved edge to previous message for zigzag flow
       if (index > 0) {
+        const isLastLink = index === messages.length - 1;
         const edge: Edge = {
           id: `e${messages[index - 1].id}-${message.id}`,
           source: messages[index - 1].id,
           target: message.id,
           type: 'smoothstep',
-          animated: workflowState === 'analyzing' || workflowState === 'generating',
+          animated: isLastLink && (workflowState === 'analyzing' || workflowState === 'generating'),
           style: {
             stroke: workflowState === 'analyzing' ? '#f59e0b' : 
                    workflowState === 'generating' ? '#10b981' : '#64748b',
@@ -177,12 +186,37 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     if (!focusMessageId) return;
     const node = nodes.find((n) => n.id === focusMessageId);
     if (node) {
-      // Center roughly on the node position; tweak offsets for better centering
-      const centerX = node.position.x + 160; // half of node width
-      const centerY = node.position.y + 80;  // approximate half of node height
+      const centerX = node.position.x + 160;
+      const centerY = node.position.y + 80;
       setCenter(centerX, centerY, { zoom: 1.1, duration: 500 });
     }
   }, [focusMessageId, nodes, setCenter]);
+
+  // Highlight analysis node when a specific tree item is selected
+  useEffect(() => {
+    if (!highlightTarget) return;
+    const analysisNode = nodes.find((n) => n.type === 'analysisMessage');
+    if (!analysisNode) return;
+
+    // center on analysis node and set temporary highlight flag
+    const centerX = analysisNode.position.x + 160;
+    const centerY = analysisNode.position.y + 80;
+    setCenter(centerX, centerY, { zoom: 1.1, duration: 400 });
+
+    setNodes((nds) => nds.map(n => n.id === analysisNode.id ? {
+      ...n,
+      data: { ...(n.data as any), processing: true, highlightLabel: highlightTarget.label }
+    } : n));
+
+    const t = setTimeout(() => {
+      setNodes((nds) => nds.map(n => n.id === analysisNode.id ? {
+        ...n,
+        data: { ...(n.data as any), processing: false, highlightLabel: undefined }
+      } : n));
+    }, HIGHLIGHT_MS);
+
+    return () => clearTimeout(t);
+  }, [highlightTarget, setCenter, setNodes, nodes]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>

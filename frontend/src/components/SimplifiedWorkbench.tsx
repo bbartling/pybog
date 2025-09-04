@@ -33,12 +33,14 @@ interface SimplifiedWorkbenchProps {
   currentAnalysis?: any;
   analysisMessageId?: string;
   focusMessageId?: string;
+  highlightTarget?: { kind: 'analysis' | 'block' | 'input' | 'output'; label?: string };
   
   // actions
   onSendMessage: (text: string, files: File[]) => void;
   onApproveAnalysis: () => void;
   onRequestChanges: (feedback: string) => void;
   onNavigateToMessage: (messageId: string) => void;
+  onNavigateToItem: (target: { kind: 'input' | 'output' | 'block'; label: string }) => void;
   
   // session manager
   sessions: SessionSummary[];
@@ -57,12 +59,14 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
   currentAnalysis,
   analysisMessageId,
   focusMessageId,
+  highlightTarget,
   
   // actions
   onSendMessage,
   onApproveAnalysis,
   onRequestChanges,
   onNavigateToMessage,
+  onNavigateToItem,
   
   // session manager
   sessions,
@@ -73,7 +77,7 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['sessions', 'files', 'project-tree']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['sessions', 'files', 'project-tree', 'io-group', 'io-inputs', 'io-outputs', 'blocks']));
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set([activeSessionId]));
   const [confirmDelete, setConfirmDelete] = useState<{open: boolean; sessionId?: string}>({open: false});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -272,19 +276,43 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
                                     <span>Analysis</span>
                                   </div>
                                   <div className="nav-section-content">
-                                    {/* I/O Points counts */}
+                                    {/* I/O Points counts and lists */}
                                     <div className="io-group">
-                                      <span className="io-group-label">I/O Points</span>
-                                      <div className="nav-io-point input" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
-                                        <span className="io-indicator">●</span>
-                                        <span>Inputs</span>
-                                        <span className="io-type">{ioPoints.filter(p => p.type==='input').length}</span>
+                                      <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-group')}}>
+                                        {expandedSections.has('io-group') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>I/O Points</span>
                                       </div>
-                                      <div className="nav-io-point output" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
-                                        <span className="io-indicator">●</span>
-                                        <span>Outputs</span>
-                                        <span className="io-type">{ioPoints.filter(p => p.type==='output').length}</span>
-                                      </div>
+                                      {expandedSections.has('io-group') && (
+                                        <div className="nav-section-content">
+                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-inputs')}}>
+                                            {expandedSections.has('io-inputs') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>Inputs ({ioPoints.filter(p=>p.type==='input').length})</span>
+                                          </div>
+                                          {expandedSections.has('io-inputs') && (
+                                            <div className="nav-section-content">
+                                              {ioPoints.filter(p=>p.type==='input').slice(0,10).map(p => (
+                                                <div key={p.id} className="nav-io-point input" onClick={() => onNavigateToItem({kind:'input', label:p.name})}>
+                                                  <span className="io-indicator">→</span>
+                                                  <span>{p.name}</span>
+                                                  <span className="io-type">{p.dataType}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-outputs')}}>
+                                            {expandedSections.has('io-outputs') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>Outputs ({ioPoints.filter(p=>p.type==='output').length})</span>
+                                          </div>
+                                          {expandedSections.has('io-outputs') && (
+                                            <div className="nav-section-content">
+                                              {ioPoints.filter(p=>p.type==='output').slice(0,10).map(p => (
+                                                <div key={p.id} className="nav-io-point output" onClick={() => onNavigateToItem({kind:'output', label:p.name})}>
+                                                  <span className="io-indicator">←</span>
+                                                  <span>{p.name}</span>
+                                                  <span className="io-type">{p.dataType}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                     {/* Functional Blocks */}
                                     {(() => {
@@ -294,13 +322,20 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
                                         || []);
                                       return (
                                         <div className="io-group">
-                                          <span className="io-group-label">Functional Blocks ({blocks?.length || 0})</span>
-                                          {(blocks || []).slice(0, 6).map((b: any, idx: number) => (
-                                            <div key={`blk-${idx}`} className="nav-io-point" onClick={() => analysisMessageId && onNavigateToMessage(analysisMessageId)}>
-                                              <span className="io-indicator">■</span>
-                                              <span>{typeof b === 'string' ? b : (b?.name || 'Block')}</span>
+                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('blocks')}}>
+                                            {expandedSections.has('blocks') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
+                                            <span>Functional Blocks ({blocks?.length || 0})</span>
+                                          </div>
+                                          {expandedSections.has('blocks') && (
+                                            <div className="nav-section-content">
+                                              {(blocks || []).slice(0, 20).map((b: any, idx: number) => (
+                                                <div key={`blk-${idx}`} className="nav-io-point" onClick={() => onNavigateToItem({kind:'block', label: (typeof b === 'string' ? b : (b?.name || 'Block'))})}>
+                                                  <span className="io-indicator">■</span>
+                                                  <span>{typeof b === 'string' ? b : (b?.name || 'Block')}</span>
+                                                </div>
+                                              ))}
                                             </div>
-                                          ))}
+                                          )}
                                         </div>
                                       );
                                     })()}
