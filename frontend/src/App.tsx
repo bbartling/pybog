@@ -23,7 +23,15 @@ const App: React.FC = () => {
 
   // UI state
   const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
-  const [isConsoleOpen, setIsConsoleOpen] = useState(true);
+  // Console defaults: collapsed in production, remember user preference
+  const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('pybog_console_open');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    // Default: open in development, collapsed in production
+    return process.env.NODE_ENV !== 'production';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [workflowState, setWorkflowState] = useState<'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete'>('idle');
   const [focusMessageId, setFocusMessageId] = useState<string | undefined>(undefined);
@@ -86,6 +94,11 @@ const App: React.FC = () => {
       addConsoleMessage('success', 'WebSocket', 'Real-time updates enabled');
     }, 1000);
   }, [addConsoleMessage]);
+
+  // Persist console preference
+  useEffect(() => {
+    try { localStorage.setItem('pybog_console_open', String(isConsoleOpen)); } catch {}
+  }, [isConsoleOpen]);
 
   // Session actions
   const createSession = useCallback(() => {

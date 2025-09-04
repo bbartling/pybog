@@ -20,13 +20,13 @@ const StatusNode: React.FC<NodeProps<StatusData>> = ({ data }) => {
       position: 'relative'
     }}>
       <div style={{
-        background: '#dbeafe',
-        color: '#1d4ed8',
+        background: '#e6ebf5',
+        color: '#334155',
         fontWeight: 700,
         padding: '6px 10px',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        borderBottom: '1px solid #bfdbfe'
+        borderBottom: '1px solid #cbd5e1'
       }}>System</div>
       <div style={{ padding: '8px 12px', whiteSpace: 'pre-wrap' }}>{data?.content || ''}</div>
       {time && (

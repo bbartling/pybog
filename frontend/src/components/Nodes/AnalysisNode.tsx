@@ -48,7 +48,7 @@ const AnalysisNode: React.FC<NodeProps<AnalysisData>> = ({ data }) => {
       position: 'relative'
     }}>
       <div style={{
-        background: '#d1fae5',
+        background: '#e9f7ef',
         color: '#065f46',
         fontWeight: 800,
         padding: '6px 10px',

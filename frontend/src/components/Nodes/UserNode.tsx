@@ -21,13 +21,13 @@ const UserNode: React.FC<NodeProps<UserData>> = ({ data }) => {
       position: 'relative'
     }}>
       <div style={{
-        background: '#ede9fe',
-        color: '#5b21b6',
+        background: '#e7e7fb',
+        color: '#4338ca',
         fontWeight: 700,
         padding: '6px 10px',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        borderBottom: '1px solid #e9d5ff'
+        borderBottom: '1px solid #c7d2fe'
       }}>User</div>
       <div style={{ padding: '8px 12px', whiteSpace: 'pre-wrap' }}>{data?.content || ''}</div>
       {data?.files && data.files.length > 0 && (

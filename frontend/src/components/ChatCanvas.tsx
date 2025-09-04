@@ -4,6 +4,7 @@ import ReactFlow, {
   Edge,
   Controls,
   Background,
+  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -69,7 +70,7 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { setCenter } = useReactFlow();
+  const { setCenter, fitView } = useReactFlow();
   const HIGHLIGHT_MS = 1200;
 
   // Convert messages to ReactFlow nodes with zigzag pattern
@@ -77,8 +78,8 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
     
-    // Calculate viewport width for proper spacing
-    const viewportWidth = window.innerWidth - 300; // Subtract sidebar width
+    // Calculate viewport width for proper spacing (match compact 240px sidebar + padding)
+    const viewportWidth = window.innerWidth - 260; // Subtract sidebar width
     const nodeWidth = 320;
     const horizontalSpacing = (viewportWidth - nodeWidth) / 2;
     
@@ -93,9 +94,9 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       if (isAnalysis || isArtifact) {
         xPosition = horizontalSpacing; // Center
       } else if (isUser) {
-        xPosition = viewportWidth - nodeWidth - 100; // Right side
+        xPosition = viewportWidth - nodeWidth - 40; // Right margin tighter
       } else {
-        xPosition = 100; // Left side (system/assistant)
+        xPosition = 40; // Left margin tighter
       }
       
       // Determine node type based on message
@@ -245,26 +246,28 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       // Create curved edge to previous message for zigzag flow
       if (index > 0) {
         const isLastLink = index === messages.length - 1;
+        const isProcessing = workflowState === 'analyzing' || workflowState === 'generating';
         const edge: Edge = {
           id: `e${messages[index - 1].id}-${message.id}`,
           source: messages[index - 1].id,
           target: message.id,
-          type: 'smoothstep',
-          animated: isLastLink && (workflowState === 'analyzing' || workflowState === 'generating'),
+          type: 'bezier',
+          animated: isProcessing && (isLastLink || index === messages.length - 2),
           style: {
             stroke: workflowState === 'analyzing' ? '#f59e0b' : 
-                   workflowState === 'generating' ? '#10b981' : '#64748b',
-            strokeWidth: 2,
-            strokeDasharray: workflowState === 'idle' ? '6,6' : '0',
+                   workflowState === 'generating' ? '#10b981' : '#6b7280',
+            strokeWidth: 2.25,
+            strokeDasharray: isProcessing ? '5,5' : '0',
+            opacity: isLastLink ? 1 : 0.8,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: '#64748b',
-            width: 16,
-            height: 16,
+            color: '#6b7280',
+            width: 14,
+            height: 14,
           },
-          labelStyle: { fill: '#6b7280', fontWeight: 700 },
-          labelBgStyle: { fill: '#f3f4f6', fillOpacity: 0.8 },
+          labelStyle: { fill: '#64748b', fontWeight: 600 },
+          labelBgStyle: { fill: '#eef2ff', fillOpacity: 0.7 },
         };
         flowEdges.push(edge);
       }
@@ -289,6 +292,38 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
       setCenter(centerX, centerY, { zoom: 1.1, duration: 500 });
     }
   }, [focusMessageId, nodes, setCenter]);
+
+  // Fit the most recent 4 conversation nodes to keep context in view
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    const recentIds = messages.slice(-4).map(m => m.id);
+    const targets = nodes.filter(n => recentIds.includes(n.id));
+    if (targets.length > 0) {
+      try {
+        // Prefer native fitView over manual centering
+        fitView({ nodes: targets, padding: 0.15, maxZoom: 1.2, duration: 500 });
+      } catch {
+        // Fallback: center on last node if fitView signature differs
+        const last = targets[targets.length - 1];
+        const cx = last.position.x + 160;
+        const cy = last.position.y + 80;
+        setCenter(cx, cy, { zoom: 1.0, duration: 450 });
+      }
+    }
+  }, [messages, nodes, fitView, setCenter]);
+
+  // During processing, nudge zoom slightly and keep the recent context visible
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    if (workflowState === 'analyzing' || workflowState === 'generating') {
+      const recentIds = messages.slice(-4).map(m => m.id);
+      const targets = nodes.filter(n => recentIds.includes(n.id));
+      if (targets.length > 0) {
+        try { fitView({ nodes: targets, padding: 0.18, maxZoom: 1.2, duration: 380 }); }
+        catch {}
+      }
+    }
+  }, [workflowState, messages, nodes, fitView]);
 
   // Highlight node by tree item; fallback to analysis node
   useEffect(() => {
@@ -327,10 +362,13 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.1, maxZoom: 1.2 }}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
+        fitViewOptions={{ padding: 0.08, maxZoom: 1.3 }}
+        defaultViewport={{ x: 0, y: 0, zoom: 1.0 }}
         minZoom={0.5}
-        maxZoom={1.5}
+        maxZoom={1.6}
+        panOnScroll
+        panOnDrag
+        zoomOnPinch
         attributionPosition="bottom-left"
       >
         <Background 
@@ -339,7 +377,8 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           size={1}
           color="#ededed"
         />
-        <Controls showInteractive={false} />
+        <MiniMap position="top-right" style={{ height: 120, width: 180 }} zoomable pannable />
+        <Controls showInteractive={true} />
       </ReactFlow>
     </div>
   );

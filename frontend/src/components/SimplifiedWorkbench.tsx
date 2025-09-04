@@ -5,6 +5,7 @@ import {
   Database, AlertCircle, Plus, Trash2, FolderTree
 } from 'lucide-react';
 import ChatCanvas, { ChatMessage } from './ChatCanvas';
+import Tree, { TreeItemData } from './Tree';
 import './SimplifiedWorkbench.css';
 import { ReactFlowProvider } from 'reactflow';
 import ConfirmModal from './ConfirmModal';
@@ -122,6 +123,11 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
       uploadedAt: new Date()
     }));
 
+  // Collect BOG artifacts produced in this session
+  const bogFiles = messages
+    .filter(m => !!m.metadata?.downloadUrl)
+    .map((m, idx) => ({ id: m.id, name: (m.metadata as any)?.fileName || `BOG_${idx + 1}.json`, url: (m.metadata as any)?.downloadUrl as string }));
+
 
   // Normalize analysis I/O into IOPoint[]
   const ioPoints: IOPoint[] = [];
@@ -217,141 +223,118 @@ const SimplifiedWorkbench: React.FC<SimplifiedWorkbenchProps> = ({
                   {sessions.length === 0 ? (
                     <div className="nav-empty">No sessions</div>
                   ) : (
-                    sessions.map((s) => {
-                      const expanded = expandedSessionIds.has(s.id);
-                      const isActive = s.id === activeSessionId;
-                      const onToggle = (e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        setExpandedSessionIds(prev => {
-                          const ns = new Set(prev);
-                          ns.has(s.id) ? ns.delete(s.id) : ns.add(s.id);
-                          return ns;
+                    (() => {
+                      const items: TreeItemData[] = sessions.map((s) => {
+                        const expanded = expandedSessionIds.has(s.id);
+                        const isActive = s.id === activeSessionId;
+
+                        // children for this session
+                        const sessionChildren: TreeItemData[] = [];
+
+                        // Uploads
+                        sessionChildren.push({
+                          id: `${s.id}-uploads`,
+                          label: 'Uploads',
+                          icon: <Folder size={12} />,
+                          count: uploadedFiles.length,
+                          expanded: true,
+                          children: uploadedFiles.length
+                            ? uploadedFiles.map(f => ({
+                                id: `${s.id}-file-${f.id}`,
+                                label: f.name,
+                                icon: <FileText size={12} />,
+                                onClick: () => {},
+                              }))
+                            : [{ id: `${s.id}-uploads-empty`, label: 'No files uploaded', muted: true }],
                         });
-                      };
-                      return (
-                        <div key={s.id}>
-                          <div 
-                            className={`nav-session ${isActive ? 'active' : ''}`}
-                            onClick={() => onSwitchSession(s.id)}
-                          >
-                            <span onClick={onToggle} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                              <span className="session-name">{s.name || s.id}</span>
-                            </span>
-                            <span className="session-time">{new Date(s.createdAt).toLocaleString()}</span>
-                            <button 
-                              className="session-delete"
-                              title="Remove session"
-                              onClick={(e) => { e.stopPropagation(); setConfirmDelete({open: true, sessionId: s.id}); }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                          {expanded && (
-                            <div className="nav-section-content">
-                              {/* Uploaded Files under this session */}
-                              <div className="nav-section">
-                                <div className="nav-section-header" onClick={(e) => e.stopPropagation()}>
-                                  <Folder size={14} />
-                                  <span>Uploads ({uploadedFiles.length})</span>
-                                </div>
-                                <div className="nav-section-content">
-                                  {uploadedFiles.length === 0 ? (
-                                    <div className="nav-empty">No files uploaded</div>
-                                  ) : (
-                                    uploadedFiles.map(file => (
-                                      <div key={file.id} className="nav-file">
-                                        <FileText size={12} />
-                                        <span>{file.name}</span>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                              {/* Analysis tree for ACTIVE session only */}
-                              {s.id === activeSessionId && currentAnalysis && (
-                                <div className="nav-section">
-                                  <div className="nav-section-header" onClick={(e) => e.stopPropagation()}>
-                                    <Database size={14} />
-                                    <span>Analysis</span>
-                                  </div>
-                                  <div className="nav-section-content">
-                                    {/* I/O Points counts and lists */}
-                                    <div className="io-group">
-                                      <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-group')}}>
-                                        {expandedSections.has('io-group') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>I/O Points</span>
-                                      </div>
-                                      {expandedSections.has('io-group') && (
-                                        <div className="nav-section-content">
-                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-inputs')}}>
-                                            {expandedSections.has('io-inputs') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>Inputs ({ioPoints.filter(p=>p.type==='input').length})</span>
-                                          </div>
-                                          {expandedSections.has('io-inputs') && (
-                                            <div className="nav-section-content">
-                                              {ioPoints.filter(p=>p.type==='input').slice(0,10).map(p => (
-                                                <div key={p.id} className="nav-io-point input" onClick={() => onNavigateToItem({kind:'input', label:p.name})}>
-                                                  <span className="io-indicator">→</span>
-                                                  <span>{p.name}</span>
-                                                  <span className="io-type">{p.dataType}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('io-outputs')}}>
-                                            {expandedSections.has('io-outputs') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}<span>Outputs ({ioPoints.filter(p=>p.type==='output').length})</span>
-                                          </div>
-                                          {expandedSections.has('io-outputs') && (
-                                            <div className="nav-section-content">
-                                              {ioPoints.filter(p=>p.type==='output').slice(0,10).map(p => (
-                                                <div key={p.id} className="nav-io-point output" onClick={() => onNavigateToItem({kind:'output', label:p.name})}>
-                                                  <span className="io-indicator">←</span>
-                                                  <span>{p.name}</span>
-                                                  <span className="io-type">{p.dataType}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {/* Functional Blocks */}
-                                    {(() => {
-                                      const blocks: any[] = (currentAnalysis?.blocks
-                                        || currentAnalysis?.functional_blocks
-                                        || currentAnalysis?.controlBlocks
-                                        || []);
-                                      return (
-                                        <div className="io-group">
-                                          <div className="nav-section-header" onClick={(e)=>{e.stopPropagation(); toggleSection('blocks')}}>
-                                            {expandedSections.has('blocks') ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
-                                            <span>Functional Blocks ({blocks?.length || 0})</span>
-                                          </div>
-                                          {expandedSections.has('blocks') && (
-                                            <div className="nav-section-content">
-                                              {(blocks || []).slice(0, 20).map((b: any, idx: number) => (
-                                                <div key={`blk-${idx}`} className="nav-io-point" onClick={() => onNavigateToItem({kind:'block', label: (typeof b === 'string' ? b : (b?.name || 'Block'))})}>
-                                                  <span className="io-indicator">■</span>
-                                                  <span>{typeof b === 'string' ? b : (b?.name || 'Block')}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                    {/* BOG Files placeholder */}
-                                    <div className="io-group">
-                                      <span className="io-group-label">BOG Files</span>
-                                      <div className="nav-empty">No files yet</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+
+                        // Analysis (active session only)
+                        if (s.id === activeSessionId && currentAnalysis) {
+                          const inputs = ioPoints.filter(p=>p.type==='input');
+                          const outputs = ioPoints.filter(p=>p.type==='output');
+                          const blocks: any[] = (currentAnalysis?.blocks || currentAnalysis?.functional_blocks || currentAnalysis?.controlBlocks || []);
+
+                          const analysisChildren: TreeItemData[] = [
+                            {
+                              id: `${s.id}-io`,
+                              label: 'I/O Points',
+                              icon: <Database size={12} />,
+                              expanded: true,
+                              children: [
+                                {
+                                  id: `${s.id}-inputs`,
+                                  label: 'Inputs',
+                                  count: inputs.length,
+                                  expanded: true,
+                                  children: inputs.slice(0,10).map(p => ({
+                                    id: `${s.id}-in-${p.id}`,
+                                    label: typeof p === 'string' ? String(p) : p.name,
+                                    className: 'nav-io-point input',
+                                    onClick: () => onNavigateToItem({kind:'input', label: (p as any).name || String(p)}),
+                                  }))
+                                },
+                                {
+                                  id: `${s.id}-outputs`,
+                                  label: 'Outputs',
+                                  count: outputs.length,
+                                  expanded: true,
+                                  children: outputs.slice(0,10).map(p => ({
+                                    id: `${s.id}-out-${p.id}`,
+                                    label: typeof p === 'string' ? String(p) : p.name,
+                                    className: 'nav-io-point output',
+                                    onClick: () => onNavigateToItem({kind:'output', label: (p as any).name || String(p)}),
+                                  }))
+                                }
+                              ]
+                            },
+                            {
+                              id: `${s.id}-blocks`,
+                              label: 'Functional Blocks',
+                              count: blocks?.length || 0,
+                              expanded: true,
+                              children: (blocks || []).slice(0,20).map((b: any, idx: number) => ({
+                                id: `${s.id}-blk-${idx}`,
+                                label: typeof b === 'string' ? b : (b?.name || 'Block'),
+                                onClick: () => onNavigateToItem({kind:'block', label: typeof b==='string'? b : (b?.name || 'Block') })
+                              }))
+                            }
+                          ];
+
+                          sessionChildren.push({
+                            id: `${s.id}-analysis`,
+                            label: 'Analysis',
+                            icon: <Database size={12} />,
+                            expanded: true,
+                            children: analysisChildren,
+                          });
+                        }
+
+                        // BOG Files
+                        sessionChildren.push({
+                          id: `${s.id}-bog`,
+                          label: 'BOG Files',
+                          icon: <FileText size={12} />,
+                          count: bogFiles.length,
+                          expanded: true,
+                          children: bogFiles.length
+                            ? bogFiles.map(f => ({ id: `${s.id}-bog-${f.id}`, label: f.name, icon: <FileText size={12} />, onClick: () => onNavigateToMessage(f.id) }))
+                            : [{ id: `${s.id}-bog-empty`, label: 'No files yet', muted: true }]
+                        });
+
+                        return {
+                          id: s.id,
+                          label: s.name || s.id,
+                          icon: <Folder size={12} />,
+                          expanded,
+                          selected: isActive,
+                          onClick: () => onSwitchSession(s.id),
+                          onToggle: () => setExpandedSessionIds(prev => { const ns = new Set(prev); ns.has(s.id) ? ns.delete(s.id) : ns.add(s.id); return ns; }),
+                          children: sessionChildren,
+                        } as TreeItemData;
+                      });
+
+                      return <Tree items={items} />;
+                    })()
                   )}
                 </div>
               )}

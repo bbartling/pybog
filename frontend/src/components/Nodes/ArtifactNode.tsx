@@ -22,13 +22,13 @@ const ArtifactNode: React.FC<NodeProps<ArtifactData>> = ({ data }) => {
       position: 'relative'
     }}>
       <div style={{
-        background: '#fef3c7',
-        color: '#92400e',
+        background: '#f8f2e1',
+        color: '#7c2d12',
         fontWeight: 800,
         padding: '6px 10px',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        borderBottom: '1px solid #fde68a'
+        borderBottom: '1px solid #f5d28a'
       }}>Artifact</div>
       <div style={{ padding: '8px 12px', whiteSpace: 'pre-wrap' }}>{data?.content || 'Output artifact is ready.'}</div>
       {data?.downloadUrl && (
