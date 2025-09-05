@@ -71,6 +71,9 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'rgba(100,116,139,0.9)' },
 } as const;
 
+// Standard width for node cards used in layout math for mini nodes
+const nodeWidth = 340;
+
 const ChatCanvas: React.FC<ChatCanvasProps> = ({
   messages,
   onApproveAnalysis,
