@@ -1,0 +1,353 @@
+/* Niagara Workbench Node Styling - Light Theme */
+
+.niagara-node {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+  border: 2px solid #c084fc;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15);
+  min-width: 280px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  position: relative;
+}
+
+.niagara-node:hover {
+  border-color: #a855f7;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+
+/* Node Header */
+.niagara-node-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, #e8d5ff 0%, #ddd6fe 100%);
+  border-bottom: 1px solid #c084fc;
+  gap: 8px;
+}
+
+.node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #ffffff;
+  border-radius: 3px;
+  color: #7c3aed;
+}
+
+.node-icon .gear-icon {
+  animation: rotate 8s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.node-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #581c87;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.node-status {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-status.ok {
+  background: #10b981;
+  color: white;
+}
+
+.node-status.fault {
+  background: #f97316;
+  color: white;
+}
+
+.node-status.alarm {
+  background: #ef4444;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.node-status.running {
+  background: #3b82f6;
+  color: white;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Node Content */
+.niagara-node-content {
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 0 0 4px 4px;
+}
+
+.node-value-display {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #374151;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.node-metadata {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e9d5ff;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.node-timestamp {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Specific Node Types */
+.user-node .niagara-node-header {
+  background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%);
+}
+
+.user-node {
+  border-color: #7c3aed;
+}
+
+.system-node .niagara-node-header {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+.system-node {
+  border-color: #2563eb;
+}
+
+.process-node {
+  min-width: 200px;
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+  border-color: #0ea5e9;
+}
+
+.process-node .niagara-node-header {
+  background: linear-gradient(180deg, #bae6fd 0%, #7dd3fc 100%);
+}
+
+.analysis-node {
+  min-width: 480px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  border-color: #10b981;
+}
+
+.analysis-node .niagara-node-header {
+  background: linear-gradient(180deg, #059669 0%, #047857 100%);
+}
+
+.artifact-node .niagara-node-header {
+  background: linear-gradient(180deg, #ea580c 0%, #dc2626 100%);
+}
+
+.artifact-node {
+  border-color: #f59e0b;
+}
+
+/* Ports */
+.niagara-port {
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.niagara-port:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+
+.niagara-port.input-port {
+  background: #22d3ee !important;
+}
+
+.niagara-port.output-port {
+  background: #fb923c !important;
+}
+
+/* Data Grid for Analysis Node */
+.niagara-data-grid {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.grid-header {
+  display: flex;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.grid-row {
+  display: flex;
+  padding: 4px 8px;
+  border-bottom: 1px solid #1e293b;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.grid-row:nth-child(even) {
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.grid-row:hover {
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.grid-cell {
+  flex: 1;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-cell.type-label {
+  flex: 0 0 80px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* Process Node Specific */
+.process-metrics {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #334155;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-label {
+  font-size: 9px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #22d3ee;
+}
+
+/* Animation for Processing State */
+.niagara-node.processing {
+  animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(34, 211, 238, 0.4);
+  }
+}
+
+/* Thermometer Icons for I/O */
+.io-indicator-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #334155;
+  border-radius: 2px;
+  margin-right: 4px;
+}
+
+.io-indicator-icon.input {
+  color: #22d3ee;
+}
+
+.io-indicator-icon.output {
+  color: #fb923c;
+}
+
+/* Action Buttons */
+.niagara-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #334155;
+}
+
+.niagara-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  border: 1px solid #475569;
+  border-radius: 3px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.niagara-btn:hover {
+  background: linear-gradient(180deg, #475569 0%, #334155 100%);
+  border-color: #64748b;
+}
+
+.niagara-btn.primary {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border-color: #10b981;
+}
+
+.niagara-btn.primary:hover {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+}
+
+.niagara-btn.secondary {
+  background: linear-gradient(180deg, #f59e0b 0%, #ea580c 100%);
+  border-color: #f59e0b;
+}
+
+.niagara-btn.secondary:hover {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.niagara-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

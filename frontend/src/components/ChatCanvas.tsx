@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -14,24 +14,26 @@ import ReactFlow, {
   BackgroundVariant,
   useReactFlow,
 } from 'reactflow';
-import { Swimlanes } from './flow/Swimlanes';
+import ConversationSwimlanes from './flow/ConversationSwimlanes';
 import './flow/canvas.css';
-import { nearestLaneX, quantize, LANES } from '../flow/lanes';
 import { SmartStepEdge } from '@tisoap/react-flow-smart-edge';
 import 'reactflow/dist/style.css';
+import { graphlib as dagreGraphLib, layout as dagreLayout } from '@dagrejs/dagre';
 
 // Import our custom nodes
 import UserNode from './Nodes/UserNode';
 import StatusNode from './Nodes/StatusNode';
-import AnalysisNode from './Nodes/AnalysisNode';
+import AnalysisGridNode from './Nodes/AnalysisGridNode';
 import ArtifactNode from './Nodes/ArtifactNode';
+import ProcessNode from './Nodes/ProcessNode';
 
 // Define node types for ReactFlow
 const nodeTypes = {
   userMessage: UserNode,
   statusMessage: StatusNode,
-  analysisMessage: AnalysisNode,
+  analysisMessage: AnalysisGridNode,
   artifactMessage: ArtifactNode,
+  processMessage: ProcessNode,
 };
 
 export interface ChatMessage {
@@ -45,6 +47,12 @@ export interface ChatMessage {
     analysisData?: any;
     downloadUrl?: string;
     status?: 'processing' | 'complete' | 'error' | 'awaiting_approval';
+    processStep?: {
+      stepKey: string;
+      detail?: string;
+      status: 'running' | 'ok' | 'error' | 'waiting';
+      metrics?: Record<string, any>;
+    };
   };
 }
 
@@ -67,12 +75,53 @@ const edgeTypes = { smart: SmartStepEdge } as const;
 
 const defaultEdgeOptions = {
   type: 'smart',
-  style: { strokeWidth: 1.25, stroke: 'rgba(100,116,139,0.9)' },
-  markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'rgba(100,116,139,0.9)' },
+  style: { strokeWidth: 1.5, stroke: '#22d3ee' }, // Niagara cyan for default chat edges
+  markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#22d3ee' },
 } as const;
 
 // Standard width for node cards used in layout math for mini nodes
 const nodeWidth = 340;
+
+// Dagre graph for auto-layout with Niagara lanes
+const dagreGraph = new dagreGraphLib.Graph();
+dagreGraph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120, edgesep: 50 });
+dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+function laneOffset(lane: 'left' | 'center' | 'right') {
+  switch (lane) {
+    case 'left':
+      return -220;
+    case 'center':
+      return 0;
+    case 'right':
+      return 220;
+  }
+}
+
+function layoutWithDagre(nodes: Node[], edges: Edge[]) {
+  // Seed dagre nodes with width/height
+  nodes.forEach((n) => {
+    const w = (n as any).width || nodeWidth;
+    const h = (n as any).height || 100;
+    dagreGraph.setNode(n.id, { width: w, height: h });
+  });
+  edges.forEach((e) => dagreGraph.setEdge(e.source, e.target));
+  dagreLayout(dagreGraph);
+
+  const laid = nodes.map((n) => {
+    const pos = dagreGraph.node(n.id);
+    const lane = ((n.data as any)?.lane as 'left' | 'center' | 'right') || 'center';
+    const x = pos.x + laneOffset(lane);
+    const y = pos.y;
+    const w = (n as any).width || nodeWidth;
+    const h = (n as any).height || 100;
+    return { ...n, position: { x: x - w / 2, y: y - h / 2 } };
+  });
+
+  // reset graph
+  dagreGraph.nodes().forEach((id) => dagreGraph.removeNode(id));
+  return laid;
+}
 
 const ChatCanvas: React.FC<ChatCanvasProps> = ({
   messages,
@@ -85,46 +134,140 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { setCenter, fitView } = useReactFlow();
+  const { setCenter, fitView, screenToFlowPosition } = useReactFlow();
+  // Ephemeral nodes/edges created via drag-drop from the navigator
+  const extraNodesRef = useRef<Node[]>([]);
+  const extraEdgesRef = useRef<Edge[]>([]);
   const HIGHLIGHT_MS = 1200;
 
-  // Convert messages to ReactFlow nodes with zigzag pattern
+  // Convert messages to ReactFlow nodes with clear conversation flow
   useEffect(() => {
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
 
-    // Lane-based Y rhythm (independent stacks)
-    const laneRow: Record<'system'|'tool'|'user', number> = { system: 0, tool: 0, user: 0 };
-    const rowGap = 160;
-    const topPad = 120;
-
+    // Conversation flow parameters
+    const CANVAS_WIDTH = 1400;
+    const NODE_WIDTH = 340;
+    const PROCESS_NODE_WIDTH = 240;
+    const VERTICAL_GAP = 120;
+    const TOP_PADDING = 100;
+    
+    // Track conversation pairs and process groups
+    let currentY = TOP_PADDING;
+    let lastUserNode: Node | null = null;
+    let processNodeGroup: Node[] = [];
+    
     messages.forEach((message, index) => {
       const isUser = message.type === 'user';
+      const isAssistant = message.type === 'assistant';
+      const isProcess = message.metadata?.processStep !== undefined;
       const isAnalysis = message.metadata?.analysisData;
       const isArtifact = message.metadata?.downloadUrl;
-
-      // Lane: system | tool | user
-      const lane: 'system' | 'tool' | 'user' = isUser ? 'user' : (isAnalysis || isArtifact) ? 'tool' : 'system';
-      const xPosition = LANES[lane] - 170; // center card in lane column (~340px width)
-      const yPosition = topPad + laneRow[lane] * rowGap; // independent vertical rhythm
-      laneRow[lane] += 1;
+      const isStatus = message.messageType === 'status' && !isProcess;
       
-      // Determine node type based on message
-      let nodeType = 'statusMessage';
-      if (message.type === 'user') {
-        nodeType = 'userMessage';
-      } else if (message.metadata?.analysisData) {
-        nodeType = 'analysisMessage';
-      } else if (message.metadata?.downloadUrl) {
-        nodeType = 'artifactMessage';
+      // Handle process step nodes (small, in middle)
+      if (isProcess) {
+        const processData = message.metadata!.processStep!;
+        const processNode: Node = {
+          id: message.id,
+          type: 'processMessage',
+          position: {
+            x: CANVAS_WIDTH / 2 - PROCESS_NODE_WIDTH / 2,
+            y: currentY
+          },
+          data: {
+            lane: 'center',
+            stepKey: processData.stepKey,
+            title: message.content,
+            detail: processData.detail,
+            status: processData.status,
+            metrics: processData.metrics,
+            timestamp: message.timestamp.toISOString(),
+          },
+          width: PROCESS_NODE_WIDTH as any,
+          height: 90 as any,
+          draggable: false,
+        };
+        
+        flowNodes.push(processNode);
+        processNodeGroup.push(processNode);
+        
+        // Don't increment Y for process nodes, they stack horizontally
+        if (processNodeGroup.length > 1) {
+          // Arrange process nodes in a row
+          processNodeGroup.forEach((pn, idx) => {
+            pn.position.x = CANVAS_WIDTH / 2 - (processNodeGroup.length * (PROCESS_NODE_WIDTH + 20)) / 2 + idx * (PROCESS_NODE_WIDTH + 20);
+          });
+        }
+        
+        // Connect process nodes to each other
+        if (processNodeGroup.length > 1) {
+          const prevProcess = processNodeGroup[processNodeGroup.length - 2];
+          flowEdges.push({
+            id: `e-process-${prevProcess.id}-${processNode.id}`,
+            source: prevProcess.id,
+            target: processNode.id,
+            type: 'smoothstep',
+            animated: processData.status === 'running',
+            style: { stroke: '#64748b', strokeWidth: 1.5, strokeDasharray: processData.status === 'running' ? '5 3' : '0' },
+          });
+        }
+        
+        // Connect from last user to first process
+        if (lastUserNode && processNodeGroup.length === 1) {
+            flowEdges.push({
+              id: `e-user-to-process-${lastUserNode.id}-${processNode.id}`,
+              source: lastUserNode.id,
+              target: processNode.id,
+              type: 'smoothstep',
+              animated: true,
+              style: { stroke: '#2dd4bf', strokeWidth: 2, strokeDasharray: '5 3' }, // teal dashed into process
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#2dd4bf', width: 12, height: 12 },
+            });
+        }
+        
+        return; // Don't create main conversation node
       }
       
-      // Create the node with wiresheet styling
+      // Clear process group when we hit a non-process message
+      if (processNodeGroup.length > 0 && !isProcess) {
+        currentY += VERTICAL_GAP / 2; // Add space after process group
+        processNodeGroup = [];
+      }
+      
+      // Determine node type and position
+      let nodeType = 'statusMessage';
+      let xPosition = CANVAS_WIDTH / 2 - NODE_WIDTH / 2; // Default center
+      let alignment: 'left' | 'right' | 'center' = 'center';
+      
+      if (isUser) {
+        nodeType = 'userMessage';
+        xPosition = 200; // Left side for user
+        alignment = 'left';
+      } else if (isAnalysis) {
+        nodeType = 'analysisMessage';
+        xPosition = CANVAS_WIDTH - NODE_WIDTH - 200; // Right side for analysis
+        alignment = 'right';
+      } else if (isArtifact) {
+        nodeType = 'artifactMessage';
+        xPosition = CANVAS_WIDTH - NODE_WIDTH - 200; // Right side for artifacts
+        alignment = 'right';
+      } else if (isAssistant) {
+        xPosition = CANVAS_WIDTH - NODE_WIDTH - 200; // Right side for assistant
+        alignment = 'right';
+      } else if (isStatus) {
+        // Treat status messages as system-side updates (right aligned)
+        xPosition = CANVAS_WIDTH - NODE_WIDTH - 200;
+        alignment = 'right';
+      }
+      
+      // Create the main conversation node
       const node: Node = {
         id: message.id,
         type: nodeType,
-        position: { x: xPosition, y: yPosition },
+        position: { x: xPosition, y: currentY },
         data: {
+          lane: alignment,
           content: message.content,
           timestamp: message.timestamp,
           files: message.files,
@@ -139,153 +282,88 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
           downloadUrl: message.metadata?.downloadUrl,
           fileName: message.metadata?.downloadUrl ? 'bog_output.json' : undefined,
         },
-        sourcePosition: isUser ? Position.Left : Position.Right,
-        targetPosition: isUser ? Position.Right : Position.Left,
+        sourcePosition: alignment === 'left' ? Position.Right : alignment === 'right' ? Position.Left : Position.Bottom,
+        targetPosition: alignment === 'left' ? Position.Left : alignment === 'right' ? Position.Right : Position.Top,
         style: {
-          width: nodeWidth,
+          width: NODE_WIDTH,
           borderRadius: '12px',
           border: '2px solid',
-          borderColor: isUser ? '#7e5bef' : (isAnalysis ? '#3ccf8e' : (isArtifact ? '#f59e0b' : '#4a9eff')),
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          background: '#ffffff',
-          color: '#111827',
+          borderColor: isUser ? '#8b5cf6' : (isAnalysis ? '#10b981' : (isArtifact ? '#f59e0b' : (isAssistant ? '#3b82f6' : '#64748b'))),
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          background: isUser ? 'linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%)' : '#ffffff',
         },
+        width: (nodeType === 'analysisMessage' ? 560 : NODE_WIDTH) as any,
+        height: (nodeType === 'analysisMessage' ? 320 : 120) as any,
         draggable: false,
       };
       
       flowNodes.push(node);
-
-      // If analysis, render mini nodes for I/O and blocks
-      if (nodeType === 'analysisMessage' && message.metadata?.analysisData) {
-        const analysis = message.metadata.analysisData as any;
-        const inputsRaw = analysis.inputs || analysis.io_points?.inputs || [];
-        const outputsRaw = analysis.outputs || analysis.io_points?.outputs || [];
-        const blocksRaw = analysis.blocks || analysis.functional_blocks || analysis.controlBlocks || [];
-
-        const norm = (arr: any[]) => arr.map((e: any) => typeof e === 'string' ? e : (e?.name || ''))
-                                        .filter((s: string) => !!s);
-        const inputs = norm(inputsRaw).slice(0, 10);
-        const outputs = norm(outputsRaw).slice(0, 10);
-        const blocks = (Array.isArray(blocksRaw) ? blocksRaw : []).map((b:any)=> typeof b==='string'?b:(b?.name||'Block')).slice(0, 8);
-
-        const colGap = 12;
-        const miniW = 220;
-        const miniH = 48;
-
-        // place inputs to the left stack
-        inputs.forEach((name, i) => {
-          const id = `${message.id}-in-${i}`;
-          const mini: Node = {
-            id,
-            type: 'statusMessage',
-            position: { x: xPosition - (miniW + 40), y: yPosition + i * (miniH + colGap) },
-            data: { content: name, kind: 'input' },
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            style: { width: miniW, border: '2px solid #93c5fd', borderRadius: '10px', background: '#fff', color: '#1e3a8a' },
-            draggable: false,
-          };
-          flowNodes.push(mini);
-          flowEdges.push({
-            id: `e-${message.id}-${id}`,
-            source: message.id,
-            target: id,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#93c5fd', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#93c5fd', width: 12, height: 12 },
-          } as Edge);
-        });
-
-        // place outputs to the right stack
-        outputs.forEach((name, i) => {
-          const id = `${message.id}-out-${i}`;
-          const mini: Node = {
-            id,
-            type: 'statusMessage',
-            position: { x: xPosition + nodeWidth + 40, y: yPosition + i * (miniH + colGap) },
-            data: { content: name, kind: 'output' },
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            style: { width: miniW, border: '2px solid #86efac', borderRadius: '10px', background: '#fff', color: '#14532d' },
-            draggable: false,
-          };
-          flowNodes.push(mini);
-          flowEdges.push({
-            id: `e-${message.id}-${id}`,
-            source: message.id,
-            target: id,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#86efac', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#86efac', width: 12, height: 12 },
-          } as Edge);
-        });
-
-        // place blocks below analysis node
-        blocks.forEach((name, i) => {
-          const rowSize = 3;
-          const id = `${message.id}-blk-${i}`;
-          const col = i % rowSize;
-          const row = Math.floor(i / rowSize);
-          const miniX = xPosition + col * (miniW + 20) - (rowSize-1)*(miniW+20)/2 + nodeWidth/2 - miniW/2;
-          const miniY = yPosition + 120 + row * (miniH + colGap);
-          const mini: Node = {
-            id,
-            type: 'statusMessage',
-            position: { x: miniX, y: miniY },
-            data: { content: name, kind: 'block' },
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            style: { width: miniW, border: '2px solid #f59e0b', borderRadius: '10px', background: '#fff', color: '#7c2d12' },
-            draggable: false,
-          };
-          flowNodes.push(mini);
-          flowEdges.push({
-            id: `e-${message.id}-${id}`,
-            source: message.id,
-            target: id,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#f59e0b', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b', width: 12, height: 12 },
-          } as Edge);
-        });
+      
+      // Track last user node for connecting to processes
+      if (isUser) {
+        lastUserNode = node;
       }
       
-      // Create curved edge to previous message for zigzag flow
-      if (index > 0) {
-        const isLastLink = index === messages.length - 1;
-        const isProcessing = workflowState === 'analyzing' || workflowState === 'generating';
-        const edge: Edge = {
-          id: `e${messages[index - 1].id}-${message.id}`,
-          source: messages[index - 1].id,
-          target: message.id,
-          type: 'smart',
-          animated: isProcessing && (isLastLink || index === messages.length - 2),
-          data: { margin: 16, cornerRadius: 10 },
-          style: {
-            stroke: workflowState === 'analyzing' ? '#f59e0b' : 
-                   workflowState === 'generating' ? '#10b981' : '#6b7280',
-            strokeWidth: 2,
-            strokeDasharray: isProcessing ? '6 4' : '0',
-            opacity: isLastLink ? 1 : 0.95,
-          },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: '#6b7280',
-            width: 14,
-            height: 14,
-          },
-          labelStyle: { fill: '#64748b', fontWeight: 600 },
-          labelBgStyle: { fill: '#eef2ff', fillOpacity: 0.7 },
-        };
-        flowEdges.push(edge);
+      // Move Y position down for next message
+      currentY += VERTICAL_GAP;
+
+      // Create conversation flow edges
+      if (index > 0 && !isProcess) {
+        const prevMessage = messages[index - 1];
+        const isPrevProcess = prevMessage.metadata?.processStep !== undefined;
+        
+        if (isPrevProcess) {
+          // Connect from last process node to this message
+          const lastProcess = processNodeGroup[processNodeGroup.length - 1] || flowNodes.find(n => n.id === prevMessage.id);
+          if (lastProcess) {
+            flowEdges.push({
+              id: `e-process-to-msg-${lastProcess.id}-${node.id}`,
+              source: lastProcess.id,
+              target: node.id,
+              type: 'smoothstep',
+              animated: false,
+              style: { stroke: '#22d3ee', strokeWidth: 1.5 }, // cyan out of process to system/user
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#22d3ee', width: 10, height: 10 },
+            });
+          }
+        } else {
+          // Normal conversation flow edge
+          const prevNode = flowNodes.find(n => n.id === prevMessage.id);
+          if (prevNode) {
+            const isConversationPair = 
+              (prevMessage.type === 'user' && message.type === 'assistant') ||
+              (prevMessage.type === 'assistant' && message.type === 'user');
+            
+            flowEdges.push({
+              id: `e-${prevMessage.id}-${message.id}`,
+              source: prevMessage.id,
+              target: message.id,
+              type: 'smoothstep',
+              animated: workflowState === 'analyzing' && index === messages.length - 1,
+              style: {
+                stroke: isConversationPair ? '#22d3ee' : '#94a3b8', // cyan for chat pair
+                strokeWidth: isConversationPair ? 2 : 1.5,
+                strokeDasharray: workflowState === 'analyzing' && index === messages.length - 1 ? '5 3' : '0',
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: isConversationPair ? '#22d3ee' : '#94a3b8',
+                width: 12,
+                height: 12,
+              },
+            });
+          }
+        }
       }
     });
     
-    setNodes(flowNodes);
-    setEdges(flowEdges);
+    // Merge ephemeral nodes/edges and layout together
+    const allNodes = [...flowNodes, ...extraNodesRef.current];
+    const allEdges = [...flowEdges, ...extraEdgesRef.current];
+
+    const layouted = layoutWithDagre(allNodes, allEdges);
+    setNodes(layouted);
+    setEdges(allEdges);
   }, [messages, workflowState, sessionId, onApproveAnalysis, onRequestChanges, setNodes, setEdges]);
 
   const onConnect = useCallback(
@@ -293,14 +371,89 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
     [setEdges]
   );
 
-  // Magnetic drag to nearest lane + grid
-  const onNodeDragStop = useCallback((_evt: any, node: Node) => {
-    setNodes((nds) => nds.map((n) => {
-      if (n.id !== node.id) return n;
-      const laneX = nearestLaneX(node.position.x);
-      return { ...n, position: { x: laneX, y: quantize(node.position.y) } };
-    }));
-  }, [setNodes]);
+  // Drag & Drop from NiagaraTreeNavigator
+  const onDragOver = useCallback((evt: React.DragEvent) => {
+    evt.preventDefault();
+    evt.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback((evt: React.DragEvent) => {
+    evt.preventDefault();
+    const raw = evt.dataTransfer.getData('application/reactflow');
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    const pos = screenToFlowPosition({ x: evt.clientX, y: evt.clientY });
+
+    const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    if (payload.type === 'message') {
+      const id = makeId('extra-msg');
+      const isUser = payload.role === 'user';
+      const lane = isUser ? 'left' : 'right';
+      const node: Node = {
+        id,
+        type: isUser ? 'userMessage' : 'statusMessage',
+        position: pos,
+        data: { lane, content: payload.text, timestamp: new Date() },
+        width: 340 as any,
+        height: 120 as any,
+        draggable: false,
+      };
+      extraNodesRef.current = [...extraNodesRef.current, node];
+    }
+
+    if (payload.type === 'file') {
+      const id = makeId('extra-file');
+      const node: Node = {
+        id,
+        type: 'statusMessage',
+        position: pos,
+        data: { lane: 'right', content: `File: ${payload.name}`, timestamp: new Date() },
+        width: 340 as any,
+        height: 120 as any,
+        draggable: false,
+      };
+      extraNodesRef.current = [...extraNodesRef.current, node];
+    }
+
+    if (payload.type === 'analysis-point') {
+      const id = makeId('extra-anl');
+      const analysis = payload.slot === 'OUT' ? { inputs: [], outputs: [payload.name] } : { inputs: [payload.name], outputs: [] };
+      const node: Node = {
+        id,
+        type: 'analysisMessage',
+        position: pos,
+        data: {
+          lane: 'right',
+          sessionId,
+          analysis,
+          approving: false,
+          processing: false,
+        },
+        width: 560 as any,
+        height: 320 as any,
+        draggable: false,
+      };
+      extraNodesRef.current = [...extraNodesRef.current, node];
+    }
+
+    if (payload.type === 'sequence') {
+      const id = makeId('extra-seq');
+      const node: Node = {
+        id,
+        type: 'statusMessage',
+        position: pos,
+        data: { lane: 'right', content: `Sequence: ${payload.name}`, timestamp: new Date() },
+        width: 340 as any,
+        height: 120 as any,
+        draggable: false,
+      };
+      extraNodesRef.current = [...extraNodesRef.current, node];
+    }
+
+    // Re-layout including new nodes
+    setNodes((prev) => layoutWithDagre([...prev, ...extraNodesRef.current.filter(n => !prev.find(p => p.id === n.id))], edges));
+  }, [edges, screenToFlowPosition, sessionId, setNodes]);
 
   // Focus viewport on a specific message/node when requested
   useEffect(() => {
@@ -374,15 +527,13 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <Swimlanes />
+      <ConversationSwimlanes />
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeDrag={(e, n) => onNodeDragStop(e as any, n)}
-        onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
@@ -394,7 +545,12 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
         panOnScroll
         panOnDrag
         zoomOnPinch
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
         attributionPosition="bottom-left"
+        onDragOver={onDragOver}
+        onDrop={onDrop}
       >
         <Background 
           variant={BackgroundVariant.Lines} 

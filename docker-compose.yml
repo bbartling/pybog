@@ -11,6 +11,8 @@ services:
       POSTGRES_DB: pybog
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database_schema.sql:/docker-entrypoint-initdb.d/01-existing-schema.sql:ro
+      - ./backend/database/migrate_to_unified_schema.sql:/docker-entrypoint-initdb.d/02-unified-schema.sql:ro
     networks:
       - pybog-network
     healthcheck:
@@ -39,11 +41,13 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DATABASE_URL=postgresql://pybog:pybog123@postgres:5432/pybog
       - REDIS_URL=redis://redis:6379
+      - DOCKER_MONITORING=true
     volumes:
       - ./api:/app/api
       - ./bog_builder:/app/bog_builder
       - ./data/outputs:/app/data/outputs
       - ./data/uploads:/app/data/uploads
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -54,6 +58,11 @@ services:
     networks:
       - pybog-network
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # n8n Workflow Engine
   n8n:
@@ -98,6 +107,27 @@ services:
     networks:
       - pybog-network
 
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pybog-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - ./pgpass:/pgpass:ro
+    ports:
+      - "5050:80"
+    networks:
+      - pybog-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # React Frontend
   frontend:
     build:
@@ -121,6 +151,7 @@ volumes:
   postgres_data:
   redis_data:
   n8n_data:
+  pgadmin_data:
 
 networks:
   pybog-network:

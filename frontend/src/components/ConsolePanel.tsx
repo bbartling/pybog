@@ -8,6 +8,7 @@ export interface ConsoleMessage {
   source: string;
   message: string;
   details?: any;
+  container?: string; // New: for Docker logs
 }
 
 interface ConsolePanelProps {
@@ -23,9 +24,54 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
   messages,
   onClear
 }) => {
-  const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
+  const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error' | 'docker'>('all');
+  const [containerFilter, setContainerFilter] = useState<string>('all');
   const [isMinimized, setIsMinimized] = useState(false);
+  const [dockerLogs, setDockerLogs] = useState<ConsoleMessage[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
   const consoleEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  
+  // Connect to Docker logs WebSocket
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const cfg = (window as any).RUNTIME_CONFIG || {};
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/logs';
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+    
+    ws.onopen = () => setWsConnected(true);
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'docker_log' && data.data) {
+          const logMessage: ConsoleMessage = {
+            id: `docker-${Date.now()}-${Math.random()}`,
+            timestamp: new Date(data.data.timestamp),
+            level: data.data.level || 'info',
+            source: 'Docker',
+            message: data.data.message,
+            container: data.data.container
+          };
+          setDockerLogs(prev => [...prev.slice(-999), logMessage]);
+        }
+      } catch (e) {
+        console.error('Failed to parse Docker log message:', e);
+      }
+    };
+    
+    ws.onclose = () => setWsConnected(false);
+    ws.onerror = () => setWsConnected(false);
+    
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [isOpen]);
   
   useEffect(() => {
     if (consoleEndRef.current) {
@@ -53,14 +99,35 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
     }
   };
   
-  const filteredMessages = messages.filter(msg => 
-    filter === 'all' || msg.level === filter
+  // Combine system messages and Docker logs
+  const allMessages = [...messages, ...dockerLogs].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
   );
   
+  const filteredMessages = allMessages.filter(msg => {
+    const levelMatch = filter === 'all' || 
+                     (filter === 'docker' && msg.source === 'Docker') ||
+                     (filter !== 'docker' && msg.level === filter);
+    
+    const containerMatch = containerFilter === 'all' || 
+                          !msg.container || 
+                          msg.container === containerFilter;
+                          
+    return levelMatch && containerMatch;
+  });
+  
+  // Get unique containers for filter
+  const containers = Array.from(new Set(
+    dockerLogs.map(log => log.container).filter(Boolean)
+  )).sort();
+  
   const exportLogs = () => {
-    const logContent = messages.map(msg => 
-      `[${msg.timestamp.toISOString()}] [${msg.level.toUpperCase()}] [${msg.source}] ${msg.message}${msg.details ? '\n  Details: ' + JSON.stringify(msg.details, null, 2) : ''}`
-    ).join('\n');
+    const logContent = allMessages.map(msg => {
+      const container = msg.container ? ` [${msg.container}]` : '';
+      return `[${msg.timestamp.toISOString()}] [${msg.level.toUpperCase()}] [${msg.source}]${container} ${msg.message}${
+        msg.details ? '\n  Details: ' + JSON.stringify(msg.details, null, 2) : ''
+      }`;
+    }).join('\n');
     
     const blob = new Blob([logContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -103,6 +170,18 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
         <span style={{ color: '#e5e7eb', fontSize: 12, fontWeight: 600 }}>
           Console Output
         </span>
+        
+        {/* Connection status */}
+        <span style={{ 
+          color: wsConnected ? '#10b981' : '#6b7280', 
+          fontSize: 11,
+          background: '#1f2937',
+          padding: '2px 8px',
+          borderRadius: 4,
+        }}>
+          Docker: {wsConnected ? 'Connected' : 'Disconnected'}
+        </span>
+        
         <span style={{ 
           color: '#6b7280', 
           fontSize: 11, 
@@ -111,12 +190,12 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
           padding: '2px 8px',
           borderRadius: 4,
         }}>
-          {messages.length} messages
+          {allMessages.length} messages
         </span>
         
         {/* Filter buttons */}
         <div style={{ marginLeft: 24, display: 'flex', gap: 8 }}>
-          {(['all', 'info', 'warn', 'error'] as const).map(level => (
+          {(['all', 'docker', 'info', 'warn', 'error'] as const).map(level => (
             <button
               key={level}
               onClick={() => setFilter(level)}
@@ -136,6 +215,29 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
           ))}
         </div>
         
+        {/* Container filter */}
+        {containers.length > 0 && (
+          <select
+            value={containerFilter}
+            onChange={(e) => setContainerFilter(e.target.value)}
+            style={{
+              background: '#1f2937',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 4,
+              padding: '2px 8px',
+              fontSize: 11,
+            }}
+          >
+            <option value="all">All Containers</option>
+            {containers.map(container => (
+              <option key={container} value={container}>
+                {container?.replace('pybog-', '') || 'Unknown'}
+              </option>
+            ))}
+          </select>
+        )}
+        
         {/* Actions */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button
@@ -152,7 +254,10 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
             <Download size={16} />
           </button>
           <button
-            onClick={onClear}
+            onClick={() => {
+              onClear();
+              setDockerLogs([]);
+            }}
             style={{
               background: 'transparent',
               border: 'none',
@@ -232,6 +337,19 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
                 }}>
                   {msg.source}
                 </span>
+                {msg.container && (
+                  <span style={{ 
+                    color: '#3b82f6', 
+                    fontSize: 10,
+                    background: '#1e3a8a',
+                    padding: '0 4px',
+                    borderRadius: 2,
+                    minWidth: 80,
+                    textAlign: 'center',
+                  }}>
+                    {msg.container.replace('pybog-', '')}
+                  </span>
+                )}
                 <span style={{ color: getLevelColor(msg.level), flex: 1 }}>
                   {msg.message}
                 </span>

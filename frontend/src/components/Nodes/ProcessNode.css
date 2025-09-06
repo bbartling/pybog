@@ -1,0 +1,292 @@
+/* ProcessNode - n8n Workflow Step Visualization */
+.process-node {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border: 2px solid #475569;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 200px;
+  max-width: 280px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  position: relative;
+  transition: all 0.3s ease;
+  font-family: 'Roboto Mono', 'SF Mono', monospace;
+}
+
+.process-node.pulse {
+  animation: process-pulse 0.6s ease-out;
+}
+
+@keyframes process-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Status-based border colors */
+.process-node.running {
+  border-color: #3b82f6;
+  animation: running-glow 2s ease-in-out infinite;
+}
+
+@keyframes running-glow {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
+  }
+}
+
+.process-node.ok {
+  border-color: #10b981;
+}
+
+.process-node.error {
+  border-color: #ef4444;
+  animation: error-shake 0.5s ease-in-out;
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.process-node.waiting {
+  border-color: #f59e0b;
+}
+
+/* Node type specific styling */
+.process-node.extract {
+  background: linear-gradient(135deg, #1e293b 0%, #1e3a8a 100%);
+}
+
+.process-node.analyze {
+  background: linear-gradient(135deg, #1e293b 0%, #312e81 100%);
+}
+
+.process-node.generate {
+  background: linear-gradient(135deg, #1e293b 0%, #134e4a 100%);
+}
+
+.process-node.validate {
+  background: linear-gradient(135deg, #1e293b 0%, #7c2d12 100%);
+}
+
+/* Header Section */
+.process-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.process-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.process-type-icon {
+  color: #64748b;
+  opacity: 0.7;
+}
+
+.process-icon {
+  transition: all 0.2s ease;
+}
+
+.process-icon.spinning {
+  animation: spin 1s linear infinite;
+  color: #3b82f6;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.process-icon.success {
+  color: #10b981;
+}
+
+.process-icon.error {
+  color: #ef4444;
+}
+
+.process-icon.waiting {
+  color: #f59e0b;
+  animation: waiting-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes waiting-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.process-title {
+  color: #f1f5f9;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Detail Section */
+.process-detail {
+  color: #cbd5e1;
+  font-size: 11px;
+  margin-top: 4px;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+/* Progress Bar */
+.process-progress {
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(100, 116, 139, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.process-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  position: relative;
+  background: linear-gradient(90deg, currentColor 0%, currentColor 100%);
+}
+
+.process-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Metrics Section */
+.process-metrics {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.metric-key {
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.metric-value {
+  color: #e2e8f0;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Handle Styling */
+.process-node .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff;
+  transition: all 0.2s ease;
+}
+
+.process-node .react-flow__handle-left {
+  left: -5px;
+}
+
+.process-node .react-flow__handle-right {
+  right: -5px;
+}
+
+.process-node:hover .react-flow__handle {
+  width: 10px;
+  height: 10px;
+}
+
+/* Connected State */
+.process-node.connected::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  border: 2px solid #1e293b;
+  animation: connected-pulse 2s ease-in-out infinite;
+}
+
+@keyframes connected-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+/* Hover Effects */
+.process-node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.process-node:hover .process-title {
+  color: #fff;
+}
+
+.process-node:hover .process-detail {
+  opacity: 1;
+}
+
+/* Dark Theme Adjustments */
+@media (prefers-color-scheme: dark) {
+  .process-node {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  }
+  
+  .process-node.running {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+  }
+}

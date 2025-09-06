@@ -1,0 +1,427 @@
+/* Niagara Workbench Light Theme - Authentic Colors */
+
+.niagara-workbench {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f8f9fa;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Header Bar */
+.niagara-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f3f4 100%);
+  border-bottom: 1px solid #d0d5dd;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  height: 48px;
+}
+
+.niagara-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.niagara-header-title svg {
+  color: #7c3aed;
+}
+
+.niagara-header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* Main Layout */
+.niagara-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* Sidebar Navigator */
+.niagara-navigator {
+  width: 280px;
+  background: #f1f3f4;
+  border-right: 1px solid #d0d5dd;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.niagara-navigator-header {
+  padding: 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #d0d5dd;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.niagara-navigator-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Tree Items */
+.niagara-tree-section {
+  margin: 0;
+  padding: 0;
+}
+
+.niagara-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.niagara-tree-header:hover {
+  background: #f8f9fa;
+}
+
+.niagara-tree-header-icon {
+  color: #7c3aed;
+}
+
+.niagara-tree-header-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.niagara-tree-content {
+  background: #ffffff;
+  border-left: 2px solid #e5e7eb;
+  margin-left: 12px;
+}
+
+.niagara-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #4b5563;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s;
+}
+
+.niagara-tree-item:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.niagara-tree-item.selected {
+  background: #ede9fe;
+  color: #7c3aed;
+  font-weight: 500;
+}
+
+.niagara-tree-item::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+/* Canvas Area */
+.niagara-canvas {
+  flex: 1;
+  background: #ffffff;
+  position: relative;
+}
+
+.niagara-canvas-grid {
+  background-image: 
+    linear-gradient(rgba(229, 231, 235, 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(229, 231, 235, 0.4) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Node Styles - Light Theme with Purple Accents */
+.niagara-node-light {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+  border: 2px solid #c084fc;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15);
+  min-width: 280px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  position: relative;
+}
+
+.niagara-node-light:hover {
+  border-color: #a855f7;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+
+.niagara-node-light .node-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #e8d5ff 0%, #ddd6fe 100%);
+  border-bottom: 1px solid #c084fc;
+  gap: 8px;
+}
+
+.niagara-node-light .node-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 4px;
+  color: #7c3aed;
+}
+
+.niagara-node-light .node-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #581c87;
+}
+
+.niagara-node-light .node-status {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.niagara-node-light .node-status.ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.niagara-node-light .node-status.fault {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.niagara-node-light .node-status.alarm {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* Node Content Area */
+.niagara-node-light .node-content {
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 0 0 4px 4px;
+}
+
+.niagara-node-light .node-property-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.niagara-node-light .node-property-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 12px;
+}
+
+.niagara-node-light .node-property-table td:first-child {
+  font-weight: 500;
+  color: #6b7280;
+  width: 40%;
+}
+
+.niagara-node-light .node-property-table td:last-child {
+  color: #1f2937;
+}
+
+/* Ports */
+.niagara-port-light {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  transition: all 0.2s;
+}
+
+.niagara-port-light.input {
+  background: #8b5cf6;
+}
+
+.niagara-port-light.output {
+  background: #f59e0b;
+}
+
+.niagara-port-light:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.5);
+}
+
+/* Edges/Wires */
+.niagara-edge {
+  stroke: #8b5cf6;
+  stroke-width: 2;
+  fill: none;
+}
+
+.niagara-edge.animated {
+  stroke-dasharray: 5 3;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+
+/* Input Bar */
+.niagara-input-bar {
+  display: flex;
+  padding: 12px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  gap: 12px;
+}
+
+.niagara-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #ffffff;
+  color: #1f2937;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.niagara-input:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.niagara-button {
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.niagara-button:hover {
+  background: linear-gradient(180deg, #9333ea 0%, #8b5cf6 100%);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+}
+
+.niagara-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Link Dialog Style (matches reference) */
+.niagara-dialog {
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 0;
+  overflow: hidden;
+}
+
+.niagara-dialog-header {
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #f8f9fa 0%, #e5e7eb 100%);
+  border-bottom: 1px solid #d0d5dd;
+  font-weight: 600;
+  color: #374151;
+}
+
+.niagara-dialog-content {
+  padding: 16px;
+  background: #ffffff;
+}
+
+.niagara-dialog-list {
+  max-height: 400px;
+  overflow-y: auto;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.niagara-dialog-item {
+  padding: 8px 12px;
+  margin: 2px 0;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.niagara-dialog-item:hover {
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+
+.niagara-dialog-item.selected {
+  background: #ede9fe;
+  border-color: #a78bfa;
+}
+
+.niagara-dialog-footer {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-top: 1px solid #d0d5dd;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Remove all dark theme artifacts */
+.simplified-workbench,
+.workbench-body {
+  background: #ffffff !important;
+}
+
+.workbench-header {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f3f4 100%) !important;
+}
+
+.workbench-sidebar {
+  background: #f8f9fa !important;
+  border-right: 1px solid #e5e7eb !important;
+}

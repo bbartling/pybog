@@ -28,6 +28,7 @@ const TreeRow: React.FC<{ item: TreeItemData; depth: number }> = ({ item, depth 
       onClick={item.onClick}
       role="treeitem"
       aria-expanded={item.expanded}
+      aria-selected={!!item.selected}
     >
       <button
         className={`tree-toggle ${item.expanded ? 'open' : ''}`}

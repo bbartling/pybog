@@ -17,12 +17,40 @@ from datetime import datetime
 import asyncpg
 import httpx
 import asyncio
+import time
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# Docker monitoring
+try:
+    from .docker_monitor import DockerMonitor
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    logger.warning("Docker monitoring not available - install docker package")
+
+# Redis Service
+try:
+    from .services.redis_service import redis_service
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis_service = None
+    logger.warning("Redis service not available")
 
 # Import core PyBOG functionality
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from bog_builder import BogFolderBuilder
 from .routes.conversation import router as conversation_router
+from .routes.session_management import router as session_router
+try:
+    from .routes.session_enhanced import router as enhanced_router
+    from .routes.unified_sessions import router as unified_router
+    from .routes.workflow import router as workflow_router
+except ImportError:
+    enhanced_router = None
+    unified_router = None
+    workflow_router = None
 from .n8n_resume import store_resume_url, append_message
 
 # Setup logging
@@ -47,6 +75,15 @@ app.add_middleware(
 
 # Include modular conversation routes (approve/request-changes/messages)
 app.include_router(conversation_router)
+# Include session management routes
+app.include_router(session_router)
+# Include enhanced and unified routes if available
+if enhanced_router:
+    app.include_router(enhanced_router)
+if unified_router:
+    app.include_router(unified_router)
+if workflow_router:
+    app.include_router(workflow_router)
 
 # ------------------------
 # Database helpers
@@ -89,8 +126,27 @@ async def startup_event():
     try:
         await ensure_tables()
         logger.info("Database tables ensured")
+        
+        # Initialize Redis
+        if REDIS_AVAILABLE and redis_service:
+            connected = await redis_service.connect()
+            if connected:
+                logger.info("✅ Redis service initialized")
+            else:
+                logger.warning("⚠️ Redis connection failed, using fallback")
+        
+        # Initialize Docker monitoring
+        if DOCKER_AVAILABLE:
+            await docker_monitor.initialize()
+            # Start background monitoring tasks
+            asyncio.create_task(health_monitoring_task())
+            asyncio.create_task(log_streaming_task())
+            logger.info("Docker monitoring initialized")
+        else:
+            logger.warning("Docker monitoring disabled - install docker package")
+            
     except Exception as e:
-        logger.warning(f"Could not ensure database tables: {e}")
+        logger.warning(f"Could not initialize monitoring: {e}")
 
 # Storage paths
 OUTPUTS_DIR = Path("data/outputs")
@@ -105,16 +161,39 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
+        # New: separate connections for monitoring
+        self.health_connections: Dict[str, WebSocket] = {}
+        self.log_connections: Dict[str, WebSocket] = {}
     
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
         self.active_connections[session_id] = websocket
         logger.info(f"WebSocket connected for session: {session_id}")
+        
+    # New: Health monitoring connections
+    async def connect_health(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.health_connections[client_id] = websocket
+        logger.info(f"Health WebSocket connected: {client_id}")
+        
+    # New: Log monitoring connections
+    async def connect_logs(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.log_connections[client_id] = websocket
+        logger.info(f"Logs WebSocket connected: {client_id}")
     
     def disconnect(self, session_id: str):
         if session_id in self.active_connections:
             del self.active_connections[session_id]
             logger.info(f"WebSocket disconnected for session: {session_id}")
+            
+    def disconnect_health(self, client_id: str):
+        if client_id in self.health_connections:
+            del self.health_connections[client_id]
+            
+    def disconnect_logs(self, client_id: str):
+        if client_id in self.log_connections:
+            del self.log_connections[client_id]
     
     async def send_message(self, session_id: str, message: dict):
         if session_id in self.active_connections:
@@ -126,6 +205,30 @@ class ConnectionManager:
                 self.disconnect(session_id)
         else:
             logger.warning(f"No active connection for session: {session_id}")
+    
+    # New: Broadcasting methods for monitoring
+    async def broadcast_health(self, health_data: dict):
+        await self._broadcast_to_connections(self.health_connections, "health", health_data)
+        
+    async def broadcast_logs(self, log_data: dict):
+        await self._broadcast_to_connections(self.log_connections, "docker_log", log_data)
+        
+    async def broadcast_audit(self, audit_data: dict):
+        await self._broadcast_to_connections(self.health_connections, "audit", audit_data)
+        
+    async def _broadcast_to_connections(self, connections: dict, event_type: str, data: dict):
+        message = {"type": event_type, "data": data}
+        disconnected = []
+        
+        for client_id, ws in connections.items():
+            try:
+                await ws.send_text(json.dumps(message))
+            except:
+                disconnected.append(client_id)
+                
+        for client_id in disconnected:
+            if client_id in connections:
+                del connections[client_id]
     
     async def send_analysis_complete(self, session_id: str, analysis_data: dict):
         await self.send_message(session_id, {
@@ -145,6 +248,77 @@ class ConnectionManager:
         })
 
 manager = ConnectionManager()
+
+# Initialize Docker monitor (if available)
+docker_monitor = None
+if DOCKER_AVAILABLE:
+    docker_monitor = DockerMonitor()
+
+# Request audit middleware
+class RequestAuditMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        req_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        
+        request.state.req_id = req_id
+        response = await call_next(request)
+        duration = time.time() - start_time
+        
+        audit_event = {
+            "reqId": req_id,
+            "method": request.method,
+            "path": str(request.url.path),
+            "status": response.status_code,
+            "duration": round(duration * 1000, 2),
+            "timestamp": time.time()
+        }
+        
+        await manager.broadcast_audit(audit_event)
+        return response
+
+# Add audit middleware
+app.add_middleware(RequestAuditMiddleware)
+
+# Background monitoring tasks
+async def health_monitoring_task():
+    """Background task to broadcast health updates"""
+    if not docker_monitor:
+        return
+        
+    while True:
+        try:
+            health_data = await docker_monitor.get_system_health()
+            await manager.broadcast_health(health_data)
+        except Exception as e:
+            logger.error(f"Health monitoring error: {e}")
+        await asyncio.sleep(5)
+
+async def log_streaming_task():
+    """Background task to stream Docker logs"""
+    if not docker_monitor:
+        return
+        
+    last_check = {}
+    while True:
+        try:
+            for container_name in docker_monitor.containers:
+                logs = await docker_monitor.get_container_logs(container_name, 10)
+                
+                last_timestamp = last_check.get(container_name)
+                new_logs = []
+                
+                for log in logs:
+                    if not last_timestamp or log['timestamp'] > last_timestamp:
+                        new_logs.append(log)
+                
+                if new_logs:
+                    last_check[container_name] = new_logs[-1]['timestamp']
+                    for log in new_logs:
+                        await manager.broadcast_logs(log)
+                        
+        except Exception as e:
+            logger.error(f"Log streaming error: {e}")
+        await asyncio.sleep(2)
 
 # ------------------------
 # Pydantic Models
@@ -245,41 +419,44 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint with DB probe and optional n8n reachability."""
-    db_ok = False
+    """Enhanced health check with detailed diagnostics and actionable feedback"""
     try:
-        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
-        conn = await asyncpg.connect(db_url)
+        from .health_diagnostics import diagnostics
+        detailed_health = await diagnostics.run_full_diagnostics()
+        return detailed_health
+    except Exception as e:
+        # Fallback basic health check
+        logger.error(f"Enhanced health check failed: {e}")
+        
+        db_ok = False
         try:
+            db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+            conn = await asyncpg.connect(db_url)
             row = await conn.fetchval("SELECT 1")
             db_ok = (row == 1)
-        finally:
             await conn.close()
-    except Exception:
-        db_ok = False
+        except Exception:
+            db_ok = False
 
-    # Optional: n8n reachability (do not fail health if not reachable)
-    n8n_ok = False
-    try:
-        n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            # GET to analyze webhook (expect 404 if not POST, still proves reachability)
-            resp = await client.get(f"{n8n_url}/webhook/pybog-analyze")
-            n8n_ok = resp.status_code in (200, 401, 403, 404)
-    except Exception:
         n8n_ok = False
+        try:
+            n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.get(f"{n8n_url}/webhook/pybog-analyze")
+                n8n_ok = resp.status_code in (200, 401, 403, 404)
+        except Exception:
+            n8n_ok = False
 
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "pybog-api",
-        "database": db_ok,
-        "n8n_reachable": n8n_ok,
-        "storage": {
-            "outputs": str(OUTPUTS_DIR),
-            "uploads": str(UPLOADS_DIR)
+        return {
+            "overall_status": "healthy" if db_ok and n8n_ok else "degraded",
+            "services": {
+                "database": {"healthy": db_ok, "status": "connected" if db_ok else "failed"},
+                "n8n": {"healthy": n8n_ok, "status": "running" if n8n_ok else "unreachable"}
+            },
+            "issues": [] if db_ok and n8n_ok else ["Basic health check only - enhanced diagnostics failed"],
+            "recommendations": ["Check Docker setup and Python dependencies"] if not (db_ok and n8n_ok) else [],
+            "fallback": True
         }
-    }
 
 @app.post("/api/validate-schema", response_model=SchemaValidationResponse)
 async def validate_schema(request: SchemaValidationRequest):
@@ -554,52 +731,61 @@ async def upload_session_file(session_id: str, file: UploadFile = File(...), ses
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/sessions/recent")
-async def get_recent_sessions(limit: int = 20):
-    """List recent sessions for switcher."""
-    db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
-    conn = await asyncpg.connect(db_url)
+# Recent sessions endpoint - using /api/recent-sessions to avoid routing conflicts
+@app.get("/api/recent-sessions")
+async def get_recent_sessions(limit: int = 10):
+    """Get recent sessions with caching"""
     try:
+        # Try Redis cache first
+        if REDIS_AVAILABLE and redis_service and redis_service.client:
+            cached_ids = await redis_service.get_recent_sessions(limit)
+            if cached_ids:
+                sessions = []
+                for sid in cached_ids:
+                    cached_data = await redis_service.get_cached_session(sid)
+                    if cached_data:
+                        sessions.append(cached_data)
+                if sessions:
+                    return {"sessions": sessions}
+        
+        # Fallback to database
+        db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+        conn = await asyncpg.connect(db_url)
         try:
             rows = await conn.fetch(
                 """
-                SELECT session_id,
-                       COALESCE(name, description, 'New Session') AS name,
-                       COALESCE(current_state, 'idle') AS current_state,
-                       COALESCE(last_activity, updated_at, created_at, NOW()) AS last_activity
-                FROM sessions
-                ORDER BY last_activity DESC
+                SELECT 
+                    s.session_id, 
+                    COALESCE(s.name, s.description, 'New Session') as name, 
+                    COALESCE(s.current_state, s.state, 'idle') as state,
+                    COALESCE(s.last_activity, s.updated_at, s.created_at, NOW()) as last_activity
+                FROM sessions s
+                ORDER BY s.last_activity DESC NULLS LAST
                 LIMIT $1
                 """,
-                limit,
+                limit
             )
-        except Exception:
-            # Fallback if columns don't exist
-            rows = await conn.fetch(
-                """
-                SELECT session_id,
-                       COALESCE(description, 'New Session') AS name,
-                       'idle' AS current_state,
-                       COALESCE(updated_at, created_at, NOW()) AS last_activity
-                FROM sessions
-                ORDER BY last_activity DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-                LIMIT $1
-                """,
-                limit,
-            )
-        return {
-            "sessions": [
-                {
-                    "session_id": r["session_id"],
-                    "name": r["name"],
-                    "current_state": r.get("current_state", "idle"),
-                    "last_activity": (r.get("last_activity") or datetime.utcnow()).isoformat(),
+            
+            sessions = []
+            for row in rows:
+                session_data = {
+                    "session_id": row["session_id"],
+                    "name": row["name"],
+                    "state": row["state"] or "idle",
+                    "last_activity": row["last_activity"].isoformat() if row["last_activity"] else datetime.utcnow().isoformat()
                 }
-                for r in rows
-            ]
-        }
-    finally:
-        await conn.close()
+                sessions.append(session_data)
+                
+                # Cache in Redis for next time
+                if REDIS_AVAILABLE and redis_service:
+                    await redis_service.cache_session(row["session_id"], session_data, ttl=300)
+            
+            return {"sessions": sessions}
+        finally:
+            await conn.close()
+    except Exception as e:
+        logger.error(f"Error getting recent sessions: {e}")
+        return {"sessions": []}
 
 class PersistMessageRequest(BaseModel):
     message_id: str
@@ -794,6 +980,8 @@ async def get_full_session(session_id: str):
     finally:
         await conn.close()
 
+# Duplicate endpoint removed - moved before /{session_id} patterns above
+
 @app.get("/api/sessions/{session_id}/state", response_model=SessionStateResponse)
 async def get_session_state(session_id: str):
     """Get current state of a session from database (hvac_chat_memory)."""
@@ -801,9 +989,9 @@ async def get_session_state(session_id: str):
         db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
         conn = await asyncpg.connect(db_url)
         try:
-            # Prefer unified message storage (session_id/message)
+            # Query hvac_chat_memory with correct column names
             query = """
-                SELECT session_id, message, created_at, updated_at
+                SELECT session_id, role, content, state, data, created_at, updated_at
                 FROM hvac_chat_memory
                 WHERE session_id = $1
                 ORDER BY created_at DESC
@@ -816,8 +1004,15 @@ async def get_session_state(session_id: str):
             state = 'UNKNOWN'
             analysis_data = None
 
+            # Extract data from the 'data' jsonb column
             try:
-                msg = row['message'] if isinstance(row['message'], dict) else json.loads(row['message'])
+                msg = row['data'] if isinstance(row['data'], dict) else {}
+                if not msg and row['content']:
+                    # Fallback: try to parse content as JSON
+                    try:
+                        msg = json.loads(row['content']) if isinstance(row['content'], str) else {}
+                    except:
+                        msg = {}
             except Exception:
                 msg = {}
 
@@ -858,7 +1053,7 @@ async def get_session_history(session_id: str, limit: int = 100):
         try:
             rows = await conn.fetch(
                 """
-                SELECT message, created_at
+                SELECT session_id, role, content, state, data, created_at
                 FROM hvac_chat_memory
                 WHERE session_id = $1
                 ORDER BY created_at ASC
@@ -869,10 +1064,20 @@ async def get_session_history(session_id: str, limit: int = 100):
             )
             out = []
             for r in rows:
+                msg = {}
                 try:
-                    msg = r['message'] if isinstance(r['message'], dict) else json.loads(r['message'])
-                except Exception:
-                    msg = {"raw": r['message']}
+                    # Try to get message from 'data' column first
+                    if r['data'] and isinstance(r['data'], dict):
+                        msg = r['data']
+                    # Otherwise, build from other columns
+                    else:
+                        msg = {
+                            "role": r.get('role', 'system'),
+                            "content": r.get('content', ''),
+                            "state": r.get('state', 'idle')
+                        }
+                except Exception as e:
+                    msg = {"raw": str(r), "error": str(e)}
                 out.append({
                     "message": msg,
                     "created_at": (r['created_at'].isoformat() if r.get('created_at') else datetime.utcnow().isoformat()),
@@ -1210,6 +1415,62 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.error(f"WebSocket error for session {session_id}: {e}")
     finally:
         manager.disconnect(session_id)
+
+# ------------------------
+# Docker Monitoring WebSocket Endpoints
+# ------------------------
+
+@app.websocket("/ws/health")
+async def websocket_health(websocket: WebSocket):
+    """WebSocket endpoint for system health monitoring"""
+    client_id = str(uuid.uuid4())
+    try:
+        await manager.connect_health(websocket, client_id)
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        logger.info(f"Health WebSocket disconnected: {client_id}")
+    finally:
+        manager.disconnect_health(client_id)
+
+@app.websocket("/ws/logs")
+async def websocket_logs(websocket: WebSocket):
+    """WebSocket endpoint for Docker logs monitoring"""
+    client_id = str(uuid.uuid4())
+    try:
+        await manager.connect_logs(websocket, client_id)
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        logger.info(f"Logs WebSocket disconnected: {client_id}")
+    finally:
+        manager.disconnect_logs(client_id)
+
+# ------------------------
+# Docker Monitoring API Endpoints
+# ------------------------
+
+@app.get("/api/docker/health")
+async def get_system_health():
+    """Get comprehensive system health including Docker containers"""
+    if not DOCKER_AVAILABLE:
+        return {"error": "Docker monitoring not available"}
+    
+    health = await docker_monitor.get_system_health()
+    return health
+
+@app.get("/api/docker/logs/{container_name}")
+async def get_container_logs(container_name: str, tail: int = 50):
+    """Get recent logs from a specific container"""
+    if not DOCKER_AVAILABLE:
+        return {"error": "Docker monitoring not available"}
+    
+    logs = await docker_monitor.get_container_logs(container_name, tail)
+    return {"container": container_name, "logs": logs}
 
 if __name__ == "__main__":
     import uvicorn

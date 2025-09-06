@@ -1,0 +1,329 @@
+/* Niagara Tree Navigator - Industrial Control System Styling */
+.niagara-tree-navigator {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-right: 1px solid #334155;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Roboto Mono', 'SF Mono', monospace;
+  font-size: 12px;
+  color: #e2e8f0;
+  user-select: none;
+  min-width: 280px;
+  max-width: 350px;
+  overflow: hidden;
+}
+
+.tree-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(90deg, #312e81 0%, #1e1b4b 100%);
+  border-bottom: 2px solid #4c1d95;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #e9d5ff;
+}
+
+.tree-header svg {
+  color: #a78bfa;
+}
+
+.tree-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+/* Custom Scrollbar */
+.tree-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tree-content::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.tree-content::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.tree-content::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.tree-node-wrapper {
+  position: relative;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 3px solid transparent;
+}
+
+.tree-node:hover {
+  background: rgba(100, 116, 139, 0.15);
+  border-left-color: #64748b;
+}
+
+.tree-node.selected {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border-left-color: #8b5cf6;
+}
+
+.tree-node.highlighted {
+  animation: pulse-highlight 1.5s ease-in-out;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(251, 191, 36, 0.3); }
+}
+
+.tree-expand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.tree-expand-icon:hover {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 2px;
+}
+
+.tree-node-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Point Icons Styling */
+.point-icon {
+  transition: all 0.2s ease;
+}
+
+.point-icon.ok {
+  color: #10b981;
+}
+
+.point-icon.alarm {
+  color: #f59e0b;
+  animation: alarm-pulse 2s infinite;
+}
+
+@keyframes alarm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.point-icon.offline {
+  color: #6b7280;
+}
+
+/* Block Icons Styling */
+.block-icon {
+  transition: all 0.2s ease;
+}
+
+.block-icon.running {
+  color: #3b82f6;
+  animation: spin 2s linear infinite;
+}
+
+.block-icon.idle {
+  color: #94a3b8;
+}
+
+.block-icon.error {
+  color: #ef4444;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.tree-node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+/* Status Indicators */
+.tree-node-status {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: auto;
+}
+
+.tree-node-status.running {
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+.tree-node-status.idle {
+  background: #475569;
+  color: #cbd5e1;
+}
+
+.tree-node-status.error {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+}
+
+/* Value Display */
+.tree-node-value {
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+  color: #10b981;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  border: 1px solid #059669;
+}
+
+/* Badges */
+.tree-node-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.tree-node-badge.writable {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: white;
+  border: 1px solid #8b5cf6;
+}
+
+/* BOG File Styling */
+.bog-file {
+  color: #fbbf24;
+}
+
+.tree-node[data-type="bog"]:hover .bog-file {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.5));
+}
+
+/* Folder Nodes */
+.tree-node[data-type="folder"] {
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.tree-node[data-type="folder"] .tree-node-label::after {
+  content: attr(data-count);
+  margin-left: 8px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+/* Tree Footer */
+.tree-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, #064e3b 0%, #065f46 100%);
+  border-top: 1px solid #10b981;
+  font-size: 11px;
+  color: #a7f3d0;
+  font-weight: 500;
+}
+
+.tree-footer .status-ok {
+  color: #10b981;
+}
+
+/* Children Container */
+.tree-children {
+  position: relative;
+}
+
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, #334155 0%, transparent 100%);
+}
+
+/* Point Status Colors for Niagara */
+.tree-node.ok {
+  --status-color: #10b981;
+}
+
+.tree-node.alarm {
+  --status-color: #f59e0b;
+}
+
+.tree-node.offline {
+  --status-color: #6b7280;
+}
+
+.tree-node.waiting {
+  --status-color: #3b82f6;
+}
+
+/* Hover Effects */
+.tree-node:not(.selected):hover {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0.2) 0%, transparent 100%);
+}
+
+/* Active/Pressed State */
+.tree-node:active {
+  transform: scale(0.98);
+}
+
+/* Loading State */
+.tree-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #64748b;
+}
+
+.tree-loading svg {
+  animation: spin 1s linear infinite;
+}

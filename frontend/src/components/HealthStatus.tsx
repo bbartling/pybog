@@ -1,11 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Database, Server, Cpu, AlertCircle, CheckCircle } from 'lucide-react';
+import { Activity, Database, Server, Cpu, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 
 interface ServiceStatus {
   name: string;
   status: 'checking' | 'online' | 'offline' | 'error';
   message?: string;
   icon: React.ReactNode;
+}
+
+interface HealthData {
+  overall_status: string;
+  services: Record<string, {
+    healthy: boolean;
+    status: string;
+    message?: string;
+    recommendation?: string;
+  }>;
+  issues: any[];
+  recommendations: string[];
+  system_info?: any;
+}
+
+interface AuditRequest {
+  reqId: string;
+  method: string;
+  path: string;
+  status: number;
+  duration: number;
+  timestamp: number;
 }
 
 const HealthStatus: React.FC = () => {
@@ -16,6 +38,37 @@ const HealthStatus: React.FC = () => {
     { name: 'WebSocket', status: 'checking', icon: <Activity size={14} /> },
   ]);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [healthData, setHealthData] = useState<HealthData | null>(null);
+  const [systemMetrics, setSystemMetrics] = useState<any>(null);
+  const [recentRequests, setRecentRequests] = useState<AuditRequest[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  // Health WebSocket connection
+  useEffect(() => {
+    const cfg = (window as any).RUNTIME_CONFIG || {};
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/health';
+    
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => setWsConnected(true);
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'health' && data.data) {
+          setSystemMetrics(data.data);
+        } else if (data.type === 'audit' && data.data) {
+          setRecentRequests(prev => [...prev.slice(-19), data.data]);
+        }
+      } catch (e) {
+        console.error('Failed to parse health message:', e);
+      }
+    };
+    ws.onclose = () => setWsConnected(false);
+    
+    return () => ws.close();
+  }, []);
 
   useEffect(() => {
     const cfg = (window as any).RUNTIME_CONFIG || {};
@@ -94,8 +147,55 @@ const HealthStatus: React.FC = () => {
     }
   };
   
+  const getHealthColor = (percentage: number) => {
+    if (percentage > 80) return '#ef4444';
+    if (percentage > 60) return '#f59e0b';
+    return '#10b981';
+  };
+
+  const formatBytes = (bytes: number) => {
+    const gb = bytes / (1024 ** 3);
+    return `${gb.toFixed(1)}GB`;
+  };
+
+  const openExternalService = (service: string) => {
+    const urls = {
+      n8n: (window as any).RUNTIME_CONFIG?.N8N_URL || 'http://localhost:5678',
+      docs: `${(window as any).RUNTIME_CONFIG?.API_URL || 'http://localhost:8000'}/docs`,
+      pgadmin: 'http://localhost:5050'
+    };
+    window.open(urls[service as keyof typeof urls], '_blank');
+  };
+  
   const allOnline = services.every(s => s.status === 'online');
   const hasIssues = services.some(s => s.status === 'offline' || s.status === 'error');
+  
+  // Enhanced health check
+  useEffect(() => {
+    const checkDetailedHealth = async () => {
+      const cfg = (window as any).RUNTIME_CONFIG || {};
+      const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      
+      try {
+        const response = await fetch(`${apiBase}/api/health`, { cache: 'no-store' });
+        if (response.ok) {
+          const health = await response.json();
+          setHealthData(health);
+        }
+      } catch (e) {
+        setHealthData({
+          overall_status: 'error',
+          services: {},
+          issues: [{ message: 'Cannot reach API server' }],
+          recommendations: ['Start the API server: docker-compose up api']
+        });
+      }
+    };
+    
+    checkDetailedHealth();
+    const interval = setInterval(checkDetailedHealth, 15000);
+    return () => clearInterval(interval);
+  }, []);
   
   return (
     <div style={{
@@ -135,51 +235,203 @@ const HealthStatus: React.FC = () => {
         }}>
           System {allOnline ? 'Online' : hasIssues ? 'Issues' : 'Checking'}
         </span>
-        <span style={{ 
-          fontSize: 10,
-          color: '#9ca3af',
-          marginLeft: 'auto'
-        }}>
-          {isExpanded ? '▲' : '▼'}
-        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button 
+            onClick={(e) => { e.stopPropagation(); openExternalService('n8n'); }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#6b7280',
+              cursor: 'pointer',
+              padding: 4,
+            }}
+            title="Open n8n"
+          >
+            <ExternalLink size={12} />
+          </button>
+          <span style={{ fontSize: 10, color: '#9ca3af' }}>
+            {isExpanded ? '▲' : '▼'}
+          </span>
+        </div>
       </div>
       
       {isExpanded && (
-        <div style={{ padding: '8px 12px' }}>
-          {services.map((service, index) => (
-            <div 
-              key={index}
+        <div style={{ padding: 12, fontSize: 12 }}>
+          {/* Issues and Recommendations */}
+          {healthData && (healthData.issues.length > 0 || healthData.recommendations.length > 0) && (
+            <div style={{ marginBottom: 12 }}>
+              <h4 style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#dc2626' }}>
+                ⚠️ Issues Detected
+              </h4>
+              {healthData.issues.map((issue, idx) => (
+                <div key={idx} style={{ 
+                  background: '#fef2f2', 
+                  border: '1px solid #fecaca', 
+                  borderRadius: 4, 
+                  padding: 8, 
+                  marginBottom: 4,
+                  fontSize: 11
+                }}>
+                  <div style={{ fontWeight: 600, color: '#dc2626' }}>{issue.status || 'Issue'}</div>
+                  <div style={{ color: '#7f1d1d' }}>{issue.message}</div>
+                  {issue.recommendation && (
+                    <div style={{ 
+                      marginTop: 4, 
+                      padding: 4, 
+                      background: '#f0f9ff', 
+                      border: '1px solid #bae6fd',
+                      borderRadius: 2,
+                      color: '#0c4a6e'
+                    }}>
+                      💡 {issue.recommendation}
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {healthData.recommendations.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <h5 style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#0891b2' }}>
+                    Recommended Actions:
+                  </h5>
+                  {healthData.recommendations.map((rec, idx) => (
+                    <div key={idx} style={{ 
+                      background: '#ecfdf5', 
+                      border: '1px solid #a7f3d0', 
+                      borderRadius: 4, 
+                      padding: 6, 
+                      marginBottom: 2,
+                      fontSize: 11,
+                      color: '#064e3b'
+                    }}>
+                      🔧 {rec}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* System Resources */}
+          {systemMetrics && (
+            <div style={{ marginBottom: 12 }}>
+              <h4 style={{ margin: '0 0 8px 0', fontWeight: 600 }}>System Resources</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
+                <div>
+                  <div style={{ color: getHealthColor(systemMetrics.system.cpu_percent), fontWeight: 600 }}>
+                    {systemMetrics.system.cpu_percent.toFixed(1)}%
+                  </div>
+                  <div style={{ color: '#6b7280', fontSize: 10 }}>CPU</div>
+                </div>
+                <div>
+                  <div style={{ color: getHealthColor(systemMetrics.system.memory_percent), fontWeight: 600 }}>
+                    {systemMetrics.system.memory_percent.toFixed(1)}%
+                  </div>
+                  <div style={{ color: '#6b7280', fontSize: 10 }}>Memory</div>
+                </div>
+                <div>
+                  <div style={{ color: getHealthColor(systemMetrics.system.disk_percent), fontWeight: 600 }}>
+                    {systemMetrics.system.disk_percent.toFixed(1)}%
+                  </div>
+                  <div style={{ color: '#6b7280', fontSize: 10 }}>Disk</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Containers */}
+          {systemMetrics?.containers && Object.keys(systemMetrics.containers).length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <h4 style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Containers</h4>
+              {Object.entries(systemMetrics.containers).map(([name, container]: [string, any]) => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                    {name.replace('pybog-', '')}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      fontSize: 10,
+                      background: container.status === 'running' ? '#dcfce7' : '#fee2e2',
+                      color: container.status === 'running' ? '#16a34a' : '#dc2626'
+                    }}>
+                      {container.status}
+                    </span>
+                    <span style={{ color: '#6b7280', fontSize: 10 }}>
+                      {formatBytes(container.memory_usage)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Recent Requests */}
+          {recentRequests.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <h4 style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Recent Requests</h4>
+              <div style={{ maxHeight: 100, overflow: 'auto' }}>
+                {recentRequests.slice(-5).map((req, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
+                    <span style={{ fontFamily: 'monospace' }}>{req.method} {req.path}</span>
+                    <span style={{ color: req.status >= 400 ? '#dc2626' : '#16a34a' }}>
+                      {req.status} ({req.duration}ms)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Service Links */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button 
+              onClick={() => openExternalService('n8n')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 0',
-                borderBottom: index < services.length - 1 ? '1px solid #f3f4f6' : 'none'
+                flex: 1,
+                padding: 6,
+                fontSize: 10,
+                background: '#dbeafe',
+                color: '#1d4ed8',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer'
               }}
             >
-              <span style={{ color: getStatusColor(service.status) }}>
-                {service.icon}
-              </span>
-              <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>
-                {service.name}
-              </span>
-              {/* Quick links */}
-              {service.name === 'API' && (
-                <a href={(window as any).RUNTIME_CONFIG?.API_URL?.replace(/\/$/, '') + '/docs'} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#3b82f6' }}>Docs</a>
-              )}
-              {service.name === 'n8n' && (
-                <a href={(window as any).RUNTIME_CONFIG?.N8N_URL || 'http://localhost:5678'} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#3b82f6' }}>Open</a>
-              )}
-              {getStatusIcon(service.status)}
-              <span style={{ 
-                fontSize: 10, 
-                color: getStatusColor(service.status),
-                fontWeight: 500
-              }}>
-                {service.status === 'checking' ? '...' : service.status.toUpperCase()}
-              </span>
-            </div>
-          ))}
+              n8n
+            </button>
+            <button 
+              onClick={() => openExternalService('docs')}
+              style={{
+                flex: 1,
+                padding: 6,
+                fontSize: 10,
+                background: '#dcfce7',
+                color: '#16a34a',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer'
+              }}
+            >
+              API Docs
+            </button>
+            <button 
+              onClick={() => openExternalService('pgadmin')}
+              style={{
+                flex: 1,
+                padding: 6,
+                fontSize: 10,
+                background: '#f3e8ff',
+                color: '#7c3aed',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer'
+              }}
+            >
+              pgAdmin
+            </button>
+          </div>
         </div>
       )}
       

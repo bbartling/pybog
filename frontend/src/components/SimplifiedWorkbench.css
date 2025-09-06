@@ -23,10 +23,27 @@
 .header-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
+  gap: 10px;
   font-weight: 600;
-  color: #1a202c;
+  color: #e2e8f0;
+}
+
+.navigator-toggle {
+  background: transparent;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.navigator-toggle:hover {
+  background: #334155;
+  color: #e2e8f0;
+  border-color: #64748b;
 }
 
 .header-logo svg {

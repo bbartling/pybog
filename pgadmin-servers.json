@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "PyBOG PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "pybog",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpass",
+      "Comment": "PyBOG Application Database"
+    }
+  }
+}

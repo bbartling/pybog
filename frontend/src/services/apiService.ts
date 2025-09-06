@@ -169,6 +169,147 @@ class ApiService {
     }
   }
 
+  // Session Management API Methods
+  
+  async createSession(name?: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name || 'New Session',
+          initial_message: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Create session failed:', error);
+      throw error;
+    }
+  }
+  
+  async listSessions(limit: number = 20, offset: number = 0, includeStats: boolean = true): Promise<any> {
+    try {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString(),
+        include_stats: includeStats.toString()
+      });
+      
+      const response = await fetch(`${this.baseUrl}/api/sessions?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('List sessions failed:', error);
+      throw error;
+    }
+  }
+  
+  async getSession(sessionId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Get session failed:', error);
+      throw error;
+    }
+  }
+  
+  async updateSession(sessionId: string, name?: string, currentState?: string): Promise<any> {
+    try {
+      const body: any = {};
+      if (name !== undefined) body.name = name;
+      if (currentState !== undefined) body.current_state = currentState;
+      
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Update session failed:', error);
+      throw error;
+    }
+  }
+  
+  async deleteSession(sessionId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Delete session failed:', error);
+      throw error;
+    }
+  }
+  
+  async duplicateSession(sessionId: string, newName?: string): Promise<any> {
+    try {
+      const body = newName ? { new_name: newName } : {};
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Duplicate session failed:', error);
+      throw error;
+    }
+  }
+  
+  async exportSession(sessionId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/export`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Export session failed:', error);
+      throw error;
+    }
+  }
+
   // Convert file to text content for processing
   async fileToText(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -200,11 +341,18 @@ class ApiService {
 
   // Get recent sessions for switcher
   async getRecentSessions(limit = 20): Promise<{ sessions: Array<{session_id: string, name: string, current_state: string, last_activity: string}> }>{
-    const res = await fetch(`${this.baseUrl}/api/sessions/recent?limit=${limit}`);
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/recent-sessions?limit=${limit}`);
+      if (!res.ok) {
+        // Log error but return empty list for graceful degradation
+        console.warn(`Failed to fetch recent sessions: HTTP ${res.status}`);
+        return { sessions: [] };
+      }
+      return res.json();
+    } catch (error) {
+      console.warn('Failed to fetch recent sessions:', error);
+      return { sessions: [] };
     }
-    return res.json();
   }
 
   // Get full session restoration payload
@@ -366,30 +514,7 @@ class ApiService {
     });
   }
 
-  // Create a new session
-  async createSession(sessionId: string, description: string): Promise<any> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          description
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to create session:', error);
-      throw error;
-    }
-  }
+  // Note: createSession method moved to session management section above
 
   // Upload file for session
   async uploadSessionFile(sessionId: string, file: File): Promise<any> {

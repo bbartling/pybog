@@ -1,5 +1,5 @@
 import React from 'react';
-import { Background, Controls, MiniMap, MarkerType } from 'reactflow';
+import { Background, Controls, MiniMap, MarkerType, BackgroundVariant } from 'reactflow';
 
 export const defaultEdgeOptions = {
   type: 'smoothstep',
@@ -10,7 +10,7 @@ export const defaultEdgeOptions = {
 export function WorkbenchScaffolding() {
   return (
     <>
-      <Background variant="lines" gap={18} color="rgba(0,0,0,0.06)" />
+      <Background variant={BackgroundVariant.Lines} gap={18} color="rgba(0,0,0,0.06)" />
       <MiniMap position="top-right" pannable zoomable />
       <Controls position="top-right" />
     </>

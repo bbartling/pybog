@@ -14,6 +14,8 @@ openai>=1.0.0
 redis
 httpx
 asyncpg>=0.29.0
+sqlalchemy>=2.0.0
+sqlalchemy[asyncio]
 
 # File processing (minimal)
 PyPDF2
@@ -22,3 +24,7 @@ python-docx
 # Development
 pytest
 pytest-asyncio
+
+# Docker monitoring
+docker>=7.0.0
+psutil>=5.9.0

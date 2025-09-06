@@ -1,0 +1,380 @@
+// n8n Webhook Service for handling approval workflows
+interface WebhookApprovalData {
+  sessionId: string;
+  extractedText?: string;
+  analysis?: any;
+  action: 'approve_text' | 'approve_analysis' | 'edit_text' | 'retry_extraction' | 'refine_analysis';
+  feedback?: string;
+}
+
+interface WorkflowWaitingResponse {
+  resumeUrl: string;
+  status: string;
+  step: string;
+  currentStep?: number;
+  totalSteps?: number;
+  message: string;
+  extractedText?: string;
+  totalCharacters?: number;
+  fileCount?: number;
+  textQuality?: string;
+  qualityScore?: number;
+  qualityIssues?: string[];
+  recommendations?: string[];
+  hvacTermsFound?: number;
+  analysis?: {
+    inputs: string[];
+    outputs: string[];
+    control_blocks: string[];
+    pseudocode: Array<{ block: string; logic: string[]; complexity?: number }>;
+    issues: string[];
+  };
+  analysisQuality?: string;
+  summary?: {
+    totalInputs: number;
+    totalOutputs: number;
+    totalBlocks: number;
+    totalLogicLines: number;
+    issuesFound: number;
+    complexity: string;
+  };
+  actions?: {
+    [key: string]: {
+      label: string;
+      action: string;
+      description: string;
+      recommended: boolean;
+      confidence: number;
+    };
+  };
+  progress?: {
+    percentage: number;
+    phase: string;
+    description: string;
+    eta: string;
+  };
+  workflowStatus: string;
+  interactionType: string;
+  capabilities?: {
+    canEdit: boolean;
+    canCancel: boolean;
+    canRetry: boolean;
+    canDownload?: boolean;
+  };
+  timestamp: string;
+  downloadUrl?: string;
+  bogFilePath?: string;
+}
+
+class N8nWebhookService {
+  private baseUrl: string;
+  private activeResumeUrls: Map<string, string> = new Map();
+
+  constructor(baseUrl = 'http://localhost:5678') {
+    this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Store resume URL for a session
+   */
+  storeResumeUrl(sessionId: string, resumeUrl: string): void {
+    console.log('[N8n Webhook] Storing resume URL for session:', sessionId, resumeUrl);
+    this.activeResumeUrls.set(sessionId, resumeUrl);
+    // Also store in localStorage for persistence
+    try {
+      localStorage.setItem(`pybog_resume_${sessionId}`, resumeUrl);
+    } catch (e) {
+      console.warn('[N8n Webhook] Failed to persist resume URL:', e);
+    }
+  }
+
+  /**
+   * Get stored resume URL for a session
+   */
+  getResumeUrl(sessionId: string): string | null {
+    let url = this.activeResumeUrls.get(sessionId);
+    if (!url) {
+      // Try to restore from localStorage
+      try {
+        const stored = localStorage.getItem(`pybog_resume_${sessionId}`);
+        if (stored) {
+          url = stored;
+          this.activeResumeUrls.set(sessionId, url);
+        }
+      } catch (e) {
+        console.warn('[N8n Webhook] Failed to restore resume URL:', e);
+      }
+    }
+    return url || null;
+  }
+
+  /**
+   * Clear resume URL after use
+   */
+  clearResumeUrl(sessionId: string): void {
+    this.activeResumeUrls.delete(sessionId);
+    try {
+      localStorage.removeItem(`pybog_resume_${sessionId}`);
+    } catch (e) {}
+  }
+
+  /**
+   * Resume a waiting workflow with approval
+   */
+  async approveWorkflowStep(
+    resumeUrl: string, 
+    data: WebhookApprovalData
+  ): Promise<any> {
+    try {
+      console.log('[N8n Webhook] Approving workflow step:', { 
+        resumeUrl, 
+        action: data.action,
+        sessionId: data.sessionId 
+      });
+      
+      // Send directly to the resume URL with proper structure
+      const response = await fetch(resumeUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          // n8n Wait node expects data in 'body' field
+          body: {
+            sessionId: data.sessionId,
+            action: data.action,
+            extractedText: data.extractedText,
+            analysis: data.analysis,
+            feedback: data.feedback,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook approval failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('[N8n Webhook] Approval response:', result);
+      
+      // Store new resume URL if provided in response
+      if (result.resumeUrl && data.sessionId) {
+        this.storeResumeUrl(data.sessionId, result.resumeUrl);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[N8n Webhook] Approval error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Approve text extraction and continue to analysis
+   */
+  async approveTextExtraction(
+    sessionId: string,
+    extractedText: string,
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for session');
+    }
+
+    const response = await this.approveWorkflowStep(url, {
+      sessionId,
+      extractedText,
+      action: 'approve_text',
+    });
+
+    // Clear the used resume URL
+    this.clearResumeUrl(sessionId);
+    
+    return response;
+  }
+
+  /**
+   * Approve analysis and proceed to BOG generation
+   */
+  async approveAnalysis(
+    sessionId: string,
+    analysis: any,
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for session');
+    }
+
+    const response = await this.approveWorkflowStep(url, {
+      sessionId,
+      analysis,
+      action: 'approve_analysis',
+    });
+
+    // Clear the used resume URL
+    this.clearResumeUrl(sessionId);
+    
+    return response;
+  }
+
+  /**
+   * Request changes to analysis
+   */
+  async requestAnalysisChanges(
+    sessionId: string,
+    analysis: any,
+    feedback: string,
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for session');
+    }
+
+    return this.approveWorkflowStep(url, {
+      sessionId,
+      analysis,
+      action: 'refine_analysis',
+      feedback,
+    });
+  }
+
+  /**
+   * Edit extracted text before analysis
+   */
+  async editExtractedText(
+    sessionId: string,
+    extractedText: string,
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for session');
+    }
+
+    return this.approveWorkflowStep(url, {
+      sessionId,
+      extractedText,
+      action: 'edit_text',
+    });
+  }
+
+  /**
+   * Retry text extraction
+   */
+  async retryExtraction(
+    sessionId: string,
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for session');
+    }
+
+    return this.approveWorkflowStep(url, {
+      sessionId,
+      action: 'retry_extraction',
+    });
+  }
+
+  /**
+   * Parse workflow response to extract relevant data
+   */
+  parseWorkflowResponse(response: any): WorkflowWaitingResponse | null {
+    try {
+      // Handle different response formats from n8n
+      const data = response.data || response;
+      
+      // Store resume URL if present
+      if (data.resumeUrl && data.sessionId) {
+        this.storeResumeUrl(data.sessionId, data.resumeUrl);
+      }
+      
+      return {
+        resumeUrl: data.resumeUrl || '',
+        status: data.status || 'unknown',
+        step: data.step || '',
+        currentStep: data.currentStep,
+        totalSteps: data.totalSteps,
+        message: data.message || '',
+        extractedText: data.extractedText,
+        totalCharacters: data.totalCharacters,
+        fileCount: data.fileCount,
+        textQuality: data.textQuality,
+        qualityScore: data.qualityScore,
+        qualityIssues: data.qualityIssues,
+        recommendations: data.recommendations,
+        hvacTermsFound: data.hvacTermsFound,
+        analysis: data.analysis || data.analysisData,
+        analysisQuality: data.analysisQuality,
+        summary: data.summary,
+        actions: data.actions,
+        progress: data.progress,
+        workflowStatus: data.workflowStatus || data.status,
+        interactionType: data.interactionType,
+        capabilities: data.capabilities,
+        timestamp: data.timestamp || new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('[N8n Webhook] Failed to parse response:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a session has a pending approval
+   */
+  hasPendingApproval(sessionId: string): boolean {
+    return this.getResumeUrl(sessionId) !== null;
+  }
+
+  /**
+   * Get all sessions with pending approvals
+   */
+  getPendingSessions(): string[] {
+    const sessions: string[] = [];
+    
+    // Check memory
+    this.activeResumeUrls.forEach((_, sessionId) => {
+      sessions.push(sessionId);
+    });
+    
+    // Check localStorage
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('pybog_resume_')) {
+          const sessionId = key.replace('pybog_resume_', '');
+          if (!sessions.includes(sessionId)) {
+            sessions.push(sessionId);
+          }
+        }
+      }
+    } catch (e) {}
+    
+    return sessions;
+  }
+
+  /**
+   * Clear all stored resume URLs (cleanup)
+   */
+  clearAllResumeUrls(): void {
+    this.activeResumeUrls.clear();
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('pybog_resume_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+    } catch (e) {}
+  }
+}
+
+const n8nWebhookService = new N8nWebhookService();
+export default n8nWebhookService;
+export type { WebhookApprovalData, WorkflowWaitingResponse };
