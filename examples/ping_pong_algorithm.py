@@ -49,7 +49,14 @@ def main():
     b.start_sub_folder("Logic")
 
     # State Management (Startup Delay)
-    b.add_component("kitControl:BooleanDelay", "StartupDelay")
+    # Calculate default onDelay from StartupDelaySeconds input (default 5 seconds)
+    default_startup_delay_ms = str(int(5.0 * 1000))
+
+    b.add_component(
+        "kitControl:BooleanDelay",
+        "StartupDelay",
+        properties={"onDelay": default_startup_delay_ms, "offDelay": "0"},
+    )
     b.add_component("kitControl:And", "RunLogicEnable")
     b.add_component(
         "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
@@ -57,7 +64,13 @@ def main():
     b.add_component("kitControl:Multiply", "Delay_ms_Calc")
 
     # Update Timer
-    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
+    default_period_ms = "1000"
+
+    b.add_component(
+        "kitControl:MultiVibrator",
+        "UpdateTimer",
+        properties={"period": default_period_ms},
+    )
     b.add_component("kitControl:Multiply", "Update_ms_Calc")
     b.add_component("kitControl:OneShot", "UpdatePulse")
     b.add_component("kitControl:And", "PulseGate")
@@ -92,6 +105,7 @@ def main():
         converter_type="conv:StatusNumericToRelTime",
     )
     b.add_link("Enable", "out", "RunLogicEnable", "inA")
+    b.add_link("Enable", "out", "UpdateTimer", "enabled")
     b.add_link("StartupDelay", "out", "RunLogicEnable", "inB")
 
     # Timer
@@ -101,7 +115,7 @@ def main():
         "Update_ms_Calc",
         "out",
         "UpdateTimer",
-        "Period",
+        "period",
         link_type="b:ConversionLink",
         converter_type="conv:StatusNumericToRelTime",
     )

@@ -471,6 +471,48 @@ class BogFolderBuilder:
             "kitControl:NumericSelect",
         ]
 
+        boolean_source_types = [
+            "control:BooleanWritable",
+            "kitControl:BooleanConst",
+            "kitControl:And",
+            "kitControl:Or",
+            "kitControl:Xor",
+            "kitControl:Not",
+            "kitControl:Equal",
+            "kitControl:NotEqual",
+            "kitControl:GreaterThan",
+            "kitControl:GreaterThanEqual",
+            "kitControl:LessThan",
+            "kitControl:LessThanEqual",
+            "kitControl:BooleanSwitch",
+            "kitControl:BooleanLatch",
+            "kitControl:BooleanDelay",
+            "kitControl:Tstat",
+            "kitControl:OneShot",
+            "kitControl:MultiVibrator",
+        ]
+
+        if (
+            s_type in boolean_source_types  # Or simplify to if "Boolean" in s_type:
+            and t_type == "kitControl:MultiVibrator"
+            and target_slot.lower() == "enabled"
+        ):
+            if self.debug:
+                print(
+                    f"[BOG BUILDER DEBUG] Applying StatusBooleanToBoolean conversion for MultiVibrator.enabled link."
+                )
+            self._links.append(
+                {
+                    "source_name": source_comp_name,
+                    "source_slot": source_slot,
+                    "target_name": target_comp_name,
+                    "target_slot": target_slot,
+                    "link_type": "b:ConversionLink",
+                    "converter_type": "conv:StatusBooleanToBoolean",
+                }
+            )
+            return
+
         # Check if the source type is in our list of numeric producers.
         if (
             s_type in numeric_source_types
@@ -482,16 +524,6 @@ class BogFolderBuilder:
                     "[BOG BUILDER DEBUG] Applying special dual-link for MultiVibrator period."
                 )
 
-            self._links.append(
-                {
-                    "source_name": source_comp_name,
-                    "source_slot": source_slot,
-                    "target_name": target_comp_name,
-                    "target_slot": "Period",  # Uppercase
-                    "link_type": "b:Link",
-                    "converter_type": None,
-                }
-            )
             self._links.append(
                 {
                     "source_name": source_comp_name,
@@ -996,22 +1028,13 @@ class BogFolderBuilder:
             and t_type == "kitControl:MultiVibrator"
             and target_slot.lower() == "period"
         ):
+            # Only append the single, correct conversion link to lowercase "period"
             self._links.append(
                 {
                     "source_name": source_name,
                     "source_slot": source_slot,
                     "target_name": target_name,
                     "target_slot": "period",  # Lowercase target
-                    "link_type": "b:ConversionLink",
-                    "converter_type": "conv:StatusNumericToRelTime",
-                }
-            )
-            self._links.append(
-                {
-                    "source_name": source_name,
-                    "source_slot": source_slot,
-                    "target_name": target_name,
-                    "target_slot": "Period",  # Uppercase target
                     "link_type": "b:ConversionLink",
                     "converter_type": "conv:StatusNumericToRelTime",
                 }

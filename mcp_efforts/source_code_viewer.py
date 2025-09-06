@@ -1,3 +1,7 @@
+"""
+Maybe use in an MCP route?
+"""
+
 import inspect
 import types
 from bog_builder import builder

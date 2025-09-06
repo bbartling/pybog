@@ -26,6 +26,8 @@ This serves as a clear, interactive example of the Tstat block's functionality.
 
 import os
 import argparse
+
+# Assuming bog_builder module is in the correct path relative to this script
 from bog_builder import BogFolderBuilder
 
 
@@ -62,7 +64,13 @@ def main():
         "kitControl:BooleanConst", "Action_Reverse", properties={"value": True}
     )
     builder.add_component(
-        "kitControl:BooleanConst", "NullOnInControl_False", properties={"value": False}
+        "kitControl:BooleanConst",
+        "NullOnInControl_Setting",
+        properties={"value": False},
+    )
+    # NEW: Add component to test nullOnInactive slot
+    builder.add_component(
+        "kitControl:BooleanConst", "NullOnInactive_Setting", properties={"value": False}
     )
 
     # --- Core Logic Block ---
@@ -78,9 +86,32 @@ def main():
     builder.add_link("HeatEnableSp", "out", "Tstat", "sp")
     builder.add_link("Differential", "out", "Tstat", "diff")
 
-    # Wire the configuration constants
-    builder.add_link("Action_Reverse", "out", "Tstat", "action")
-    builder.add_link("NullOnInControl_False", "out", "Tstat", "nullOnInactive")
+    # Wire the configuration constants with conversion links to fix ClassCastException
+    builder.add_link(
+        "Action_Reverse",
+        "out",
+        "Tstat",
+        "action",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusBooleanToFrozenEnum",  # <-- ENUM
+    )
+    builder.add_link(
+        "NullOnInControl_Setting",  # Renamed component for clarity
+        "out",
+        "Tstat",
+        "nullOnInControl",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusBooleanToBoolean",
+    )
+    # NEW: Wire the nullOnInactive slot with conversion link
+    builder.add_link(
+        "NullOnInactive_Setting",
+        "out",
+        "Tstat",
+        "nullOnInactive",
+        link_type="b:ConversionLink",
+        converter_type="conv:StatusBooleanToBoolean",
+    )
 
     # Wire the final command to the output writable for viewing
     builder.add_link("Tstat", "out", "HeatCommand", "in16")

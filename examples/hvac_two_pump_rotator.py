@@ -1,5 +1,5 @@
 """
-    
+
 kitControl:LeadLagCycles 2-Pump Rotator (AI-Generated)
 -------------------------------------------------------
 
@@ -38,15 +38,14 @@ points is 'true', the 'in' slot of the rotator block is enabled, calling
 for one pump to run.
 
 Rotation Logic:
-Every time the block needs to start a pump, it looks at the 
+Every time the block needs to start a pump, it looks at the
 cycleCount input for both pumps and always chooses the one with the lower number.
 
-This is its primary method for keeping the wear on the pumps 
-as even as possible over time. The maxRuntime setting is just 
-a backup to force a rotation if one pump happens to run for 
+This is its primary method for keeping the wear on the pumps
+as even as possible over time. The maxRuntime setting is just
+a backup to force a rotation if one pump happens to run for
 10 hours straight without ever shutting off.
 """
-
 
 import sys
 import os
@@ -125,9 +124,7 @@ def main():
         cycle_count_slot = f"cycleCount{chr(ord('A') + i)}"
 
         # 1. Link the rotator's output to the final pump command writable.
-        builder.add_link(
-            "Pump_Rotator_Block", output_slot, f"{pump_name}_Cmd", "in16"
-        )
+        builder.add_link("Pump_Rotator_Block", output_slot, f"{pump_name}_Cmd", "in16")
 
         # 2. When a pump is commanded on, trigger its cycle counter to increment.
         builder.add_link(

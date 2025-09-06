@@ -49,9 +49,6 @@ def main():
     # This boolean will pulse on and off so you can see the result.
     builder.add_boolean_writable("PulseOutput")
 
-    # --- Logic Sub-folder ---
-    builder.start_sub_folder("Logic")
-
     # A constant for converting seconds to milliseconds.
     builder.add_component(
         "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
@@ -60,14 +57,14 @@ def main():
     # The block that performs the ms calculation.
     builder.add_component("kitControl:Multiply", "Update_ms_Calc")
 
-    # The MultiVibrator to be tested.
-    # The initial 'period' property is set here, but will be overridden by the link.
+    # Update Timer
+    default_period_ms = "1000"
+
     builder.add_component(
-        "kitControl:MultiVibrator", "TestMultiVibrator", properties={"period": "1000"}
+        "kitControl:MultiVibrator",
+        "TestMultiVibrator",
+        properties={"period": default_period_ms},
     )
-
-    builder.end_sub_folder()
-
     print("\n--- Wiring Components ---")
 
     # Wire the seconds-to-milliseconds calculation
