@@ -6,7 +6,11 @@
 
 
 ## Python Project Setup
+
 I use **WSL (Windows Subsystem for Linux)** but it make work just fine on ordinary Windows or Mac. Generating `bogs` can be done easily without setting up Python enivornments as shown further below via "ChatGPT Agent" mode and `The Bog Maker 4000` website. Both examples are demo'd on YouTube.
+
+<details><summary><strong>Details</strong></summary>
+
 >
 > ```bash
 > pip install pybog
@@ -81,9 +85,14 @@ python examples/bool_latch_play_ground.py
 
 and it will always drop files directly into your Workbench directory for easy fast testing.
 
+</details>
+
+
 ---
 
-<details><summary><strong>Bog Builder Python Example And Bog XML Graph Tutorial</strong></summary>
+## Bog Builder Python Example And Bog XML Graph Tutorial
+
+<details><summary><strong>How it works</strong></summary>
 
 This is a code snip from the `examples\subtract_simple.py` file with optional `start_sub_folder` folder structures.
 
@@ -305,7 +314,7 @@ With Agent Mode, you can rapidly prototype complex HVAC sequences without writin
 
 ---
 
-## Generate Context Text Files
+## Generate LLM Context Text Files
 
 The **context directory** contains documentation specifically formatted for use by the LLM agent.
 Running the generator will take all Python files in the `examples` directory and combine them into a set of **LLM-friendly documentation files** (see [GoFast MCP docs](https://gofastmcp.com/getting-started/welcome#llm-friendly-docs) for the format specification).
@@ -806,6 +815,7 @@ Wrappers for creating schedule objects.
 | `add_enum_schedule(name: str, properties: dict)` | `sch:EnumSchedule` | Creates a schedule for enumerated values. |
 
 </details>
+
 ---
 
 [🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
