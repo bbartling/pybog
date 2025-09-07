@@ -83,7 +83,7 @@ and it will always drop files directly into your Workbench directory for easy fa
 
 ---
 
-## Bog Builder Python API Example
+<details><summary><strong>Bog Builder Python Example And Bog XML Graph Tutorial</strong></summary>
 
 This is a code snip from the `examples\subtract_simple.py` file with optional `start_sub_folder` folder structures.
 
@@ -222,8 +222,9 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 ![Adder Logic Created with Python](https://github.com/bbartling/pybog/blob/develop/snips/addrMadeWithPy.jpg)
 
 
----
+</details>
 
+---
 
 # 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
 
@@ -232,7 +233,8 @@ The workflow is entirely conversational: upload your project zip, describe the c
 
 ![Agent mode snip](https://github.com/bbartling/pybog/blob/develop/snips/agent_mode_snip.png)
 
-## 🚀 How It Works
+
+<details><summary><strong>How It Works</strong></summary>
 
 1. **Upload the project zip**
    In the chat interface, attach the `pybog-develop.zip` file (found in this repository). The agent will automatically extract the archive and inspect the code.
@@ -299,11 +301,11 @@ flowchart TD
 
 With Agent Mode, you can rapidly prototype complex HVAC sequences without writing any code yourself. Just describe what you need, and let ChatGPT handle the heavy lifting.
 
+</details>
+
 ---
 
-
-
-### Generate Context Text Files
+## Generate Context Text Files
 
 The **context directory** contains documentation specifically formatted for use by the LLM agent.
 Running the generator will take all Python files in the `examples` directory and combine them into a set of **LLM-friendly documentation files** (see [GoFast MCP docs](https://gofastmcp.com/getting-started/welcome#llm-friendly-docs) for the format specification).
@@ -339,7 +341,7 @@ The graph is **not strictly hierarchical**: components can have links and refere
 
 ---
 
-### Analyzer Class
+<details><summary><strong>Analyzer Class</strong></summary>
 
 The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
 
@@ -400,12 +402,10 @@ This will print a detailed report listing:
 
 👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
 
----
-
-
-[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
+</details>
 
 ---
+
 
 ## Component Library (kitControl)
 
@@ -554,9 +554,7 @@ Below is a summary of available kitControl widgets exposed through the `BogFolde
 </details>
 
 
-### pybog API Reference: BogFolderBuilder Methods
-
-<details>
+<details><summary><strong>pybog API Reference: BogFolderBuilder Methods</strong></summary>
 
 These methods create standard input/output points that are typically exposed on the wiresheet interface.
 
@@ -808,6 +806,10 @@ Wrappers for creating schedule objects.
 | `add_enum_schedule(name: str, properties: dict)` | `sch:EnumSchedule` | Creates a schedule for enumerated values. |
 
 </details>
+---
+
+[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
+
 ---
 
 ## License
