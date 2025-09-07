@@ -91,17 +91,15 @@ const UserNodeNiagara: React.FC<NodeProps<UserData>> = ({ data }) => {
           fontSize: '12px',
           lineHeight: '1.5',
           color: '#374151',
-          maxHeight: '80px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          display: '-webkit-box',
-          WebkitLineClamp: 4,
-          WebkitBoxOrient: 'vertical',
-          wordBreak: 'break-word'
+          // Removed maxHeight to allow content to expand
+          // Removed overflow: hidden
+          // Removed WebkitLineClamp to show full content
+          wordBreak: 'break-word',
+          whiteSpace: 'pre-wrap',
+          // Optional: Add max-width if needed to maintain bubble width
+          maxWidth: '400px'
         }}>
-          {data?.content && data.content.length > 150 
-            ? data.content.substring(0, 150) + '...' 
-            : data?.content || 'No content'}
+          {data?.content || 'No content'}
         </div>
         
         {hasFiles && (

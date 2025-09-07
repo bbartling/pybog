@@ -16,11 +16,14 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-// Import our styled nodes
+// Import our styled nodes - use neubrutalism if available, fallback to originals
 import UserNodeWithResend from './Nodes/UserNodeWithResend';
 import SystemNodeNiagara from './Nodes/SystemNodeNiagara';
 import AnalysisGridNode from './Nodes/AnalysisGridNode';
 import ProcessNodeNiagara from './Nodes/ProcessNodeNiagara';
+
+// Import neubrutalism theme
+import { TOKENS } from '../theme/neubrutalism';
 
 const nodeTypes = {
   userMessage: UserNodeWithResend,
@@ -43,6 +46,8 @@ export interface ChatMessage {
     analysisData?: any;
     downloadUrl?: string;
     fileName?: string;
+    file_id?: string; // DB identifier for uploaded file
+    previewUrl?: string; // server-provided preview URL (e.g., extracted text/image)
     bogFilePath?: string;
     status?: 'processing' | 'complete' | 'error' | 'awaiting_approval';
     processStep?: {
@@ -127,6 +132,13 @@ function ChatCanvasGridContent({
       return { x, y };
     };
 
+    // Precompute last user message index for optional resend affordance
+    const lastUserIndex = (() => {
+      let i = -1;
+      for (let k = 0; k < messages.length; k++) if (messages[k].type === 'user') i = k;
+      return i;
+    })();
+
     // Create nodes
     messages.forEach((message, index) => {
       const position = calculatePosition(index);
@@ -152,13 +164,18 @@ function ChatCanvasGridContent({
           analysis: message.metadata?.analysisData,
           onApprove: isAnalysis ? onApproveAnalysis : undefined,
           onRequestChanges: isAnalysis ? onRequestChanges : undefined,
-          onResend: isUser && message.status === 'failed' && onResendMessage ? 
-            () => onResendMessage(message) : undefined,
+          // Resend is offered if message is failed OR it's the latest user message (quick retry)
+          onResend: isUser && onResendMessage && (message.status === 'failed' || index === lastUserIndex)
+            ? () => onResendMessage(message) : undefined,
           stepKey: message.metadata?.processStep?.stepKey,
           title: isProcess ? message.content : undefined,
           detail: message.metadata?.processStep?.detail,
           processStatus: message.metadata?.processStep?.status,
           metrics: message.metadata?.processStep?.metrics,
+          // Option B: pass action set and resume URL for system nodes
+          actions: message.metadata?.actions,
+          resumeUrl: message.metadata?.workflowState?.resumeUrl || message.metadata?.resumeUrl,
+          workflowStatus: message.metadata?.status || message.metadata?.workflowState?.state,
         },
         style: {
           width: GRID_CONFIG.NODE_WIDTH,
@@ -187,19 +204,28 @@ function ChatCanvasGridContent({
         //   edgeType = ConnectionLineType.Step;
         // }
         
+        const targetStatus = message.metadata?.status || message.metadata?.workflowState?.state;
+        const statusStr = String(targetStatus || '');
+        const awaitingStatuses = ['awaiting_approval', 'awaiting_confirmation'];
+        const isAwaiting = awaitingStatuses.includes(statusStr);
+        const isError = statusStr === 'error';
+        const edgeColor = isError ? TOKENS.error : (isAwaiting ? TOKENS.warning : TOKENS.border);
+        const dash = (workflowState === 'analyzing' && index === messages.length - 1) || isAwaiting ? '8 6' : undefined;
+
         const edge: Edge = {
           id: `e-${sourceNode.id}-${targetNode.id}`,
           source: sourceNode.id,
           target: targetNode.id,
           type: 'smoothstep',
-          animated: workflowState === 'analyzing' && index === messages.length - 1,
+          animated: workflowState === 'analyzing' && index === messages.length - 1 && !isError,
           style: {
-            stroke: isUser ? '#8b5cf6' : '#22d3ee',
+            stroke: edgeColor,
             strokeWidth: 2,
+            strokeDasharray: dash,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: isUser ? '#8b5cf6' : '#22d3ee',
+            color: edgeColor,
             width: 20,
             height: 20,
           },
@@ -251,34 +277,35 @@ function ChatCanvasGridContent({
       connectionLineType={ConnectionLineType.SmoothStep}
     >
       <Background 
-        color="#e5e7eb" 
-        gap={20} 
+        color={TOKENS.grid}
+        gap={16} 
         variant={BackgroundVariant.Lines} 
         size={1}
-        style={{ backgroundColor: '#ffffff' }}
+        style={{ backgroundColor: TOKENS.bg }}
       />
       <Controls 
         showZoom
         showFitView
         showInteractive={false}
         style={{
-          background: '#ffffff',
-          border: '1px solid #e5e7eb',
+          background: TOKENS.white,
+          border: `2px solid ${TOKENS.border}`,
           borderRadius: '8px',
         }}
       />
       <MiniMap 
         style={{
-          background: '#ffffff',
-          border: '1px solid #e5e7eb',
+          background: TOKENS.white,
+          border: `2px solid ${TOKENS.border}`,
+          borderRadius: '8px',
         }}
         nodeColor={(n) => {
-          if (n.type === 'userMessage') return '#8b5cf6';
-          if (n.type === 'processMessage') return '#22d3ee';
-          if (n.type === 'analysisMessage') return '#10b981';
-          return '#3b82f6';
+          if (n.type === 'userMessage') return TOKENS.userHeader;
+          if (n.type === 'processMessage') return TOKENS.processHeader;
+          if (n.type === 'analysisMessage') return TOKENS.ok;
+          return TOKENS.systemHeader;
         }}
-        maskColor="rgba(255, 255, 255, 0.8)"
+        maskColor="rgba(247, 248, 250, 0.8)"
       />
     </ReactFlow>
   );
@@ -286,7 +313,7 @@ function ChatCanvasGridContent({
 
 const ChatCanvasGrid: React.FC<ChatCanvasProps> = (props) => {
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', background: '#ffffff' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', background: TOKENS.bg }}>
       <ReactFlowProvider>
         <ChatCanvasGridContent {...props} />
       </ReactFlowProvider>

@@ -57,7 +57,7 @@ class EnhancedApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
-        initial_message: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.'
+        initial_message: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.'
       })
     });
 
@@ -139,6 +139,7 @@ class EnhancedApiService {
     file_id: string;
     filename: string;
     size: number;
+    preview_url?: string;
   }> {
     console.log('📤 Uploading file:', file.name, 'Size:', file.size);
     
@@ -301,6 +302,25 @@ class EnhancedApiService {
 
     await this.persistMessage(sessionId, resendMessage);
     console.log('✅ Message resent');
+  }
+
+  // Replay stored files for a session via server (streams binaries back into n8n)
+  async replayFiles(sessionId: string, sourceMessageId?: string): Promise<any> {
+    try {
+      const resp = await fetch(`${API_BASE}/api/workflow/replay-files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, source_message_id: sourceMessageId })
+      });
+      if (!resp.ok) {
+        const error = await resp.text();
+        throw new Error(`Failed to replay files: ${error}`);
+      }
+      return await resp.json();
+    } catch (e) {
+      console.warn('Replay files failed:', e);
+      throw e;
+    }
   }
 
   // Test connection

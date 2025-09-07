@@ -12,7 +12,11 @@ import {
   X,
   Download,
   Database,
-  Eye
+  Eye,
+  MessageSquare,
+  FileCode,
+  BarChart3,
+  Clock
 } from 'lucide-react';
 
 interface Session {
@@ -84,7 +88,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
 
   const startRename = (session: Session) => {
     setEditingSessionId(session.id);
-    setEditingName(session.name);
+    setEditingName(session.name || '');
   };
 
   const saveRename = () => {
@@ -105,7 +109,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
     !m.sessionId || m.sessionId === sessionId
   );
 
-  // Extract uploaded files from session messages
+  // Extract uploaded files from session messages (in-memory)
   const uploadedFiles = sessionMessages
     .filter(m => m.files && m.files.length > 0)
     .flatMap((m, msgIdx) => 
@@ -114,9 +118,22 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
         name: file.name,
         messageId: m.id,
         size: file.size,
-        type: file.type
+        type: file.type,
+        previewUrl: undefined as string | undefined
       }))
     );
+
+  // Extract persisted files with preview URLs from system messages
+  const storedFiles = sessionMessages
+    .filter(m => (m as any)?.metadata?.file_id || (m as any)?.metadata?.previewUrl)
+    .map((m: any, idx) => ({
+      id: m.id,
+      name: m?.metadata?.fileName || `uploaded_${idx + 1}`,
+      messageId: m.id,
+      size: undefined as number | undefined,
+      type: 'application/octet-stream',
+      previewUrl: m?.metadata?.previewUrl || (m?.metadata?.previewUrls && m.metadata.previewUrls[0])
+    }));
 
   // Extract BOG files from session messages
   const bogFiles = sessionMessages
@@ -130,409 +147,503 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
 
   return (
     <div style={{
-      width: '300px',
-      height: '100%',
-      background: '#fafbfc',
-      borderRight: '1px solid #d1d5db',
       display: 'flex',
       flexDirection: 'column',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      fontSize: '14px',
-      color: '#1f2937',
+      height: '100%',
+      overflow: 'hidden',
+      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+      fontSize: '13px',
+      color: '#3F3F4B',
     }}>
       {/* Header */}
       <div style={{
-        padding: '14px 16px',
-        background: '#ffffff',
-        borderBottom: '1px solid #e5e7eb',
+        padding: '16px',
+        background: '#FFFFFF',
+        borderBottom: '2px solid #3F3F4B',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'space-between',
         gap: '8px',
       }}>
-        <Database size={18} style={{ color: '#7c3aed' }} />
-        <div style={{ 
-          flex: 1, 
-          fontWeight: 600, 
-          fontSize: '15px',
-          color: '#111827',
-          letterSpacing: '-0.025em' 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
         }}>
-          Project Navigator
+          <Database size={16} style={{ color: '#6B7280' }} />
+          <div style={{ 
+            fontWeight: 700, 
+            fontSize: '12px',
+            color: '#3F3F4B',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em' 
+          }}>
+            CHAT SESSIONS
+          </div>
         </div>
+        <button
+          onClick={onCreateSession}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            background: '#569BFF',
+            color: '#FFFFFF',
+            border: '2px solid #3F3F4B',
+            borderRadius: '8px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 0 0 #3F3F4B';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          + New
+        </button>
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {/* Sessions Section */}
-        <div key="sessions-section">
-          <div
-            onClick={() => toggleSection('sessions')}
+      <div style={{ 
+        flex: 1, 
+        overflow: 'auto', 
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        {/* Sessions List */}
+
+        {sessions.map((session) => {
+          const isActive = session.id === sessionId;
+          const isEditing = editingSessionId === session.id;
+          const isExpanded = expandedSections.has(`session-${session.id}`);
+          const sessionFiles = messages.filter(m => 
+            !m.sessionId || m.sessionId === session.id
+          ).filter(m => m.files && m.files.length > 0).flatMap(m => m.files!);
+          const messageCount = messages.filter(m => !m.sessionId || m.sessionId === session.id).length;
+          const hasAnalysis = currentAnalysis && session.id === sessionId;
+
+          return (
+            <div 
+              key={session.id}
+              style={{
+                background: '#FFFFFF',
+                border: isActive ? '2px solid #569BFF' : '2px solid #E5E7EB',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                transition: 'all 0.2s ease',
+                boxShadow: isActive ? '2px 2px 0 0 rgba(86, 155, 255, 0.2)' : 'none',
+              }}
+            >
+              {/* Session Card Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  background: isActive ? 'linear-gradient(to right, #F0F9FF, #E6F3FE)' : '#FFFFFF',
+                  cursor: 'pointer',
+                  borderBottom: isExpanded ? '1px solid #E5E7EB' : 'none',
+                }}
+                onClick={() => !isEditing && onSwitchSession(session.id)}
+              >
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSection(`session-${session.id}`);
+                  }}
+                  style={{ marginRight: '8px', cursor: 'pointer' }}
+                >
+                  {isExpanded ? 
+                    <ChevronDown size={14} style={{ color: '#6B7280' }} /> : 
+                    <ChevronRight size={14} style={{ color: '#6B7280' }} />
+                  }
+                </div>
+                <MessageSquare size={14} style={{ color: isActive ? '#569BFF' : '#6B7280', marginRight: '8px' }} />
+                {isEditing ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && saveRename()}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        border: '2px solid #569BFF',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        background: '#ffffff',
+                        outline: 'none',
+                      }}
+                      autoFocus
+                    />
+                    <Save
+                      size={14}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveRename();
+                      }}
+                      style={{ 
+                        marginLeft: '6px', 
+                        cursor: 'pointer', 
+                        color: '#10b981' 
+                      }}
+                    />
+                    <X
+                      size={14}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cancelRename();
+                      }}
+                      style={{ 
+                        marginLeft: '4px', 
+                        cursor: 'pointer', 
+                        color: '#ef4444' 
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        color: isActive ? '#3F3F4B' : '#6B7280',
+                        fontWeight: isActive ? 600 : 500,
+                        fontSize: '13px',
+                        marginBottom: '2px',
+                      }}>
+                        {session.name || 'Untitled Session'}
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '12px',
+                        fontSize: '11px',
+                        color: '#9CA3AF'
+                      }}>
+                        {messageCount > 0 && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MessageSquare size={10} />
+                            {messageCount}
+                          </span>
+                        )}
+                        {sessionFiles.length > 0 && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FileText size={10} />
+                            {sessionFiles.length}
+                          </span>
+                        )}
+                        {hasAnalysis && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <BarChart3 size={10} />
+                            Analysis
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <Edit3
+                        size={14}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(session);
+                        }}
+                        style={{ 
+                          cursor: 'pointer', 
+                          color: '#6B7280',
+                          opacity: 0.7,
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                      />
+                      <Trash2
+                        size={14}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSession(session.id);
+                        }}
+                        style={{ 
+                          cursor: 'pointer', 
+                          color: '#EF4444',
+                          opacity: 0.7,
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Expandable Content */}
+              {isExpanded && (
+                <div style={{ 
+                  padding: '12px',
+                  background: '#FAFBFC',
+                  borderTop: '1px solid #E5E7EB'
+                }}>
+                  {/* Session Info */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginBottom: '12px',
+                    fontSize: '11px',
+                    color: '#6B7280'
+                  }}>
+                    <Clock size={12} />
+                    <span>
+                      Created: {new Date(session.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  {/* Files Section */}
+                  {(storedFiles.length > 0 || uploadedFiles.length > 0) && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: '#3F3F4B', 
+                        fontWeight: 600,
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <FileCode size={12} />
+                        Uploaded Files ({[...storedFiles, ...uploadedFiles].length})
+                      </div>
+                      <div style={{ 
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        {[...storedFiles, ...uploadedFiles].map((file) => (
+                          <div
+                            key={file.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '6px 8px',
+                              background: '#FFFFFF',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              color: '#6B7280',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = '#569BFF';
+                              e.currentTarget.style.background = '#F0F9FF';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#E5E7EB';
+                              e.currentTarget.style.background = '#FFFFFF';
+                            }}
+                          >
+                            <FileText size={12} style={{ color: '#569BFF', marginRight: '6px' }} />
+                            <span style={{ flex: 1, fontWeight: 500 }}>{file.name}</span>
+                            {file.previewUrl && (
+                              <Eye 
+                                size={12} 
+                                style={{ color: '#6B7280', cursor: 'pointer' }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(file.previewUrl!, '_blank');
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generated BOG Files */}
+                  {bogFiles.length > 0 && (
+                    <div>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: '#3F3F4B', 
+                        fontWeight: 600,
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <BarChart3 size={12} />
+                        Generated BOG Files
+                      </div>
+                      <div style={{ 
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        {bogFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '6px 8px',
+                              background: 'linear-gradient(to right, #F0FDF4, #DCFCE7)',
+                              border: '1px solid #10B981',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              color: '#065F46',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'translateX(4px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'translateX(0)';
+                            }}
+                            onClick={() => window.open(file.url, '_blank')}
+                          >
+                            <FileCode size={12} style={{ color: '#10B981', marginRight: '6px' }} />
+                            <span style={{ flex: 1 }}>{file.name}</span>
+                            <Download
+                              size={12}
+                              style={{ 
+                                cursor: 'pointer', 
+                                color: '#10B981'
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        
+        {/* Analysis Section - Show when analysis exists for current session */}
+        {currentAnalysis && sessionId && (
+          <div style={{
+            marginTop: '12px',
+            background: '#FFFFFF',
+            border: '2px solid #10B981',
+            borderRadius: '10px',
+            overflow: 'hidden',
+          }}>
+            <div
+            onClick={() => toggleSection('analysis')}
             style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '10px 14px',
-              background: '#ffffff',
-              borderBottom: '1px solid #e5e7eb',
+              padding: '10px 12px',
+              background: 'linear-gradient(to right, #F0FDF4, #DCFCE7)',
               cursor: 'pointer',
               userSelect: 'none',
             }}
           >
-            {expandedSections.has('sessions') ? 
-              <ChevronDown size={16} style={{ color: '#6b7280' }} /> : 
-              <ChevronRight size={16} style={{ color: '#6b7280' }} />
+            {expandedSections.has('analysis') ? 
+              <ChevronDown size={14} style={{ color: '#065F46' }} /> : 
+              <ChevronRight size={14} style={{ color: '#065F46' }} />
             }
-            <FolderOpen size={16} style={{ marginLeft: '6px', color: '#7c3aed' }} />
+            <BarChart3 size={14} style={{ marginLeft: '8px', color: '#10B981' }} />
             <span style={{ 
               flex: 1, 
-              marginLeft: '10px', 
-              fontWeight: 500,
-              fontSize: '14px',
-              color: '#374151'
+              marginLeft: '8px', 
+              fontWeight: 600,
+              fontSize: '13px',
+              color: '#065F46'
             }}>
-              Chat Sessions ({sessions.length})
+              Analysis Results
             </span>
-            <Plus
-              size={16}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateSession();
-              }}
-              style={{ 
-                cursor: 'pointer', 
-                color: '#10b981',
-                padding: '2px',
-                borderRadius: '4px',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
           </div>
 
-          {expandedSections.has('sessions') && (
-            <div style={{ background: '#fcfcfd' }}>
-              {sessions.map((session) => {
-                const isActive = session.id === sessionId;
-                const isEditing = editingSessionId === session.id;
-                const sessionFiles = messages.filter(m => 
-                  !m.sessionId || m.sessionId === session.id
-                ).filter(m => m.files && m.files.length > 0).flatMap(m => m.files!);
-
-                return (
-                  <div key={session.id}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '8px 28px',
-                        background: isActive ? '#f3f0ff' : 'transparent',
-                        borderLeft: isActive ? '3px solid #7c3aed' : '3px solid transparent',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s',
-                      }}
-                      onClick={() => !isEditing && onSwitchSession(session.id)}
-                      onMouseEnter={(e) => {
-                        if (!isActive && !isEditing) {
-                          e.currentTarget.style.backgroundColor = '#f9fafb';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive && !isEditing) {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }
-                      }}
-                    >
-                      <Folder size={14} style={{ color: isActive ? '#7c3aed' : '#9ca3af' }} />
-                      {isEditing ? (
-                        <>
-                          <input
-                            type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && saveRename()}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              flex: 1,
-                              marginLeft: '8px',
-                              padding: '3px 6px',
-                              border: '1px solid #7c3aed',
-                              borderRadius: '4px',
-                              fontSize: '13px',
-                              background: '#ffffff',
-                              outline: 'none',
-                            }}
-                            autoFocus
-                          />
-                          <Save
-                            size={14}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              saveRename();
-                            }}
-                            style={{ 
-                              marginLeft: '6px', 
-                              cursor: 'pointer', 
-                              color: '#10b981' 
-                            }}
-                          />
-                          <X
-                            size={14}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              cancelRename();
-                            }}
-                            style={{ 
-                              marginLeft: '4px', 
-                              cursor: 'pointer', 
-                              color: '#ef4444' 
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <span style={{
-                            flex: 1,
-                            marginLeft: '10px',
-                            color: isActive ? '#581c87' : '#4b5563',
-                            fontWeight: isActive ? 500 : 400,
-                            fontSize: '13px',
-                          }}>
-                            {session.name}
-                          </span>
-                          <span style={{
-                            fontSize: '11px',
-                            color: '#9ca3af',
-                            marginRight: '8px',
-                          }}>
-                            {sessionFiles.length > 0 && `${sessionFiles.length} files`}
-                          </span>
-                          <Edit3
-                            size={14}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startRename(session);
-                            }}
-                            style={{ 
-                              marginRight: '6px', 
-                              cursor: 'pointer', 
-                              color: '#6b7280',
-                              opacity: 0.7,
-                              transition: 'opacity 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-                          />
-                          <Trash2
-                            size={14}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteSession(session.id);
-                            }}
-                            style={{ 
-                              cursor: 'pointer', 
-                              color: '#ef4444',
-                              opacity: 0.7,
-                              transition: 'opacity 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-                          />
-                        </>
-                      )}
+          {expandedSections.has('analysis') && (
+            <div style={{ 
+              padding: '12px',
+              background: '#FAFBFC',
+              borderTop: '1px solid #10B981'
+            }}>
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ 
+                  fontWeight: 600, 
+                  fontSize: '12px',
+                  color: '#065F46',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em'
+                }}>
+                  I/O Points Summary
+                </div>
+                <div style={{ 
+                  display: 'flex',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{
+                    flex: 1,
+                    minWidth: '100px',
+                    padding: '8px',
+                    background: '#FFFFFF',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#569BFF' }}>
+                      {currentAnalysis.inputs?.length || 0}
                     </div>
-
-                    {/* Show files under active session */}
-                    {isActive && expandedSections.has(`session-${session.id}`) && (
-                      <div style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                        {/* Uploaded Files subsection */}
-                        {uploadedFiles.length > 0 && (
-                          <div style={{ paddingLeft: '44px', paddingTop: '4px' }}>
-                            <div style={{ 
-                              fontSize: '11px', 
-                              color: '#6b7280', 
-                              fontWeight: 500,
-                              marginBottom: '4px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.05em'
-                            }}>
-                              Uploaded Files
-                            </div>
-                            {uploadedFiles.map((file) => (
-                              <div
-                                key={file.id}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  padding: '4px 0',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  color: '#4b5563',
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
-                                onMouseLeave={(e) => e.currentTarget.style.color = '#4b5563'}
-                              >
-                                <FileText size={12} style={{ color: '#9ca3af', marginRight: '6px' }} />
-                                <span style={{ flex: 1 }}>{file.name}</span>
-                                <Eye size={12} style={{ color: '#6b7280', marginRight: '4px' }} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* BOG Files subsection */}
-                        {bogFiles.length > 0 && (
-                          <div style={{ paddingLeft: '44px', paddingTop: '8px', paddingBottom: '8px' }}>
-                            <div style={{ 
-                              fontSize: '11px', 
-                              color: '#6b7280', 
-                              fontWeight: 500,
-                              marginBottom: '4px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.05em'
-                            }}>
-                              Generated BOG Files
-                            </div>
-                            {bogFiles.map((file) => (
-                              <div
-                                key={file.id}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  padding: '4px 0',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  color: '#4b5563',
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.color = '#1f2937'}
-                                onMouseLeave={(e) => e.currentTarget.style.color = '#4b5563'}
-                              >
-                                <FileText size={12} style={{ color: '#10b981', marginRight: '6px' }} />
-                                <span style={{ flex: 1 }}>{file.name}</span>
-                                <Download
-                                  size={12}
-                                  onClick={() => window.open(file.url, '_blank')}
-                                  style={{ 
-                                    cursor: 'pointer', 
-                                    color: '#3b82f6',
-                                    marginRight: '4px'
-                                  }}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {uploadedFiles.length === 0 && bogFiles.length === 0 && (
-                          <div style={{
-                            paddingLeft: '44px',
-                            padding: '8px 44px',
-                            fontSize: '12px',
-                            color: '#9ca3af',
-                            fontStyle: 'italic',
-                          }}>
-                            No files in this session
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>Inputs</div>
                   </div>
-                );
-              })}
+                  <div style={{
+                    flex: 1,
+                    minWidth: '100px',
+                    padding: '8px',
+                    background: '#FFFFFF',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#10B981' }}>
+                      {currentAnalysis.outputs?.length || 0}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>Outputs</div>
+                  </div>
+                </div>
+              </div>
+              {currentAnalysis.blocks && currentAnalysis.blocks.length > 0 && (
+                <div>
+                  <div style={{ 
+                    fontWeight: 600, 
+                    fontSize: '12px',
+                    color: '#065F46',
+                    marginBottom: '8px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em'
+                  }}>
+                    Logic Blocks: {currentAnalysis.blocks.length}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
-
-        {/* Analysis Section - Only show for current session */}
-        {currentAnalysis && sessionId && (
-          <>
-            <div
-              onClick={() => toggleSection('analysis')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '10px 14px',
-                background: '#ffffff',
-                borderBottom: '1px solid #e5e7eb',
-                borderTop: '1px solid #e5e7eb',
-                marginTop: '1px',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              {expandedSections.has('analysis') ? 
-                <ChevronDown size={16} style={{ color: '#6b7280' }} /> : 
-                <ChevronRight size={16} style={{ color: '#6b7280' }} />
-              }
-              <Database size={16} style={{ marginLeft: '6px', color: '#10b981' }} />
-              <span style={{ 
-                flex: 1, 
-                marginLeft: '10px', 
-                fontWeight: 500,
-                fontSize: '14px',
-                color: '#374151'
-              }}>
-                Analysis Results
-              </span>
-            </div>
-
-                {expandedSections.has('analysis') && (
-              <div style={{ 
-                background: '#fcfcfd', 
-                padding: '12px 20px', 
-                fontSize: '13px',
-                color: '#4b5563'
-              }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ 
-                    fontWeight: 600, 
-                    color: '#1f2937',
-                    marginBottom: '6px'
-                  }}>
-                    I/O Points
-                  </div>
-                  <div style={{ 
-                    marginLeft: '16px', 
-                    lineHeight: '1.5'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Input Points:</span>
-                      <span style={{ fontWeight: 500, color: '#7c3aed' }}>
-                        {currentAnalysis.inputs?.length || 0}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Output Points:</span>
-                      <span style={{ fontWeight: 500, color: '#10b981' }}>
-                        {currentAnalysis.outputs?.length || 0}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {currentAnalysis.blocks && currentAnalysis.blocks.length > 0 && (
-                  <div>
-                    <div style={{ 
-                      fontWeight: 600, 
-                      color: '#1f2937',
-                      marginBottom: '6px'
-                    }}>
-                      Logic Blocks
-                    </div>
-                    <div style={{ marginLeft: '16px' }}>
-                      <span>Total Blocks:</span>
-                      <span style={{ 
-                        marginLeft: '8px', 
-                        fontWeight: 500, 
-                        color: '#3b82f6' 
-                      }}>
-                        {currentAnalysis.blocks.length}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+      )}
       </div>
     </div>
   );

@@ -1,26 +1,77 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { NodeProps } from 'reactflow';
 import { Handle, Position } from 'reactflow';
-import { Database, CheckCircle } from 'lucide-react';
+import { Database, CheckCircle, XCircle, Wand2 } from 'lucide-react';
+import n8nWebhookService from '../../services/n8nWebhookService';
+import { TOKENS, STYLES, COMPONENTS } from '../../theme/neubrutalism';
+
+interface ActionDef { label: string; action: string; primary?: boolean; color?: string; recommended?: boolean; }
 
 interface SystemData {
   content?: string;
   timestamp?: Date | string;
   analysis?: any;
   downloadUrl?: string;
+  // Option B wiring
+  sessionId?: string;
+  actions?: Record<string, ActionDef> | undefined;
+  resumeUrl?: string;
+  workflowStatus?: string;
 }
 
 const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
   const time = data?.timestamp ? new Date(data.timestamp) : null;
+  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [note, setNote] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const actionSet = useMemo(() => {
+    const a: Record<string, ActionDef> = (data?.actions as any) || {};
+    // Normalize known actions to keys
+    const confirm = a.confirm || a.approve || a['generation_confirm'];
+    const regenerate = a.regenerate || a.retry || a['generation_regenerate'];
+    const cancel = a.cancel || a.abort || a['generation_cancel'];
+    return { confirm, regenerate, cancel } as const;
+  }, [data?.actions]);
+
+  const statusPill = useMemo(() => {
+    const status = data?.workflowStatus;
+    if (status === 'awaiting_approval' || status === 'awaiting_confirmation') {
+      return { bg: TOKENS.awaitingApproval, label: 'Awaiting approval' };
+    }
+    if (status === 'generating' || status === 'processing') {
+      return { bg: TOKENS.running, label: 'Running…' };
+    }
+    return { bg: '#D6F3D7', label: 'OK' };
+  }, [data?.workflowStatus]);
+
+  const handleAction = async (kind: 'confirm' | 'regenerate' | 'cancel') => {
+    if (!data?.sessionId) return;
+    setSubmitting(kind);
+    try {
+      await n8nWebhookService.confirmGeneration(
+        data.sessionId,
+        kind,
+        data.resumeUrl
+      );
+      setNote({ kind: 'success', text: 'Action sent' });
+      setTimeout(() => setNote(null), 2000);
+    } catch (e) {
+      console.error('Confirm/Regenerate/Cancel failed', e);
+      setNote({ kind: 'error', text: 'Action failed' });
+      setTimeout(() => setNote(null), 2500);
+    } finally {
+      setSubmitting(null);
+    }
+  };
   
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-      border: '2px solid #3b82f6',
-      borderRadius: '6px',
-      boxShadow: '0 2px 8px rgba(59, 130, 246, 0.15)',
+      background: TOKENS.white,
+      border: STYLES.border.solid,
+      borderRadius: STYLES.radius.medium,
+      boxShadow: STYLES.shadow.sm,
       minWidth: '280px',
-      fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+      fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
       position: 'relative'
     }}>
       {/* Input Port */}
@@ -28,10 +79,10 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
         type="target" 
         position={Position.Left}
         style={{ 
-          background: '#22d3ee',
+          background: TOKENS.info,
           width: 10,
           height: 10,
-          border: '2px solid #ffffff',
+          border: `2px solid ${TOKENS.black}`,
           left: -5
         }} 
       />
@@ -41,8 +92,8 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
         display: 'flex',
         alignItems: 'center',
         padding: '8px 12px',
-        background: 'linear-gradient(180deg, #93c5fd 0%, #60a5fa 100%)',
-        borderBottom: '1px solid #3b82f6',
+        background: TOKENS.systemHeader,
+        borderBottom: STYLES.border.solid,
         gap: '8px'
       }}>
         <div style={{
@@ -51,9 +102,9 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#ffffff',
+          background: TOKENS.white,
           borderRadius: '4px',
-          color: '#3b82f6'
+          color: TOKENS.text
         }}>
           <Database size={16} />
         </div>
@@ -61,54 +112,119 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
           flex: 1,
           fontSize: '13px',
           fontWeight: 600,
-          color: '#1e3a8a'
+          color: TOKENS.text
         }}>
           System Response
         </div>
         <div style={{
           padding: '2px 8px',
-          borderRadius: '12px',
+          borderRadius: STYLES.radius.pill,
           fontSize: '11px',
           fontWeight: 600,
           textTransform: 'uppercase',
-          background: '#dcfce7',
-          color: '#166534'
+          background: statusPill.bg,
+          border: STYLES.border.solid,
+          color: TOKENS.text
         }}>
-          <CheckCircle size={12} style={{ display: 'inline', marginRight: '2px' }} />
-          OK
+          <CheckCircle size={12} style={{ display: 'inline', marginRight: '4px' }} />
+          {statusPill.label}
         </div>
       </div>
       
       {/* Node Content */}
       <div style={{
         padding: '12px',
-        background: '#ffffff',
-        borderRadius: '0 0 4px 4px'
+        background: TOKENS.systemBody,
+        borderRadius: '0 0 6px 6px'
       }}>
         <div style={{
           fontSize: '12px',
           lineHeight: '1.5',
-          color: '#374151',
-          maxHeight: '80px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          display: '-webkit-box',
-          WebkitLineClamp: 4,
-          WebkitBoxOrient: 'vertical',
-          wordBreak: 'break-word'
+          color: TOKENS.text,
+          // Removed maxHeight to allow content to expand
+          // Removed overflow: hidden
+          // Removed WebkitLineClamp to show full content
+          wordBreak: 'break-word',
+          whiteSpace: 'pre-wrap',
+          // Optional: Add max-width if needed to maintain bubble width
+          maxWidth: '400px'
         }}>
-          {data?.content && data.content.length > 150 
-            ? data.content.substring(0, 150) + '...' 
-            : data?.content || 'No content'}
+          {data?.content || 'No content'}
         </div>
         
+        {/* Option B: Render action buttons when present */}
+        {(actionSet.confirm || actionSet.regenerate || actionSet.cancel) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            {actionSet.confirm && (
+              <button
+                onClick={() => handleAction('confirm')}
+                disabled={!!submitting}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.success,
+                  flex: 2,
+                  fontWeight: 700,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = STYLES.shadow.sm; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <CheckCircle size={14} style={{ marginRight: 6 }} />
+                {submitting === 'confirm' ? 'Submitting…' : (actionSet.confirm.label || 'Confirm')}
+              </button>
+            )}
+            {actionSet.regenerate && (
+              <button
+                onClick={() => handleAction('regenerate')}
+                disabled={!!submitting}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.primary,
+                  flex: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = STYLES.shadow.sm; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <Wand2 size={14} style={{ marginRight: 6 }} />
+                {submitting === 'regenerate' ? 'Regenerating…' : (actionSet.regenerate.label || 'Regenerate')}
+              </button>
+            )}
+            {actionSet.cancel && (
+              <button
+                onClick={() => handleAction('cancel')}
+                disabled={!!submitting}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.warning,
+                  flex: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = STYLES.shadow.sm; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <XCircle size={14} style={{ marginRight: 6 }} />
+                {submitting === 'cancel' ? 'Cancelling…' : (actionSet.cancel.label || 'Cancel')}
+              </button>
+            )}
+          </div>
+        )}
+
+        {note && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 11,
+            color: note.kind === 'success' ? TOKENS.ok : TOKENS.error,
+            fontWeight: 600
+          }}>
+            {note.text}
+          </div>
+        )}
+
         {time && (
           <div style={{
             marginTop: '8px',
             paddingTop: '8px',
-            borderTop: '1px solid #e5e7eb',
+            borderTop: STYLES.border.light,
             fontSize: '10px',
-            color: '#6b7280',
+            color: TOKENS.muted,
             fontStyle: 'italic'
           }}>
             {time.toLocaleTimeString()}
@@ -124,7 +240,7 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
           background: '#f59e0b',
           width: 10,
           height: 10,
-          border: '2px solid #ffffff',
+          border: `2px solid ${TOKENS.black}`,
           right: -5
         }} 
       />

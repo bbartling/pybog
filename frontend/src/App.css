@@ -1,4 +1,4 @@
-/* Authentic Tridium Niagara N4 Workbench Styling */
+/* PyBOG N4 Builder - Neubrutalism Design System */
 
 * {
   box-sizing: border-box;
@@ -7,10 +7,10 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
-  font-size: 11px;
-  background: #c0c0c0;
-  color: #000000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
+  background: #F7F8FA;
+  color: #1F1F1F;
   overflow: hidden;
 }
 
@@ -24,34 +24,37 @@ html, body, #root {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #c0c0c0;
-  color: #000000;
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
-  font-size: 11px;
+  background: #F7F8FA;
+  color: #1F1F1F;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
+  padding: 8px;
+  gap: 12px;
 }
 
-/* Workbench Title Bar */
+/* Workbench Title Bar - Neubrutalism */
 .workbench-header {
-  height: 24px;
-  background: #c0c0c0;
-  border-bottom: 1px solid #808080;
+  height: auto;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  font-weight: normal;
-  font-size: 11px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 14px;
   flex-shrink: 0;
-  color: #000000;
+  color: #1F1F1F;
 }
 
 .workbench-logo {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-weight: normal;
-  color: #000000;
-  font-size: 11px;
+  gap: 8px;
+  font-weight: 600;
+  color: #1F1F1F;
+  font-size: 14px;
 }
 
 .header-right {
@@ -63,66 +66,76 @@ html, body, #root {
 .connection-status {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #e0e0e0;
+  gap: 8px;
+  font-size: 12px;
+  color: #6D6E7A;
+  border: 2px solid #3F3F4B;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #ECEEF5;
 }
 
 .new-session-btn {
-  background: #d0d0d0;
-  border: 1px outset #d0d0d0;
-  padding: 2px 6px;
-  font-size: 10px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 .new-session-btn:hover {
-  background: #e0e0e0;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .new-session-btn:active {
-  border: 1px inset #d0d0d0;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #808080;
-  border: 1px inset #808080;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #6D6E7A;
+  display: inline-block;
 }
 
 .status-dot.connected {
-  background: #00ff00;
+  background: #2DB72D;
 }
 
 .status-dot.disconnected {
-  background: #ff0000;
+  background: #FF4444;
 }
 
 .status-dot.checking {
-  background: #ffff00;
+  background: #FFA500;
 }
 
 /* Main Body Layout */
 .workbench-body {
   flex: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 12px;
   overflow: hidden;
-  background: #c0c0c0;
+  background: transparent;
 }
 
-/* Sidebar - Modern Tree View Style */
+/* Sidebar - Neubrutalism Style */
 .workbench-sidebar {
-  width: 280px;
-  background: white;
-  border-right: 2px solid #e2e8f0;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 .workbench-sidebar.collapsed {
@@ -143,16 +156,17 @@ html, body, #root {
   border-bottom: 1px solid #e2e8f0;
 }
 .section-header {
-  height: 20px;
-  background: #c0c0c0;
-  border-bottom: 1px solid #808080;
+  background: #ECEEF5;
+  border-bottom: 2px solid #3F3F4B;
   display: flex;
   align-items: center;
-  padding: 0 6px;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: bold;
+  padding: 8px 12px;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
   flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .collapse-btn {
@@ -168,15 +182,14 @@ html, body, #root {
   font-weight: bold;
 }
 
-/* Palette Section - Classic Windows Tree Control */
+/* Palette Section - Neubrutalism Tree Control */
 .palette-section {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #ffffff;
-  border: 1px inset #c0c0c0;
-  margin: 2px;
+  background: #FFFFFF;
+  padding: 8px;
 }
 
 .palette-categories {
@@ -185,65 +198,74 @@ html, body, #root {
 }
 
 .palette-category {
-  border-bottom: 1px solid #d0d0d0;
+  margin-bottom: 8px;
 }
 .category-btn {
   width: 100%;
-  height: 18px;
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 4px;
-  font-size: 11px;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   text-align: left;
-  color: #000000;
+  color: #1F1F1F;
+  transition: all 0.2s ease;
 }
 
 .category-btn:hover {
-  background: #d0d0d0;
+  background: #ECEEF5;
+  transform: translateX(2px);
 }
 
 .category-btn:active {
-  border: 1px inset #c0c0c0;
+  transform: translateX(0);
 }
 
 .palette-category.expanded .category-btn {
-  background: #0a5f9a;
-  color: white;
-  font-weight: bold;
+  background: #4A9EFF;
+  color: #FFFFFF;
+  font-weight: 600;
 }
 
 .palette-items {
-  background: #ffffff;
-  border-left: 16px solid #f0f0f0;
+  background: #FFFFFF;
+  margin-left: 16px;
+  padding-left: 8px;
+  border-left: 2px solid #E9EBF2;
 }
 
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  gap: 8px;
+  padding: 6px 10px;
   cursor: pointer;
-  font-size: 11px;
-  border-bottom: 1px solid #f0f0f0;
-  line-height: 1.2;
-  min-height: 16px;
+  font-size: 12px;
+  border-radius: 6px;
+  line-height: 1.4;
+  min-height: 28px;
+  transition: all 0.15s ease;
+  margin: 2px 0;
 }
 
 .palette-item:hover {
-  background: #316ac5;
-  color: white;
+  background: #4A9EFF;
+  color: #FFFFFF;
+  transform: translateX(2px);
 }
 
 .palette-item.bog-item {
-  background: #f0fff0;
+  background: #D4F5E5;
+  border: 1px solid #2DB72D;
 }
 .palette-item.bog-item:hover {
-  background: #316ac5;
-  color: white;
+  background: #2DB72D;
+  color: #FFFFFF;
 }
 
 .item-name {
@@ -260,43 +282,51 @@ html, body, #root {
 }
 
 .upload-btn {
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
-  margin: 2px;
-  padding: 4px 6px;
-  font-size: 11px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  margin: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
 .upload-btn:hover {
-  background: #d0d0d0;
+  background: #4A9EFF;
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .upload-btn:active {
-  border: 1px inset #c0c0c0;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .bog-status {
-  width: 8px;
-  height: 8px;
-  border: 1px inset #c0c0c0;
-  background: #808080;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #6D6E7A;
   flex-shrink: 0;
 }
 
 .bog-status.ready {
-  background: #00ff00;
+  background: #2DB72D;
 }
 
 .bog-status.generating {
-  background: #ffff00;
+  background: #FFA500;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .bog-status.error {
-  background: #ff0000;
+  background: #FF4444;
 }
 
 .empty-state {
@@ -306,35 +336,35 @@ html, body, #root {
   font-size: 11px;
   font-style: italic;
 }
-/* Wire Sheet Main Area - Classic Workbench Wiresheet */
+/* Wire Sheet Main Area - Neubrutalism Wiresheet */
 .wire-sheet {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  border: 2px inset #c0c0c0;
-  margin: 2px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
+  overflow: hidden;
   min-width: 0;
 }
 
 .wire-sheet-header {
-  height: 22px;
-  background: #c0c0c0;
-  border-bottom: 1px solid #808080;
+  background: #ECEEF5;
+  border-bottom: 2px solid #3F3F4B;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: bold;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
 .wire-sheet-header h3 {
   margin: 0;
-  font-size: 11px;
-  color: #000000;
-  font-weight: bold;
+  font-size: 14px;
+  color: #1F1F1F;
+  font-weight: 600;
 }
 
 .sheet-actions {
@@ -348,31 +378,35 @@ html, body, #root {
   font-size: 10px;
 }
 .action-btn {
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
-  padding: 2px 6px;
-  font-size: 10px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
 .action-btn:hover {
-  background: #d0d0d0;
+  background: #ECEEF5;
+  transform: translateY(-1px);
 }
 
 .action-btn:active {
-  border: 1px inset #c0c0c0;
+  transform: translateY(0);
 }
 
-/* Authentic Niagara Wiresheet Canvas */
+/* Neubrutalism Wiresheet Canvas */
 .wire-sheet-canvas {
   flex: 1;
   position: relative;
   overflow: auto;
-  background: #f0f0f0;
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+  background: #F7F8FA;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
 .grid-background {
@@ -382,12 +416,12 @@ html, body, #root {
   width: 100%;
   height: 100%;
   background-image: 
-    linear-gradient(to right, #d8d8d8 1px, transparent 1px),
-    linear-gradient(to bottom, #d8d8d8 1px, transparent 1px);
-  background-size: 20px 20px;
+    linear-gradient(0deg, #E9EBF2 1px, transparent 1px),
+    linear-gradient(90deg, #E9EBF2 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: center;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.6;
 }
 .components-container {
   position: relative;
@@ -414,111 +448,107 @@ html, body, #root {
   filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
 }
 
-/* KitControl Component Base */
+/* KitControl Component Base - Neubrutalism */
 .kit-control-wrapper {
-  background: #ffffff;
-  border: 2px outset #c0c0c0;
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
-  font-size: 11px;
-  box-shadow: 2px 2px 4px rgba(128,128,128,0.3);
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
   min-width: 140px;
   max-width: 320px;
+  overflow: hidden;
 }
 
 /* Analysis Wrapper - Large Complex Component */
 .analysis-wrapper {
   min-width: 500px;
   max-width: 700px;
-  border: 2px outset #8080ff;
-  background: #f8f8ff;
+  border: 2px solid #3F3F4B;
+  background: #C9C7DF;
 }
 
 /* Input Component */
 .input-wrapper {
   min-width: 180px;
   max-width: 280px;
-  border: 2px outset #4080ff;
-  background: #f0f8ff;
+  border: 2px solid #3F3F4B;
+  background: #DBDAF5;
 }
 
 /* Output Component */
 .output-wrapper {
   min-width: 160px;
   max-width: 260px;
-  border: 2px outset #ff8040;
-  background: #fff8f0;
+  border: 2px solid #3F3F4B;
+  background: #D4F5E5;
 }
 
 /* System Component */
 .system-wrapper {
   min-width: 200px;
   max-width: 360px;
-  border: 2px outset #808080;
-  background: #f8f8f8;
+  border: 2px solid #3F3F4B;
+  background: #ECEEF5;
 }
 
-/* KitControl Headers */
+/* KitControl Headers - Neubrutalism */
 .kit-header {
-  background: linear-gradient(180deg, #e0e0e0 0%, #c0c0c0 100%);
-  border-bottom: 1px solid #808080;
-  padding: 2px 6px;
+  background: #ECEEF5;
+  border-bottom: 2px solid #3F3F4B;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: bold;
-  font-size: 11px;
-  height: 16px;
-  color: #000000;
+  font-weight: 600;
+  font-size: 12px;
+  color: #1F1F1F;
 }
 
 .kit-title {
   flex: 1;
-  color: #000000;
-  font-size: 11px;
-  font-weight: bold;
+  color: #1F1F1F;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .kit-status-indicator {
-  width: 6px;
-  height: 6px;
-  border: 1px inset #c0c0c0;
-  background: #808080;
-  margin-left: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #6D6E7A;
+  margin-left: 8px;
   flex-shrink: 0;
 }
 
 .kit-status-indicator.active {
-  background: #00ff00;
-  border: 1px outset #00ff00;
+  background: #2DB72D;
 }
 
 .kit-status-indicator.ready {
-  background: #0000ff;
-  border: 1px outset #0000ff;
+  background: #4A9EFF;
 }
 
 .kit-status-indicator.analyzing {
-  background: #ffff00;
-  border: 1px outset #ffff00;
+  background: #FFA500;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .kit-status-indicator.system {
-  background: #c0c0c0;
-  border: 1px inset #c0c0c0;
+  background: #6D6E7A;
 }
 
 .kit-status-indicator.processing {
-  background: #ff8000;
-  border: 1px outset #ff8000;
-  animation: blink 1s infinite;
+  background: #FFA500;
+  animation: pulse 1.5s infinite;
 }
 
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0.3; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* KitControl Body and Connections */
@@ -990,12 +1020,14 @@ html, body, #root {
   font-size: 10px;
   color: #606060;
 }
-/* Input Controls - Classic Windows Style */
+/* Input Controls - Neubrutalism Style */
 .input-workspace {
-  background: #c0c0c0;
-  border-top: 2px inset #c0c0c0;
-  padding: 6px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
+  padding: 12px;
   flex-shrink: 0;
+  margin-top: 12px;
 }
 
 .attached-files {
@@ -1034,81 +1066,93 @@ html, body, #root {
   align-items: flex-end;
 }
 .control-btn {
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
-  padding: 4px 6px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  padding: 8px 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .control-btn:hover:not(:disabled) {
-  background: #d0d0d0;
+  background: #ECEEF5;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .control-btn:active:not(:disabled) {
-  border: 1px inset #c0c0c0;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .control-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .send-btn {
-  background: #0000ff;
-  border: 1px outset #0000ff;
-  color: white;
-  font-weight: bold;
+  background: #4A9EFF;
+  border: 2px solid #3F3F4B;
+  color: #FFFFFF;
+  font-weight: 600;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #3333ff;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .test-btn {
-  background: #ff8000;
-  border: 1px outset #ff8000;
-  color: white;
-  font-weight: bold;
-  font-size: 10px;
+  background: #FFA500;
+  border: 2px solid #3F3F4B;
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .test-btn:hover:not(:disabled) {
-  background: #ff9933;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .control-input {
   flex: 1;
-  background: #ffffff;
-  border: 1px inset #c0c0c0;
-  padding: 4px;
-  font-family: 'Courier New', 'MS Sans Serif', monospace;
-  font-size: 11px;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
   resize: vertical;
-  min-height: 24px;
-  color: #000000;
+  min-height: 40px;
+  color: #1F1F1F;
+  transition: all 0.2s ease;
 }
 .control-input:focus {
   outline: none;
-  background: #ffffcc;
+  border-color: #4A9EFF;
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
 }
 
 .control-input::placeholder {
-  color: #808080;
-  font-size: 11px;
+  color: #6D6E7A;
+  font-size: 14px;
 }
 
-/* Preview Modal - Classic Dialog Style */
+/* Preview Modal - Neubrutalism Dialog Style */
 .preview-modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(63, 63, 75, 0.5);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1116,102 +1160,116 @@ html, body, #root {
 }
 
 .preview-content {
-  background: #c0c0c0;
-  border: 2px outset #c0c0c0;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 12px;
   width: 80%;
   max-width: 800px;
   height: 80%;
   max-height: 600px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
 }
 
 .preview-header {
-  background: #c0c0c0;
-  border-bottom: 1px solid #808080;
-  padding: 4px 8px;
+  background: #ECEEF5;
+  border-bottom: 2px solid #3F3F4B;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: bold;
-  font-size: 11px;
+  font-weight: 600;
+  font-size: 14px;
 }
 .preview-header h4 {
   margin: 0;
-  color: #000000;
+  color: #1F1F1F;
+  font-size: 16px;
 }
 
 .preview-header button {
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
+  background: #FFFFFF;
+  border: 2px solid #3F3F4B;
+  border-radius: 6px;
   cursor: pointer;
-  padding: 2px 4px;
-  font-size: 11px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .preview-header button:hover {
-  background: #d0d0d0;
+  background: #FF4444;
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
 }
 
 .preview-header button:active {
-  border: 1px inset #c0c0c0;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .preview-body {
   flex: 1;
-  padding: 8px;
+  padding: 16px;
   overflow: auto;
-  background: #ffffff;
-  border: 1px inset #c0c0c0;
-  margin: 2px;
+  background: #FFFFFF;
 }
 
 .preview-body pre {
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  line-height: 1.4;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
   margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
-  color: #000000;
+  color: #1F1F1F;
+  background: #F7F8FA;
+  padding: 12px;
+  border: 2px solid #E9EBF2;
+  border-radius: 8px;
 }
 
-/* Classic Windows Scrollbars */
+/* Neubrutalism Scrollbars */
 ::-webkit-scrollbar {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-track {
-  background: #c0c0c0;
-  border: 1px inset #c0c0c0;
+  background: #F7F8FA;
+  border: 1px solid #E9EBF2;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c0c0c0;
-  border: 1px outset #c0c0c0;
+  background: #6D6E7A;
+  border-radius: 6px;
+  border: 2px solid #F7F8FA;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #d0d0d0;
+  background: #3F3F4B;
 }
 
 ::-webkit-scrollbar-thumb:active {
-  border: 1px inset #c0c0c0;
+  background: #1F1F1F;
 }
 
 ::-webkit-scrollbar-corner {
-  background: #c0c0c0;
+  background: #F7F8FA;
 }
 
 /* Selection */
 ::selection {
-  background: #0000ff;
-  color: #ffffff;
+  background: #4A9EFF;
+  color: #FFFFFF;
 }
 
 ::-moz-selection {
-  background: #0000ff;
-  color: #ffffff;
+  background: #4A9EFF;
+  color: #FFFFFF;
 }
 
 /* Animations */

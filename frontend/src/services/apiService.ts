@@ -180,7 +180,7 @@ class ApiService {
         },
         body: JSON.stringify({
           name: name || 'New Session',
-          initial_message: 'PyBOG Control Builder initialized. Upload HVAC documents or describe your control requirements.'
+          initial_message: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.'
         })
       });
       

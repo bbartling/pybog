@@ -1,0 +1,81 @@
+/* Neubrutalism Design System CSS Variables */
+
+:root {
+  /* Core Colors */
+  --nb-bg: #F7F8FA;
+  --nb-grid: #E9EBF2;
+  --nb-border: #3F3F4B;
+  --nb-text: #1F1F1F;
+  --nb-muted: #6D6E7A;
+  
+  /* Component Colors */
+  --nb-node-header: #C9C7DF;
+  --nb-node-footer: #F6F2C7;
+  --nb-chip: #ECEEF5;
+  --nb-port: #59586A;
+  
+  /* Status Colors */
+  --nb-ok: #2DB72D;
+  --nb-warning: #FFA500;
+  --nb-error: #FF4444;
+  --nb-info: #4A9EFF;
+  
+  /* Role-based Colors */
+  --nb-user-header: #C9C7DF;
+  --nb-user-body: #DBDAF5;
+  --nb-system-header: #D0D6D7;
+  --nb-system-body: #D4F5E5;
+  --nb-process-header: #BFE4FB;
+  --nb-process-body: #E6F3FE;
+  
+  /* Special States */
+  --nb-awaiting-approval: #F6F2C7;
+  --nb-changes-requested: #FFF0CC;
+  --nb-approved: #D6F3D7;
+  --nb-running: #ECEEF5;
+  
+  /* UI Elements */
+  --nb-white: #FFFFFF;
+  --nb-black: #000000;
+  
+  /* Border Styles */
+  --nb-border-width: 2px;
+  --nb-border-style: solid;
+  --nb-border-full: 2px solid var(--nb-border);
+  
+  /* Border Radius */
+  --nb-radius-small: 6px;
+  --nb-radius-medium: 8px;
+  --nb-radius-large: 12px;
+  --nb-radius-pill: 999px;
+  
+  /* Spacing */
+  --nb-spacing-xs: 4px;
+  --nb-spacing-sm: 6px;
+  --nb-spacing-md: 8px;
+  --nb-spacing-lg: 12px;
+  --nb-spacing-xl: 16px;
+  --nb-spacing-xxl: 24px;
+  
+  /* Typography */
+  --nb-font-size-xs: 10px;
+  --nb-font-size-sm: 12px;
+  --nb-font-size-base: 14px;
+  --nb-font-size-lg: 16px;
+  --nb-font-size-xl: 18px;
+  
+  --nb-font-weight-normal: 400;
+  --nb-font-weight-medium: 500;
+  --nb-font-weight-semibold: 600;
+  --nb-font-weight-bold: 700;
+  
+  /* Shadows */
+  --nb-shadow-sm: 2px 2px 0px rgba(0,0,0,0.1);
+  --nb-shadow-md: 3px 3px 0px rgba(0,0,0,0.15);
+  --nb-shadow-lg: 4px 4px 0px rgba(0,0,0,0.2);
+  
+  /* Transitions */
+  --nb-transition-fast: all 0.15s ease;
+  --nb-transition-base: all 0.2s ease;
+  --nb-transition-slow: all 0.3s ease;
+}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { CheckCircle, AlertCircle, Loader2, Zap, Activity } from 'lucide-react';
-import './NiagaraNodes.css';
+import { TOKENS, STYLES, COMPONENTS } from '../../theme/neubrutalism';
 
 interface ProcessNodeData {
   stepKey: string;
@@ -26,71 +26,102 @@ const ProcessNodeNiagara: React.FC<{ data: ProcessNodeData }> = ({ data }) => {
     }
   };
 
-  const getStatusClass = () => {
+  const statusColor = () => {
     switch (data.status) {
       case 'running':
-        return 'running';
+        return TOKENS.info;
       case 'ok':
-        return 'ok';
+        return TOKENS.ok;
       case 'error':
-        return 'alarm';
+        return TOKENS.error;
       default:
-        return 'fault';
+        return TOKENS.muted;
     }
   };
 
-  const isProcessing = data.status === 'running';
-
   return (
-    <div className={`niagara-node process-node ${isProcessing ? 'processing' : ''}`}>
+    <div
+      style={{
+        background: TOKENS.processBody,
+        border: STYLES.border.solid,
+        borderRadius: STYLES.radius.medium,
+        minWidth: '200px',
+        boxShadow: STYLES.shadow.sm,
+      }}
+    >
       {/* Input Port */}
       <Handle
         type="target"
         position={Position.Left}
-        className="niagara-port input-port"
         style={{
-          background: '#22d3ee',
+          background: TOKENS.info,
           width: 10,
           height: 10,
-          border: '2px solid #0f172a',
-          left: -5
+          border: `2px solid ${TOKENS.black}`,
+          left: -5,
+          borderRadius: '50%'
         }}
       />
       
-      {/* Node Header */}
-      <div className="niagara-node-header">
-        <div className="node-icon">
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: `${STYLES.spacing.sm} ${STYLES.spacing.md}`,
+        background: TOKENS.processHeader,
+        borderBottom: STYLES.border.solid,
+        gap: STYLES.spacing.sm,
+      }}>
+        <div style={{
+          width: 24,
+          height: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: TOKENS.white,
+          borderRadius: STYLES.radius.small,
+          color: TOKENS.text,
+        }}>
           <Zap size={14} />
         </div>
-        <div className="node-title">{data.stepKey || 'Process'}</div>
-        <div className={`node-status ${getStatusClass()}`}>
+        <div style={{ flex: 1, fontWeight: STYLES.fontWeight.semibold, fontSize: STYLES.fontSize.sm, color: TOKENS.text }}>
+          {data.stepKey || 'Process'}
+        </div>
+        <div style={{
+          ...COMPONENTS.badge.base,
+          background: statusColor(),
+          color: TOKENS.white,
+          borderColor: TOKENS.border,
+        }}>
           {getStatusIcon()}
+          <span style={{ marginLeft: 4 }}>{data.status}</span>
         </div>
       </div>
       
-      {/* Node Content */}
-      <div className="niagara-node-content">
-        <div className="node-value-display" style={{ fontSize: '11px' }}>
+      {/* Content */}
+      <div style={{ padding: STYLES.spacing.md, background: TOKENS.white }}>
+        <div style={{ fontSize: STYLES.fontSize.sm, color: TOKENS.text }}>
           {data.title}
         </div>
         
         {data.detail && (
-          <div style={{ 
-            marginTop: '4px',
-            fontSize: '10px',
-            color: '#94a3b8',
-            fontStyle: 'italic'
-          }}>
+          <div style={{ marginTop: STYLES.spacing.xs, fontSize: STYLES.fontSize.xs, color: TOKENS.muted, fontStyle: 'italic' }}>
             {data.detail}
           </div>
         )}
         
         {data.metrics && Object.keys(data.metrics).length > 0 && (
-          <div className="process-metrics">
+          <div style={{
+            display: 'flex',
+            gap: STYLES.spacing.lg,
+            marginTop: STYLES.spacing.sm,
+            paddingTop: STYLES.spacing.sm,
+            borderTop: STYLES.border.light,
+          }}>
             {Object.entries(data.metrics).slice(0, 3).map(([key, value]) => (
-              <div key={key} className="metric-item">
-                <span className="metric-label">{key}</span>
-                <span className="metric-value">
+              <div key={key} style={{ fontSize: STYLES.fontSize.xs }}>
+                <span style={{ color: TOKENS.muted, textTransform: 'uppercase' }}>{key}:</span>
+                <span style={{ color: TOKENS.text, marginLeft: 4, fontWeight: STYLES.fontWeight.semibold }}>
                   {typeof value === 'number' ? value.toLocaleString() : String(value)}
                 </span>
               </div>
@@ -103,13 +134,13 @@ const ProcessNodeNiagara: React.FC<{ data: ProcessNodeData }> = ({ data }) => {
       <Handle
         type="source"
         position={Position.Right}
-        className="niagara-port output-port"
         style={{
-          background: '#fb923c',
+          background: TOKENS.warning,
           width: 10,
           height: 10,
-          border: '2px solid #0f172a',
-          right: -5
+          border: `2px solid ${TOKENS.black}`,
+          right: -5,
+          borderRadius: '50%'
         }}
       />
     </div>

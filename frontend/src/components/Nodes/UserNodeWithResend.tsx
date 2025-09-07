@@ -1,11 +1,12 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { User, RefreshCw, AlertCircle } from 'lucide-react';
+import { TOKENS, STYLES, COMPONENTS } from '../../theme/neubrutalism';
 
 interface UserNodeProps {
   data: {
     content: string;
-    timestamp?: Date;
+    timestamp?: Date | string;
     files?: File[];
     status?: 'sending' | 'sent' | 'failed';
     onResend?: () => void;
@@ -17,62 +18,108 @@ const UserNodeWithResend: React.FC<UserNodeProps> = ({ data }) => {
   const isFailed = status === 'failed';
   const isSending = status === 'sending';
 
+  const ActionBar = () => {
+    if (!data.onResend) return null;
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: STYLES.spacing.sm,
+          marginTop: STYLES.spacing.sm,
+        }}
+      >
+        <button
+          onClick={data.onResend}
+          disabled={isSending}
+          title={isFailed ? 'Resend failed message' : 'Retry this message'}
+          style={{
+            ...COMPONENTS.button.base,
+            ...(isFailed ? {} : { borderColor: TOKENS.border }),
+            color: isFailed ? TOKENS.error : TOKENS.text,
+            fontSize: STYLES.fontSize.sm,
+            background: TOKENS.white,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = STYLES.shadow.sm;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <RefreshCw size={12} style={{ marginRight: 6 }} />
+          {isFailed ? 'Resend' : 'Retry'}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div 
-      className={`niagara-node user-node ${isFailed ? 'error' : ''} ${isSending ? 'sending' : ''}`}
       style={{
-        background: isFailed ? '#fee2e2' : '#e0e7ff',
-        border: `2px solid ${isFailed ? '#dc2626' : '#6366f1'}`,
-        borderRadius: '8px',
-        padding: '12px',
+        background: TOKENS.userBody,
+        border: STYLES.border.solid,
+        borderRadius: STYLES.radius.large,
+        padding: STYLES.spacing.md,
         minWidth: '280px',
-        maxWidth: '400px',
+        maxWidth: '440px',
         opacity: isSending ? 0.7 : 1,
+        boxShadow: STYLES.shadow.sm,
       }}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       
       <div style={{ 
         display: 'flex', 
         alignItems: 'flex-start', 
-        gap: '10px',
-        marginBottom: '8px' 
+        gap: STYLES.spacing.md,
+        marginBottom: STYLES.spacing.sm 
       }}>
         <div style={{
-          background: isFailed ? '#dc2626' : '#6366f1',
+          background: isFailed ? TOKENS.error : TOKENS.info,
           borderRadius: '50%',
-          padding: '6px',
+          padding: STYLES.spacing.sm,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          color: TOKENS.white,
         }}>
-          <User size={16} color="white" />
+          <User size={16} />
         </div>
         
         <div style={{ flex: 1 }}>
           <div style={{ 
-            fontWeight: 500, 
-            color: isFailed ? '#991b1b' : '#312e81',
-            marginBottom: '4px',
+            fontWeight: STYLES.fontWeight.semibold, 
+            color: TOKENS.text,
+            marginBottom: STYLES.spacing.xs,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: STYLES.spacing.sm
           }}>
             User
             {isFailed && (
-              <>
-                <AlertCircle size={14} color="#dc2626" />
-                <span style={{ fontSize: '12px', color: '#dc2626' }}>Failed to send</span>
-              </>
+              <span style={{
+                ...COMPONENTS.badge.base,
+                ...COMPONENTS.badge.error,
+              }}>
+                <AlertCircle size={12} /> Failed
+              </span>
             )}
             {isSending && (
-              <span style={{ fontSize: '12px', color: '#6366f1' }}>Sending...</span>
+              <span style={{
+                ...COMPONENTS.badge.base,
+                ...COMPONENTS.badge.info,
+              }}>
+                Sending…
+              </span>
             )}
           </div>
           
           <div style={{ 
-            fontSize: '13px', 
-            color: '#1f2937',
+            fontSize: STYLES.fontSize.base, 
+            color: TOKENS.text,
             lineHeight: '1.4',
             wordBreak: 'break-word'
           }}>
@@ -81,9 +128,9 @@ const UserNodeWithResend: React.FC<UserNodeProps> = ({ data }) => {
           
           {files && files.length > 0 && (
             <div style={{ 
-              marginTop: '6px', 
-              fontSize: '11px', 
-              color: '#6b7280' 
+              marginTop: STYLES.spacing.sm, 
+              fontSize: STYLES.fontSize.sm, 
+              color: TOKENS.muted 
             }}>
               📎 {files.length} file(s) attached
             </div>
@@ -93,51 +140,24 @@ const UserNodeWithResend: React.FC<UserNodeProps> = ({ data }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginTop: '6px'
+            marginTop: STYLES.spacing.sm
           }}>
             {timestamp && (
               <div style={{ 
-                fontSize: '11px', 
-                color: '#9ca3af' 
+                fontSize: STYLES.fontSize.xs, 
+                color: TOKENS.muted 
               }}>
-                {(timestamp instanceof Date ? timestamp : new Date(timestamp)).toLocaleTimeString()}
+                {new Date(timestamp as any).toLocaleTimeString()}
               </div>
             )}
-            
-            {isFailed && onResend && (
-              <button
-                onClick={onResend}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  color: '#dc2626',
-                  background: 'white',
-                  border: '1px solid #dc2626',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#dc2626';
-                  e.currentTarget.style.color = 'white';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'white';
-                  e.currentTarget.style.color = '#dc2626';
-                }}
-              >
-                <RefreshCw size={12} />
-                Resend
-              </button>
-            )}
           </div>
+
+          {/* Floating action row below message */}
+          <ActionBar />
         </div>
       </div>
       
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   );
 };

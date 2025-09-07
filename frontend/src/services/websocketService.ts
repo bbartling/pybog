@@ -216,6 +216,14 @@ class WebSocketService {
         this.emit('message', payload);
         break;
 
+      case 'process_step':
+      case 'analysis_progress':
+      case 'status':
+      case 'analysis_complete':
+      case 'workflow_completed':
+        this.emit('message', { type, ...payload });
+        break;
+
       case 'health':
         this.emit('health_update', payload);
         break;

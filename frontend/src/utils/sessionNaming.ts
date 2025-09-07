@@ -4,7 +4,24 @@
  */
 
 export function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Prefer built-in crypto UUID when available
+  try {
+    const anyCrypto: any = (globalThis as any).crypto;
+    if (anyCrypto && typeof anyCrypto.randomUUID === 'function') {
+      return anyCrypto.randomUUID();
+    }
+  } catch {}
+  // Fallback: RFC4122 v4 implementation
+  const bytes = new Uint8Array(16);
+  if (typeof (globalThis as any).crypto?.getRandomValues === 'function') {
+    (globalThis as any).crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
+  return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
 }
 
 export function generateDefaultSessionName(index: number): string {
@@ -117,4 +134,19 @@ export function shouldUpdateSessionName(currentName: string, messages: any[]): b
   );
   
   return hasUserContent;
+}
+
+/**
+ * Ensure a session display name is unique within a set of names.
+ */
+export function ensureUniqueSessionName(desired: string, existingNames: string[]): string {
+  const existing = new Set((existingNames || []).map(n => (n || '').trim().toLowerCase()));
+  const base = (desired || 'Session').trim();
+  let candidate = base;
+  let i = 2;
+  while (existing.has(candidate.trim().toLowerCase())) {
+    candidate = `${base} (${i})`;
+    i += 1;
+  }
+  return candidate;
 }

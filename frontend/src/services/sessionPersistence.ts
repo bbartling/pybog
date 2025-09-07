@@ -25,6 +25,54 @@ class SessionPersistenceService {
   private readonly WORKFLOW_STATE_KEY_PREFIX = 'pybog_workflow_state_';
 
   /**
+   * Remove invalid localStorage keys that can cause ghost sessions
+   */
+  cleanupInvalidLocalKeys(): string[] {
+    const removed: string[] = [];
+    try {
+      // Remove invalid active session id
+      const rawActive = localStorage.getItem(this.ACTIVE_SESSION_KEY);
+      if (rawActive && (rawActive === 'undefined' || rawActive === 'null' || rawActive.trim() === '')) {
+        localStorage.removeItem(this.ACTIVE_SESSION_KEY);
+        removed.push(this.ACTIVE_SESSION_KEY);
+      }
+
+      // Collect keys to remove first (don't mutate while iterating)
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || '';
+        if (!key) continue;
+        if (key === this.ACTIVE_SESSION_KEY) continue;
+
+        if (key.startsWith(this.SESSION_KEY_PREFIX)) {
+          const id = key.replace(this.SESSION_KEY_PREFIX, '');
+          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+        }
+        if (key.startsWith(this.WORKFLOW_STATE_KEY_PREFIX)) {
+          const id = key.replace(this.WORKFLOW_STATE_KEY_PREFIX, '');
+          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+        }
+        if (key.startsWith('pybog_resume_')) {
+          const id = key.replace('pybog_resume_', '');
+          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+        }
+      }
+
+      toRemove.forEach(k => {
+        try { localStorage.removeItem(k); } catch {}
+        removed.push(k);
+      });
+
+      if (removed.length) {
+        console.log('[SessionPersistence] Cleaned invalid keys:', removed);
+      }
+    } catch (e) {
+      console.warn('[SessionPersistence] Failed during cleanupInvalidLocalKeys:', e);
+    }
+    return removed;
+  }
+
+  /**
    * Save session to localStorage and database
    */
   async saveSession(session: PersistedSession): Promise<void> {
@@ -88,6 +136,12 @@ class SessionPersistenceService {
    */
   async loadSession(sessionId: string): Promise<PersistedSession | null> {
     try {
+      // Guard against invalid IDs
+      if (!sessionId || sessionId === 'undefined' || sessionId === 'null') {
+        console.warn('[SessionPersistence] Invalid sessionId passed to loadSession:', sessionId);
+        return null;
+      }
+
       // First try localStorage for quick recovery
       const sessionKey = `${this.SESSION_KEY_PREFIX}${sessionId}`;
       const localData = localStorage.getItem(sessionKey);
@@ -129,6 +183,36 @@ class SessionPersistenceService {
           metadata: m.metadata || undefined,
           persisted: true,
         }));
+
+        // Ensure uploaded files are represented in chat history for preview
+        try {
+          const referencedFileIds = new Set<string>();
+          for (const msg of messages) {
+            const fid = (msg as any)?.metadata?.file_id;
+            if (fid) referencedFileIds.add(fid);
+          }
+          if (Array.isArray(fullSession.files)) {
+            for (const f of fullSession.files) {
+              const fid = (f as any).file_id;
+              if (!fid || referencedFileIds.has(fid)) continue;
+              const sizeKb = f.file_size ? `${(f.file_size / 1024).toFixed(1)} KB` : undefined;
+              const fileMsg: ChatMessage = {
+                id: `file-stored-${fid}`,
+                type: 'system',
+                content: `File uploaded: ${f.filename}${sizeKb ? ` (${sizeKb})` : ''}`,
+                timestamp: new Date(fullSession.session?.created_at || Date.now()),
+                sessionId,
+                metadata: {
+                  status: 'complete' as const,
+                  fileName: f.filename,
+                  file_id: fid,
+                  previewUrl: (f as any).preview_url,
+                }
+              } as any;
+              messages.push(fileMsg);
+            }
+          }
+        } catch {}
 
         const session: PersistedSession = {
           id: sessionId,
@@ -202,7 +286,10 @@ class SessionPersistenceService {
    */
   getActiveSessionId(): string | null {
     try {
-      return localStorage.getItem(this.ACTIVE_SESSION_KEY);
+      const raw = localStorage.getItem(this.ACTIVE_SESSION_KEY);
+      const id = (raw || '').trim();
+      if (!id || id === 'undefined' || id === 'null') return null;
+      return id;
     } catch (e) {
       return null;
     }
@@ -259,10 +346,15 @@ class SessionPersistenceService {
       const recent = await enhancedApiService.getRecentSessions(10);
       if (recent.sessions) {
         for (const dbSession of recent.sessions) {
-          if (!sessions.has(dbSession.session_id)) {
-            const fullSession = await this.loadSession(dbSession.session_id);
+          const sid = (dbSession as any)?.session_id;
+          if (!sid || sid === 'undefined' || sid === 'null') {
+            console.warn('[SessionPersistence] Skipping invalid recent session id:', sid);
+            continue;
+          }
+          if (!sessions.has(sid)) {
+            const fullSession = await this.loadSession(sid);
             if (fullSession) {
-              sessions.set(dbSession.session_id, fullSession);
+              sessions.set(sid, fullSession);
             }
           }
         }

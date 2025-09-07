@@ -3,8 +3,18 @@ interface WebhookApprovalData {
   sessionId: string;
   extractedText?: string;
   analysis?: any;
-  action: 'approve_text' | 'approve_analysis' | 'edit_text' | 'retry_extraction' | 'refine_analysis';
+  action:
+    | 'approve_text'
+    | 'edit_text'
+    | 'retry_extraction'
+    | 'approve_analysis'
+    | 'refine_analysis'
+    | 'confirm'
+    | 'regenerate'
+    | 'cancel';
   feedback?: string;
+  userAction?: string;
+  timestamp?: string;
 }
 
 interface WorkflowWaitingResponse {
@@ -42,16 +52,18 @@ interface WorkflowWaitingResponse {
     [key: string]: {
       label: string;
       action: string;
-      description: string;
-      recommended: boolean;
-      confidence: number;
+      description?: string;
+      recommended?: boolean;
+      confidence?: number;
+      primary?: boolean;
+      color?: string;
     };
   };
   progress?: {
     percentage: number;
     phase: string;
-    description: string;
-    eta: string;
+    description?: string;
+    eta?: string;
   };
   workflowStatus: string;
   interactionType: string;
@@ -64,6 +76,9 @@ interface WorkflowWaitingResponse {
   timestamp: string;
   downloadUrl?: string;
   bogFilePath?: string;
+  // Enhanced: approval type to drive UI
+  approvalType?: 'text_review' | 'analysis_review' | 'generation_confirmation';
+  data?: any;
 }
 
 class N8nWebhookService {
@@ -78,6 +93,10 @@ class N8nWebhookService {
    * Store resume URL for a session
    */
   storeResumeUrl(sessionId: string, resumeUrl: string): void {
+    if (!sessionId || sessionId === 'undefined' || !resumeUrl) {
+      console.warn('[N8n Webhook] Skipping storeResumeUrl for invalid sessionId or resumeUrl', { sessionId, resumeUrl });
+      return;
+    }
     console.log('[N8n Webhook] Storing resume URL for session:', sessionId, resumeUrl);
     this.activeResumeUrls.set(sessionId, resumeUrl);
     // Also store in localStorage for persistence
@@ -92,6 +111,7 @@ class N8nWebhookService {
    * Get stored resume URL for a session
    */
   getResumeUrl(sessionId: string): string | null {
+    if (!sessionId || sessionId === 'undefined') return null;
     let url = this.activeResumeUrls.get(sessionId);
     if (!url) {
       // Try to restore from localStorage
@@ -137,6 +157,8 @@ class N8nWebhookService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Session-ID': data.sessionId,
+          'X-User-Action': data.action,
         },
         body: JSON.stringify({
           // n8n Wait node expects data in 'body' field
@@ -146,6 +168,8 @@ class N8nWebhookService {
             extractedText: data.extractedText,
             analysis: data.analysis,
             feedback: data.feedback,
+            userAction: data.userAction,
+            timestamp: data.timestamp || new Date().toISOString(),
           }
         }),
       });
@@ -211,11 +235,10 @@ class N8nWebhookService {
       sessionId,
       analysis,
       action: 'approve_analysis',
+      userAction: 'approve',
     });
 
-    // Clear the used resume URL
-    this.clearResumeUrl(sessionId);
-    
+    // Do not clear resume URL here; downstream generation may provide a new resume URL we should store on parse
     return response;
   }
 
@@ -276,7 +299,35 @@ class N8nWebhookService {
     return this.approveWorkflowStep(url, {
       sessionId,
       action: 'retry_extraction',
+      userAction: 'retry',
     });
+  }
+
+  /**
+   * Confirm, regenerate, or cancel BOG generation in the Generation workflow
+   */
+  async confirmGeneration(
+    sessionId: string,
+    action: 'confirm' | 'regenerate' | 'cancel',
+    resumeUrl?: string
+  ) {
+    const url = resumeUrl || this.getResumeUrl(sessionId);
+    if (!url) {
+      throw new Error('No resume URL available for generation confirmation');
+    }
+
+    const result = await this.approveWorkflowStep(url, {
+      sessionId,
+      action,
+      userAction: action,
+    });
+
+    // Clear resume URL after confirm or cancel
+    if (action === 'confirm' || action === 'cancel') {
+      this.clearResumeUrl(sessionId);
+    }
+
+    return result;
   }
 
   /**
@@ -284,14 +335,23 @@ class N8nWebhookService {
    */
   parseWorkflowResponse(response: any): WorkflowWaitingResponse | null {
     try {
-      // Handle different response formats from n8n
-      const data = response.data || response;
-      
+      const data = response?.data || response || {};
+
       // Store resume URL if present
       if (data.resumeUrl && data.sessionId) {
         this.storeResumeUrl(data.sessionId, data.resumeUrl);
       }
-      
+
+      // Detect approval stage
+      let approvalType: WorkflowWaitingResponse['approvalType'] | undefined;
+      if (data.step === 'text_review' || data.status === 'text_review_required' || data.status === 'text_extracted') {
+        approvalType = 'text_review';
+      } else if (data.step === 'analysis_review' || data.status === 'analysis_complete' || data.status === 'ready_for_review') {
+        approvalType = 'analysis_review';
+      } else if (data.step === 'generation_confirmation' || data.status === 'generation_complete' || data.status === 'awaiting_confirmation') {
+        approvalType = 'generation_confirmation';
+      }
+
       return {
         resumeUrl: data.resumeUrl || '',
         status: data.status || 'unknown',
@@ -316,6 +376,10 @@ class N8nWebhookService {
         interactionType: data.interactionType,
         capabilities: data.capabilities,
         timestamp: data.timestamp || new Date().toISOString(),
+        approvalType,
+        data: data.data,
+        downloadUrl: data.downloadUrl,
+        bogFilePath: data.bogFilePath,
       };
     } catch (error) {
       console.error('[N8n Webhook] Failed to parse response:', error);

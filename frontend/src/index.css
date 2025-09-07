@@ -1,4 +1,4 @@
-/* Global Reset and Base Styles */
+/* Neubrutalism Global Reset and Base Styles */
 * {
   box-sizing: border-box;
 }
@@ -6,12 +6,14 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #1a1a1a;
-  color: #e0e0e0;
+  background: #F7F8FA; /* Neubrutalism light background */
+  color: #1F1F1F; /* Dark text for contrast */
   overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 html, body, #root {
@@ -21,26 +23,147 @@ html, body, #root {
 
 code {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: #ECEEF5;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
 }
 
-/* Global button reset */
+/* Neubrutalism button reset */
 button {
   font-family: inherit;
   font-size: inherit;
+  font-weight: 500;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #FFFFFF;
+  color: #1F1F1F;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
 }
 
-/* Global input styling */
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Neubrutalism input styling */
 input, textarea {
   font-family: inherit;
+  border: 2px solid #3F3F4B;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  color: #1F1F1F;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+input:focus, textarea:focus {
+  border-color: #4A9EFF;
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+}
+
+input:disabled, textarea:disabled {
+  background: #ECEEF5;
+  color: #6D6E7A;
+  cursor: not-allowed;
 }
 
 /* Selection styling */
 ::selection {
-  background: #4a9eff;
-  color: #ffffff;
+  background: #4A9EFF;
+  color: #FFFFFF;
 }
 
 ::-moz-selection {
-  background: #4a9eff;
-  color: #ffffff;
+  background: #4A9EFF;
+  color: #FFFFFF;
+}
+
+/* Neubrutalism Animations */
+@keyframes dash {
+  to { stroke-dashoffset: -1000; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Animation classes */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F7F8FA;
+  border: 1px solid #E9EBF2;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6D6E7A;
+  border-radius: 6px;
+  border: 2px solid #F7F8FA;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3F3F4B;
+}
+
+/* Utility classes */
+.text-muted {
+  color: #6D6E7A;
+}
+
+.text-success {
+  color: #2DB72D;
+}
+
+.text-warning {
+  color: #FFA500;
+}
+
+.text-error {
+  color: #FF4444;
+}
+
+.text-info {
+  color: #4A9EFF;
 }
