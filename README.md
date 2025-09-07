@@ -6,10 +6,14 @@
 
 ## Python Project Setup
 
-I use **WSL (Windows Subsystem for Linux)** but it make work just fine on ordinary Windows or Mac. Generating `bogs` can be done easily without setting up Python enivornments as shown further below via "ChatGPT Agent" mode and `The Bog Maker 4000` website. Both examples are demo'd on YouTube.
+📦 PyPI project page: [https://pypi.org/project/pybog/](https://pypi.org/project/pybog/)
 
-<details><summary><strong>Details</strong></summary>
+This project has been tested on **WSL (Windows Subsystem for Linux)** using a clean Python **3.12.x** environment.  
+A standard virtual environment (`venv`) with `pip` works out of the box.
 
+<details><summary><strong>Installation Details</strong></summary>
+
+The package is available on **PyPI** and can be installed with:
 >
 > ```bash
 > pip install pybog
@@ -41,7 +45,11 @@ Make sure tests pass:
 
 Make Git PR and if it is a mega make over beyond submitting [examples](https://github.com/bbartling/pybog/tree/develop/examples) Python files give me a heads up prior please.
 
+</details>
+
 ## Running Example Scripts with WSL
+
+<details><summary><strong>Details</strong></summary>
 
 Each example script can be executed directly in WSL to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
 
@@ -232,11 +240,11 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 ---
 
-# 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
-
-The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest. Be se sure to hit the plus sign to enable "Agent" mode in ChatGPT.
+## Using ChatGPT Agent Mode to Build `.bog` Files
 
 <details><summary><strong>How It Works</strong></summary>
+
+The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest. Be se sure to hit the plus sign to enable "Agent" mode in ChatGPT.
 
 ![Agent mode snip](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/agent_mode_snip.png)
 
@@ -335,9 +343,9 @@ This ensures the agent has direct access to all available example scripts, eithe
 
 ## Traversing Baja Object Graphs
 
-* TODO - Unfinished and need more research here
-
 <details><summary><strong>Details</strong></summary>
+
+* <strong>TODO</strong> - Unfinished and need more research here especially Graph theory best practices and inefficient operations in pybog
 
 Niagara represents the contents of a station as a directed graph of objects and properties.
 When working with the raw XML stored inside `.bog` and `.dist` archives you are effectively traversing this graph.
@@ -423,15 +431,11 @@ This will print a detailed report listing:
 ---
 
 
-## Component Library (kitControl)
-
-Reference logic building blocks from Niagara’s kitControl palette are documented in `pdf/docKitControl.pdf`.
-
-### API Reference (kitControl Widgets & BogFolderBuilder)
-
-Below is a summary of available kitControl widgets exposed through the `BogFolderBuilder` along with usage signatures and input/output slots. Use the checkboxes to track which widgets are implemented vs. pending.
+## Support Niagara4 kitControl Components
 
 <details><summary><strong>KitControl Widget Implementation Checklist</strong></summary>
+
+Reference logic building blocks from Niagara’s kitControl palette are documented in `pdf/docKitControl.pdf`.
 
 ### Alarm
 - [ ] ChangeOfStateCountAlarmExt
