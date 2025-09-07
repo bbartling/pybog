@@ -104,46 +104,82 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
     setEditingName('');
   };
 
-  // Filter messages and files for current session
-  const sessionMessages = messages.filter(m => 
-    !m.sessionId || m.sessionId === sessionId
-  );
-
-  // Extract uploaded files from session messages (in-memory)
-  const uploadedFiles = sessionMessages
-    .filter(m => m.files && m.files.length > 0)
-    .flatMap((m, msgIdx) => 
-      m.files!.map((file, fileIdx) => ({
-        id: `file-${m.id}-${fileIdx}`,
-        name: file.name,
-        messageId: m.id,
-        size: file.size,
-        type: file.type,
-        previewUrl: undefined as string | undefined
-      }))
+  // Helper function to extract files for a specific session
+  const getSessionFiles = (sid: string) => {
+    const sessionMsgs = messages.filter(m => 
+      !m.sessionId || m.sessionId === sid
     );
+    
+    // Extract uploaded files from session messages (in-memory)
+    const uploaded = sessionMsgs
+      .filter(m => m.files && m.files.length > 0)
+      .flatMap((m, msgIdx) => 
+        m.files!.map((file, fileIdx) => ({
+          id: `file-${m.id}-${fileIdx}`,
+          name: file.name,
+          messageId: m.id,
+          size: file.size,
+          type: file.type,
+          previewUrl: undefined as string | undefined
+        }))
+      );
 
-  // Extract persisted files with preview URLs from system messages
-  const storedFiles = sessionMessages
-    .filter(m => (m as any)?.metadata?.file_id || (m as any)?.metadata?.previewUrl)
-    .map((m: any, idx) => ({
-      id: m.id,
-      name: m?.metadata?.fileName || `uploaded_${idx + 1}`,
-      messageId: m.id,
-      size: undefined as number | undefined,
-      type: 'application/octet-stream',
-      previewUrl: m?.metadata?.previewUrl || (m?.metadata?.previewUrls && m.metadata.previewUrls[0])
-    }));
+    // Extract persisted files with preview URLs from system messages  
+    const stored = sessionMsgs
+      .filter(m => {
+        const meta = (m as any)?.metadata;
+        return meta && (meta.file_id || meta.previewUrl) && !meta.downloadUrl; // Exclude BOG files
+      })
+      .map((m: any) => {
+        const meta = m.metadata;
+        // Extract clean filename from various possible fields
+        let fileName = meta.fileName || meta.filename || meta.file_id || 'Uploaded File';
+        // Remove any path prefixes if present
+        if (fileName.includes('/')) {
+          fileName = fileName.split('/').pop() || fileName;
+        }
+        return {
+          id: m.id,
+          name: fileName,
+          messageId: m.id,
+          size: meta.fileSize || meta.size,
+          type: meta.fileType || meta.type || 'application/pdf',
+          previewUrl: meta.previewUrl || meta.preview_url
+        };
+      });
 
-  // Extract BOG files from session messages
-  const bogFiles = sessionMessages
-    .filter(m => m.metadata?.downloadUrl)
-    .map((m, idx) => ({
-      id: m.id,
-      name: m.metadata?.fileName || `BOG_${idx + 1}.json`,
-      url: m.metadata?.downloadUrl,
-      messageId: m.id
-    }));
+    // Extract BOG files from session messages
+    const bog = sessionMsgs
+      .filter(m => {
+        const meta = m.metadata;
+        // Only include files with downloadUrl that are JSON files (BOG files)
+        return meta?.downloadUrl && (meta?.fileName?.includes('.json') || meta?.fileName?.includes('BOG'));
+      })
+      .map((m) => {
+        const meta = m.metadata!;
+        let fileName = meta.fileName || 'BOG.json';
+        // Clean up filename
+        if (fileName.includes('/')) {
+          fileName = fileName.split('/').pop() || fileName;
+        }
+        return {
+          id: m.id,
+          name: fileName,
+          url: meta.downloadUrl,
+          messageId: m.id
+        };
+      });
+      
+    // Remove duplicates based on file name
+    const uniqueUploaded = uploaded.filter((file, index, self) => 
+      index === self.findIndex(f => f.name === file.name)
+    );
+    const uniqueStored = stored.filter((file, index, self) => 
+      index === self.findIndex(f => f.name === file.name)
+    );
+    
+    return { uploaded: uniqueUploaded, stored: uniqueStored, bog };
+  };
 
   return (
     <div style={{
@@ -225,9 +261,11 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
           const isActive = session.id === sessionId;
           const isEditing = editingSessionId === session.id;
           const isExpanded = expandedSections.has(`session-${session.id}`);
-          const sessionFiles = messages.filter(m => 
-            !m.sessionId || m.sessionId === session.id
-          ).filter(m => m.files && m.files.length > 0).flatMap(m => m.files!);
+          
+          // Get files specific to this session
+          const { uploaded: uploadedFiles, stored: storedFiles, bog: bogFiles } = getSessionFiles(session.id);
+          const totalFileCount = uploadedFiles.length + storedFiles.length;
+          
           const messageCount = messages.filter(m => !m.sessionId || m.sessionId === session.id).length;
           const hasAnalysis = currentAnalysis && session.id === sessionId;
 
@@ -336,10 +374,10 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                             {messageCount}
                           </span>
                         )}
-                        {sessionFiles.length > 0 && (
+                        {totalFileCount > 0 && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <FileText size={10} />
-                            {sessionFiles.length}
+                            {totalFileCount}
                           </span>
                         )}
                         {hasAnalysis && (
@@ -386,7 +424,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                 )}
               </div>
 
-              {/* Expandable Content */}
+              {/* Expandable Content - Only show for the specific expanded session */}
               {isExpanded && (
                 <div style={{ 
                   padding: '12px',
@@ -408,7 +446,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                     </span>
                   </div>
 
-                  {/* Files Section */}
+                  {/* Files Section - Combined uploaded and stored files */}
                   {(storedFiles.length > 0 || uploadedFiles.length > 0) && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{ 
@@ -423,14 +461,55 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                         gap: '4px'
                       }}>
                         <FileCode size={12} />
-                        Uploaded Files ({[...storedFiles, ...uploadedFiles].length})
+                        Files ({storedFiles.length + uploadedFiles.length})
                       </div>
                       <div style={{ 
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '4px'
                       }}>
-                        {[...storedFiles, ...uploadedFiles].map((file) => (
+                        {/* Show stored files first (with preview URLs) */}
+                        {storedFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '6px 8px',
+                              background: '#FFFFFF',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              color: '#6B7280',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = '#569BFF';
+                              e.currentTarget.style.background = '#F0F9FF';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#E5E7EB';
+                              e.currentTarget.style.background = '#FFFFFF';
+                            }}
+                          >
+                            <FileText size={12} style={{ color: '#569BFF', marginRight: '6px' }} />
+                            <span style={{ flex: 1, fontWeight: 500 }}>{file.name}</span>
+                            {file.previewUrl && (
+                              <Eye 
+                                size={12} 
+                                style={{ color: '#6B7280', cursor: 'pointer' }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(file.previewUrl!, '_blank');
+                                }}
+                                // Preview PDF
+                              />
+                            )}
+                          </div>
+                        ))}
+                        {/* Show uploaded files (without preview URLs yet) */}
+                        {uploadedFiles.map((file) => (
                           <div
                             key={file.id}
                             style={{
