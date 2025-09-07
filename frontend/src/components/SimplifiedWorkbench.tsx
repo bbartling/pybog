@@ -4,7 +4,7 @@ import {
   PanelLeftOpen, PanelLeftClose, Database,
   Activity, CheckCircle, AlertCircle, XCircle,
   Terminal, Wifi, WifiOff, Server, HardDrive, Zap,
-  ExternalLink, RefreshCw, GitBranch, Cpu, CircuitBoard
+  ExternalLink, RefreshCw, GitBranch, Cpu, CircuitBoard, Github
 } from 'lucide-react';
 import ChatCanvasGrid, { ChatMessage } from './ChatCanvasGrid';
 import ProjectNavigator from './ProjectNavigatorEnhanced';
@@ -202,18 +202,58 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
           }}>
             <CircuitBoard size={20} style={{ color: '#FFFFFF' }} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span className="header-title" style={{
-              fontSize: '18px',
-              fontWeight: '700',
-              color: '#3F3F4B',
-              letterSpacing: '-0.02em',
-            }}>N4 Builder</span>
-            <span className="header-subtitle" style={{
-              fontSize: '12px',
-              color: '#6B7280',
-              fontWeight: '500',
-            }}>AI Logic Generation</span>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span className="header-title" style={{
+                fontSize: '18px',
+                fontWeight: '700',
+                color: '#3F3F4B',
+                letterSpacing: '-0.02em',
+              }}>N4 Builder</span>
+              <span className="header-subtitle" style={{
+                fontSize: '12px',
+                color: '#6B7280',
+                fontWeight: '500',
+              }}>AI Logic Generation</span>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px',
+              marginTop: '2px'
+            }}>
+              <span style={{
+                fontSize: '10px',
+                color: '#9CA3AF',
+                fontWeight: '500',
+              }}>Powered by</span>
+              <a 
+                href="https://github.com/bbartling/pybog"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  fontSize: '10px',
+                  color: '#569BFF',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#4A8EE8';
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#569BFF';
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                <Github size={10} />
+                PyBOG
+              </a>
+            </div>
           </div>
         </div>
         <div className="header-right">
