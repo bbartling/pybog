@@ -44,7 +44,7 @@ def main():
     builder.start_sub_folder("CalculationLogic")
 
     # --- Logic Blocks ---
-    builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
+    builder.add_numeric_const("Const_1", properties={"out": 1.0})
     builder.add_numeric_switch("Test_NumericSwitch")
 
     builder.end_sub_folder()

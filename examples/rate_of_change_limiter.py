@@ -46,7 +46,7 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     # ==========================================================================
     # 1. TOP-LEVEL I/O AND CONFIGURATION
     # ==========================================================================
-    b.add_component("kitControl:SineWave", "FastChangingInput")
+    b.add_sine_wave("FastChangingInput")
     b.add_numeric_writable("MaxChangePerSecond", default_value=5.0)
 
     # New configurable time delta
@@ -62,36 +62,31 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
 
     # --- Timer for periodic updates ---
     # The initial period is set from the default value.
-    b.add_component(
-        "kitControl:MultiVibrator",
+    b.add_multi_vibrator(
         "UpdateTimer",
-        properties={"period": str(int(update_seconds_default * 1000))},
+        period_ms=str(int(update_seconds_default * 1000)),
     )
-    b.add_component("kitControl:OneShot", "UpdateTick")
+    b.add_one_shot("UpdateTick")
 
     # --- Visual feedback for timer period in milliseconds ---
-    b.add_component(
-        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
-    )
-    b.add_component("kitControl:Multiply", "Update_ms_Display")
+    b.add_numeric_const("Const_1000", properties={"value": 1000.0})
+    b.add_multiply("Update_ms_Display")
     b.add_numeric_writable("CalculatedPeriod_ms")
 
     # --- Memory to hold the last output value ---
-    b.add_component("kitControl:NumericLatch", "PreviousOutput_Latch")
+    b.add_numeric_latch("PreviousOutput_Latch")
 
     # --- Calculate the desired change (Delta) ---
-    b.add_component("kitControl:Subtract", "CalculateDelta")
+    b.add_subtract("CalculateDelta")
 
     # --- Logic to clamp the change within limits (using Multiply by -1) ---
-    b.add_component(
-        "kitControl:NumericConst", "Const_Neg_1", properties={"value": -1.0}
-    )
-    b.add_component("kitControl:Multiply", "CreateNegativeLimit")
-    b.add_component("kitControl:Maximum", "Clamp_Low")
-    b.add_component("kitControl:Minimum", "Clamp_High")
+    b.add_numeric_const("Const_Neg_1", properties={"value": -1.0})
+    b.add_multiply("CreateNegativeLimit")
+    b.add_maximum("Clamp_Low")
+    b.add_minimum("Clamp_High")
 
     # --- Calculate the new rate-limited output ---
-    b.add_component("kitControl:Add", "CalculateNewOutput")
+    b.add_add("CalculateNewOutput")
 
     b.end_sub_folder()
 

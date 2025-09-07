@@ -90,16 +90,14 @@ def main():
         "feedbackDelay": "30",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_Rotator_Block", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_Rotator_Block", properties=lead_lag_properties)
 
     # A counter for each pump to track start/stop cycles for rotation logic.
     for name in pump_names:
-        builder.add_component("kitControl:Counter", f"{name}_CycleCounter")
+        builder.add_counter(f"{name}_CycleCounter")
 
     # An OR gate combines the 2 status signals into a single signal.
-    builder.add_component("kitControl:Or", "Feedback_Or")
+    builder.add_or("Feedback_Or")
 
     # --- Component Wiring ---
 
@@ -138,7 +136,7 @@ def main():
 
     # --- Save the .bog file ---
     # The final .bog filename is hardcoded within the script.
-    bog_filename = "two_pump_rotator_status_driven.bog"
+    bog_filename = "two_pump_rotator_rotator.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)

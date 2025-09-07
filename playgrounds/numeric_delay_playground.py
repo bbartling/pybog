@@ -48,13 +48,11 @@ def main():
 
     # --- Logic Components (No Sub-folder) ---
     # The core NumericDelay component
-    builder.add_component("kitControl:NumericDelay", "MainDelay")
+    builder.add_numeric_delay("MainDelay")
 
     # Logic to convert minutes to milliseconds for the delay time
-    builder.add_component(
-        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
-    )
-    builder.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    builder.add_numeric_const("Const_60000", properties={"value": 60000.0})
+    builder.add_multiply("Delay_ms_Calc")
 
     # --- Wiring ---
 

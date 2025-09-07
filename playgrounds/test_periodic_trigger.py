@@ -34,27 +34,23 @@ def main():
 
     # --------------- SUBFOLDER: Interval ---------------
     b.start_sub_folder("Interval")
-    b.add_component(
-        "kitControl:BooleanDelay", "TickDelay", properties={"onDelay": T_MS}
-    )
-    b.add_component("kitControl:OneShot", "TickPulse")
-    b.add_component("kitControl:Not", "PulseNot")
-    b.add_component("kitControl:And", "Enable_AND_Hold")
+    b.add_boolean_delay("TickDelay", on_delay=T_MS)
+    b.add_one_shot("TickPulse")
+    b.add_not("PulseNot")
+    b.add_and("Enable_AND_Hold")
     b.end_sub_folder()
 
     # --------------- SUBFOLDER: Compare ---------------
     b.start_sub_folder("Compare")
-    b.add_component("kitControl:GreaterThanEqual", "Reached_GE_Target")
-    b.add_component("kitControl:Not", "NotReached")
-    b.add_component("kitControl:And", "Enable_AND_NotReached")
+    b.add_greater_than_equal("Reached_GE_Target")
+    b.add_not("NotReached")
+    b.add_and("Enable_AND_NotReached")
     b.end_sub_folder()
 
     # --------------- SUBFOLDER: Increment ---------------
     b.start_sub_folder("Increment")
-    b.add_component("kitControl:Add", "CounterPlusStep")
-    b.add_component(
-        "kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"}
-    )
+    b.add_add("CounterPlusStep")
+    b.add_numeric_delay("UnitDelay", update_time="10")
     b.add_numeric_switch("PulseGate")
     b.end_sub_folder()
 

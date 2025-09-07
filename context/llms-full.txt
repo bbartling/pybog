@@ -64,28 +64,28 @@ def main():
     builder.start_sub_folder("Logic")
 
     # --- Manual Maximum Calculation ---
-    builder.add_component("kitControl:Maximum", "Max1")
-    builder.add_component("kitControl:Maximum", "Max2")
-    builder.add_component("kitControl:Maximum", "Max3")
-    builder.add_component("kitControl:Maximum", "Max_Final")
+    builder.add_maximum("Max1")
+    builder.add_maximum("Max2")
+    builder.add_maximum("Max3")
+    builder.add_maximum("Max_Final")
 
     # --- Hysteresis (SR Latch) Logic ---
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Setpoint", properties={"value": 30.0}
+    builder.add_numeric_const(
+        "Enable_Setpoint", properties={"value": 30.0}
     )
-    builder.add_component(
-        "kitControl:NumericConst", "Disable_Setpoint", properties={"value": 15.0}
+    builder.add_numeric_const(
+        "Disable_Setpoint", properties={"value": 15.0}
     )
-    builder.add_component("kitControl:GreaterThan", "Set_Condition")
-    builder.add_component("kitControl:LessThan", "Reset_Condition_Raw")
-    builder.add_component("kitControl:Not", "Reset_Condition")
-    builder.add_component("kitControl:Or", "Latch_Set_Logic")
-    builder.add_component("kitControl:And", "Raw_Chiller_Request")
+    builder.add_greater_than("Set_Condition")
+    builder.add_less_than("Reset_Condition_Raw")
+    builder.add_not("Reset_Condition")
+    builder.add_or("Latch_Set_Logic")
+    builder.add_and("Raw_Chiller_Request")
 
     # --- Anti-Short-Cycle Delay ---
-    builder.add_component("kitControl:BooleanDelay", "Anti_Short_Cycle_Delay")
-    builder.add_component(
-        "kitControl:NumericConst", "Off_Delay_Constant", properties={"value": 1800000.0}
+    builder.add_boolean_delay("Anti_Short_Cycle_Delay")
+    builder.add_numeric_const(
+        "Off_Delay_Constant", properties={"value": 1800000.0}
     )  # 30 minutes
 
     builder.end_sub_folder()
@@ -228,41 +228,39 @@ def main():
 
     # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:And", "EnableGate")  # NEW
-    b.add_component("kitControl:BooleanDelay", "StartupDelay")
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
-    )
-    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_and("EnableGate")  # NEW
+    b.add_boolean_delay("StartupDelay")
+    b.add_and("RunLogicEnable")
+    b.add_numeric_const("Const_60000", properties={"value": 60000.0})
+    b.add_multiply("Delay_ms_Calc")
 
     # Update Timer
-    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
-    b.add_component("kitControl:Multiply", "Update_ms_Calc")
-    b.add_component("kitControl:OneShot", "UpdatePulse")
-    b.add_component("kitControl:And", "PulseGate")
+    b.add_multi_vibrator("UpdateTimer")
+    b.add_multiply("Update_ms_Calc")
+    b.add_one_shot("UpdatePulse")
+    b.add_and("PulseGate")
 
     # Trim vs Respond Logic
-    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
-    b.add_component("kitControl:Subtract", "ExcessRequests")
+    b.add_greater_than("IsRespondCondition")
+    b.add_subtract("ExcessRequests")
 
     b.start_sub_folder("RespondCappingLogic")
-    b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_component("kitControl:Minimum", "CappedResponse")
+    b.add_multiply("ProportionalResponse")
+    b.add_minimum("CappedResponse")
     b.end_sub_folder()
 
     b.add_numeric_switch("AdjustmentSwitch")
 
     # Custom Counter Core
-    b.add_component("kitControl:NumericLatch", "ValueLatch")
-    b.add_component("kitControl:Add", "NewSetpoint_Unclamped")
-    b.add_component("kitControl:Minimum", "Clamp_Hi")
-    b.add_component("kitControl:Maximum", "Clamp_Lo")
+    b.add_numeric_latch("ValueLatch")
+    b.add_add("NewSetpoint_Unclamped")
+    b.add_minimum("Clamp_Hi")
+    b.add_maximum("Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
     b.add_numeric_switch("FinalOutputSwitch")
 
     # Latch Initialization Logic
-    b.add_component("kitControl:OneShot", "InitializeLatchPulse")
+    b.add_one_shot("InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
 
     # Dynamic Minimum Clamp Logic
@@ -275,13 +273,13 @@ def main():
 
     # dont define a properties={"": 0.5} for NumericDelay just
     # wire in a numeric writeable for that as shown below
-    b.add_component("kitControl:NumericDelay", "MinClampDelay")
-    b.add_component("kitControl:Multiply", "MinClampDelay_ms_Calc")
+    b.add_numeric_delay("MinClampDelay")
+    b.add_multiply("MinClampDelay_ms_Calc")
 
     # Reset Logic
-    b.add_component("kitControl:Not", "FanIsOff")
-    b.add_component("kitControl:Or", "ResetTrigger")
-    b.add_component("kitControl:OneShot", "ResetPulse")
+    b.add_not("FanIsOff")
+    b.add_or("ResetTrigger")
+    b.add_one_shot("ResetPulse")
 
     # --- Wiring ---
 
@@ -473,13 +471,11 @@ def main():
 
     # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:And", "EnableGate")
-    b.add_component("kitControl:BooleanDelay", "StartupDelay")
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
-    )
-    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_and("EnableGate")
+    b.add_boolean_delay("StartupDelay")
+    b.add_and("RunLogicEnable")
+    b.add_numeric_const("Const_60000", properties={"value": 60000.0})
+    b.add_multiply("Delay_ms_Calc")
 
     # this correct some odd quark in flow programming to smooth
     # start up values after startup delay expires
@@ -487,31 +483,31 @@ def main():
     b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
 
     # Update Timer
-    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
-    b.add_component("kitControl:Multiply", "Update_ms_Calc")
-    b.add_component("kitControl:OneShot", "UpdatePulse")
-    b.add_component("kitControl:And", "PulseGate")
+    b.add_multi_vibrator("UpdateTimer")
+    b.add_multiply("Update_ms_Calc")
+    b.add_one_shot("UpdatePulse")
+    b.add_and("PulseGate")
 
     # Trim vs Respond Logic
-    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
-    b.add_component("kitControl:Subtract", "ExcessRequests")
+    b.add_greater_than("IsRespondCondition")
+    b.add_subtract("ExcessRequests")
 
-    b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_component(
-        "kitControl:Maximum", "CappedResponse"
+    b.add_multiply("ProportionalResponse")
+    b.add_maximum(
+        "CappedResponse"
     )  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 
     # tMaxState Counter Core
-    b.add_component("kitControl:NumericLatch", "tMaxState_Latch")
-    b.add_component("kitControl:Add", "New_tMaxState_Unclamped")
-    b.add_component("kitControl:Minimum", "tMaxState_Clamp_Hi")
-    b.add_component("kitControl:Maximum", "tMaxState_Clamp_Lo")
+    b.add_numeric_latch("tMaxState_Latch")
+    b.add_add("New_tMaxState_Unclamped")
+    b.add_minimum("tMaxState_Clamp_Hi")
+    b.add_maximum("tMaxState_Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
 
     # Latch Initialization Logic (like duct static version)
-    b.add_component("kitControl:OneShot", "InitializeLatchPulse")
+    b.add_one_shot("InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
 
     # Dynamic Minimum Clamp Logic (like duct static version)
@@ -519,15 +515,15 @@ def main():
 
     # dont define a properties={"": 0.5} for NumericDelay just
     # wire in a numeric writeable for that as shown below
-    b.add_component("kitControl:NumericDelay", "MinClampDelay")
-    b.add_component("kitControl:Multiply", "MinClampDelay_ms_Calc")
+    b.add_numeric_delay("MinClampDelay")
+    b.add_multiply("MinClampDelay_ms_Calc")
 
     # Reset Logic
-    b.add_component("kitControl:Not", "FanIsOff")
-    b.add_component("kitControl:Or", "ResetTrigger")
-    b.add_component("kitControl:OneShot", "ResetPulse")
+    b.add_not("FanIsOff")
+    b.add_or("ResetTrigger")
+    b.add_one_shot("ResetPulse")
 
-    b.add_component("kitControl:Reset", "SAT_Reset_By_OAT")
+    b.add_reset("SAT_Reset_By_OAT")
     b.end_sub_folder()
 
     # --- Wiring ---
@@ -645,7 +641,138 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: hvac_gl36_box_pressure_request_logic.py ===
+=== FILE: hvac_gl36_vav_box_cooling_request_logic.py ===
+DIR: .
+=== CODE START ===
+"""
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
+(1, 2, or 3) based on zone temperature deviation from setpoint and the
+cooling loop demand. A higher value indicates a more urgent request. The
+final output is the maximum of all generated requests, ensuring the highest
+priority request is always represented.
+
+This script programmatically builds the VAV Box Cooling Request logic
+from ASHRAE Guideline 36, §5.6.8.1.
+
+It uses a parallel structure with a final Maximum block to prioritize
+requests based on zone temperature deviation and cooling demand.
+"""
+
+import sys
+import os
+import argparse
+
+from bog_builder import BogFolderBuilder
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for VAV Cooling Request logic."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    script_filename = os.path.basename(__file__).replace(".py", "")
+
+    builder = BogFolderBuilder("G36_VAV_Cooling_Req")
+    print("Creating top-level inputs and outputs...")
+
+    # --- Inputs ---
+    builder.add_numeric_writable("ZoneTemp", default_value=78.0)
+    builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
+    builder.add_numeric_writable("ZoneDemand", default_value=96.0)
+
+    builder.add_numeric_writable("VAVCoolingRequestsTotal")
+    print("Creating and organizing logic components in sub-folders...")
+
+    builder.start_sub_folder("SetpointDeviationCalcs")
+    builder.add_add("Setpoint_Plus_5F")
+    builder.add_add("Setpoint_Plus_3F")
+    builder.add_numeric_const("Const_5", properties={"out": 5.0})
+    builder.add_numeric_const("Const_3", properties={"out": 3.0})
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate3RequestsLogic")
+    builder.add_greater_than("Temp_GT_SP_plus_5F")
+    builder.add_boolean_delay("Timer_2min_Delay3", on_delay="120000")
+    builder.add_numeric_switch("NumericSwitch_3_Req")
+    builder.add_numeric_const(
+        "Const_3_Req", properties={"out": 3.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate2RequestsLogic")
+    builder.add_greater_than("Temp_GT_SP_plus_3F")
+    builder.add_boolean_delay("Timer_2min_Delay2", on_delay="120000")
+    builder.add_numeric_switch("NumericSwitch_2_Req")
+    builder.add_numeric_const(
+        "Const_2_Req", properties={"out": 2.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Generate1RequestLogic")
+    builder.add_greater_than("Demand_GT_95")
+    builder.add_numeric_switch("NumericSwitch_1_Req")
+    builder.add_numeric_const(
+        "Const_95", properties={"out": 95.0}
+    )
+    builder.add_numeric_const(
+        "Const_1_Req", properties={"out": 1.0}
+    )
+    builder.end_sub_folder()
+
+    builder.start_sub_folder("Prioritization")
+    builder.add_maximum("Maximum")
+    builder.end_sub_folder()
+
+    print("Wiring components across all folders...")
+
+    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_5F", "inA")
+    builder.add_link("Const_5", "out", "Setpoint_Plus_5F", "inB")
+    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_3F", "inA")
+    builder.add_link("Const_3", "out", "Setpoint_Plus_3F", "inB")
+
+    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_5F", "inA")
+    builder.add_link("Setpoint_Plus_5F", "out", "Temp_GT_SP_plus_5F", "inB")
+    builder.add_link("Temp_GT_SP_plus_5F", "out", "Timer_2min_Delay3", "in")
+    builder.add_link("Timer_2min_Delay3", "out", "NumericSwitch_3_Req", "inSwitch")
+    builder.add_link("Const_3_Req", "out", "NumericSwitch_3_Req", "inTrue")
+
+    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_3F", "inA")
+    builder.add_link("Setpoint_Plus_3F", "out", "Temp_GT_SP_plus_3F", "inB")
+    builder.add_link("Temp_GT_SP_plus_3F", "out", "Timer_2min_Delay2", "in")
+    builder.add_link("Timer_2min_Delay2", "out", "NumericSwitch_2_Req", "inSwitch")
+    builder.add_link("Const_2_Req", "out", "NumericSwitch_2_Req", "inTrue")
+
+    builder.add_link("ZoneDemand", "out", "Demand_GT_95", "inA")
+    builder.add_link("Const_95", "out", "Demand_GT_95", "inB")
+    builder.add_link("Demand_GT_95", "out", "NumericSwitch_1_Req", "inSwitch")
+    builder.add_link("Const_1_Req", "out", "NumericSwitch_1_Req", "inTrue")
+
+    builder.add_link("NumericSwitch_3_Req", "out", "Maximum", "inA")
+    builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
+    builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
+    builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
+
+    bog_filename = f"{script_filename}.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: hvac_gl36_vav_box_pressure_request_logic.py ===
 DIR: .
 === CODE START ===
 """
@@ -699,47 +826,37 @@ def main():
     print("Creating and organizing logic components in sub-folders...")
 
     builder.start_sub_folder("PercentageCalculations")
-    builder.add_component("kitControl:Multiply", "Calc_50_percent")
-    builder.add_component("kitControl:Multiply", "Calc_70_percent")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_0_5", properties={"out": 0.5}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_0_7", properties={"out": 0.7}
-    )
+    builder.add_multiply("Calc_50_percent")
+    builder.add_multiply("Calc_70_percent")
+    builder.add_numeric_const("Const_0_5", properties={"out": 0.5})
+    builder.add_numeric_const("Const_0_7", properties={"out": 0.7})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate3RequestsLogic")
-    builder.add_component("kitControl:LessThan", "LessThan_Flow_50pct")
-    builder.add_component("kitControl:GreaterThan", "GreaterThan_Damper_95")
-    builder.add_component("kitControl:And", "Generate3requests")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay1", properties={"onDelay": "60000"}
-    )
+    builder.add_less_than("LessThan_Flow_50pct")
+    builder.add_greater_than("GreaterThan_Damper_95")
+    builder.add_and("Generate3requests")
+    builder.add_boolean_delay("Timer_1min_Delay1", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
+    builder.add_numeric_const("Const_3", properties={"out": 3.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate2RequestsLogic")
-    builder.add_component("kitControl:LessThan", "LessThan_Flow_70pct")
-    builder.add_component("kitControl:And", "Generate2requests")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay2", properties={"onDelay": "60000"}
-    )
+    builder.add_less_than("LessThan_Flow_70pct")
+    builder.add_and("Generate2requests")
+    builder.add_boolean_delay("Timer_1min_Delay2", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_component("kitControl:NumericConst", "Const_2", properties={"out": 2.0})
+    builder.add_numeric_const("Const_2", properties={"out": 2.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate1RequestLogic")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"}
-    )
+    builder.add_boolean_delay("Timer_1min_Delay", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
+    builder.add_numeric_const("Const_1", properties={"out": 1.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Prioritization")
-    builder.add_component("kitControl:Maximum", "Maximum")
+    builder.add_maximum("Maximum")
     builder.end_sub_folder()
 
     print("Wiring components across all folders...")
@@ -792,142 +909,7 @@ if __name__ == "__main__":
     main()
 === CODE END ===
 
-=== FILE: hvac_gl36_vav_box_cooling_request_logic.py ===
-DIR: .
-=== CODE START ===
-"""
-This script programmatically builds the VAV Box Cooling Request logic
-from ASHRAE Guideline 36, §5.6.8.1. It generates a numeric request value
-(1, 2, or 3) based on zone temperature deviation from setpoint and the
-cooling loop demand. A higher value indicates a more urgent request. The
-final output is the maximum of all generated requests, ensuring the highest
-priority request is always represented.
-
-This script programmatically builds the VAV Box Cooling Request logic
-from ASHRAE Guideline 36, §5.6.8.1.
-
-It uses a parallel structure with a final Maximum block to prioritize
-requests based on zone temperature deviation and cooling demand.
-"""
-
-import sys
-import os
-import argparse
-
-from bog_builder import BogFolderBuilder
-
-
-def main():
-
-    parser = argparse.ArgumentParser(
-        description="Build a .bog file for VAV Cooling Request logic."
-    )
-    parser.add_argument(
-        "-o",
-        "--output_dir",
-        default="examples",
-        help="Output directory for the .bog file.",
-    )
-    args = parser.parse_args()
-
-    script_filename = os.path.basename(__file__).replace(".py", "")
-
-    builder = BogFolderBuilder("G36_VAV_Cooling_Req")
-    print("Creating top-level inputs and outputs...")
-
-    # --- Inputs ---
-    builder.add_numeric_writable("ZoneTemp", default_value=78.0)
-    builder.add_numeric_writable("ZoneCoolingSpt", default_value=72.0)
-    builder.add_numeric_writable("ZoneDemand", default_value=96.0)
-
-    builder.add_numeric_writable("VAVCoolingRequestsTotal")
-    print("Creating and organizing logic components in sub-folders...")
-
-    builder.start_sub_folder("SetpointDeviationCalcs")
-    builder.add_component("kitControl:Add", "Setpoint_Plus_5F")
-    builder.add_component("kitControl:Add", "Setpoint_Plus_3F")
-    builder.add_component("kitControl:NumericConst", "Const_5", properties={"out": 5.0})
-    builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
-    builder.end_sub_folder()
-
-    builder.start_sub_folder("Generate3RequestsLogic")
-    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_5F")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_2min_Delay3", properties={"onDelay": "120000"}
-    )
-    builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_3_Req", properties={"out": 3.0}
-    )
-    builder.end_sub_folder()
-
-    builder.start_sub_folder("Generate2RequestsLogic")
-    builder.add_component("kitControl:GreaterThan", "Temp_GT_SP_plus_3F")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_2min_Delay2", properties={"onDelay": "120000"}
-    )
-    builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_2_Req", properties={"out": 2.0}
-    )
-    builder.end_sub_folder()
-
-    builder.start_sub_folder("Generate1RequestLogic")
-    builder.add_component("kitControl:GreaterThan", "Demand_GT_95")
-    builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_95", properties={"out": 95.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_1_Req", properties={"out": 1.0}
-    )
-    builder.end_sub_folder()
-
-    builder.start_sub_folder("Prioritization")
-    builder.add_component("kitControl:Maximum", "Maximum")
-    builder.end_sub_folder()
-
-    print("Wiring components across all folders...")
-
-    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_5F", "inA")
-    builder.add_link("Const_5", "out", "Setpoint_Plus_5F", "inB")
-    builder.add_link("ZoneCoolingSpt", "out", "Setpoint_Plus_3F", "inA")
-    builder.add_link("Const_3", "out", "Setpoint_Plus_3F", "inB")
-
-    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_5F", "inA")
-    builder.add_link("Setpoint_Plus_5F", "out", "Temp_GT_SP_plus_5F", "inB")
-    builder.add_link("Temp_GT_SP_plus_5F", "out", "Timer_2min_Delay3", "in")
-    builder.add_link("Timer_2min_Delay3", "out", "NumericSwitch_3_Req", "inSwitch")
-    builder.add_link("Const_3_Req", "out", "NumericSwitch_3_Req", "inTrue")
-
-    builder.add_link("ZoneTemp", "out", "Temp_GT_SP_plus_3F", "inA")
-    builder.add_link("Setpoint_Plus_3F", "out", "Temp_GT_SP_plus_3F", "inB")
-    builder.add_link("Temp_GT_SP_plus_3F", "out", "Timer_2min_Delay2", "in")
-    builder.add_link("Timer_2min_Delay2", "out", "NumericSwitch_2_Req", "inSwitch")
-    builder.add_link("Const_2_Req", "out", "NumericSwitch_2_Req", "inTrue")
-
-    builder.add_link("ZoneDemand", "out", "Demand_GT_95", "inA")
-    builder.add_link("Const_95", "out", "Demand_GT_95", "inB")
-    builder.add_link("Demand_GT_95", "out", "NumericSwitch_1_Req", "inSwitch")
-    builder.add_link("Const_1_Req", "out", "NumericSwitch_1_Req", "inTrue")
-
-    builder.add_link("NumericSwitch_3_Req", "out", "Maximum", "inA")
-    builder.add_link("NumericSwitch_2_Req", "out", "Maximum", "inB")
-    builder.add_link("NumericSwitch_1_Req", "out", "Maximum", "inC")
-    builder.add_link("Maximum", "out", "VAVCoolingRequestsTotal", "in16")
-
-    bog_filename = f"{script_filename}.bog"
-    output_path = os.path.join(args.output_dir, bog_filename)
-    os.makedirs(args.output_dir, exist_ok=True)
-    builder.save(output_path)
-    print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
-=== CODE END ===
-
-=== FILE: hvac_simple_chiller_plant.py ===
+=== FILE: hvac_simple_chiller_plant_one.py ===
 DIR: .
 === CODE START ===
 """
@@ -978,42 +960,36 @@ def main():
 
     # --- Tstat Refactoring Start ---
     # 1. Add Tstat component without complex properties.
-    builder.add_component("kitControl:Tstat", "Plant_Enable_Tstat")
+    builder.add_tstat("Plant_Enable_Tstat")
 
     # 2. Create explicit constants for Tstat configuration.
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Setpoint", properties={"value": 60.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Differential", properties={"value": 2.0}
-    )
+    builder.add_numeric_const("Enable_Setpoint", properties={"value": 60.0})
+    builder.add_numeric_const("Enable_Differential", properties={"value": 2.0})
     # action=False means direct-acting.
-    builder.add_component(
-        "kitControl:BooleanConst", "Enable_Action_Direct", properties={"value": False}
+    builder.add_boolean_const(
+        "Enable_Action_Direct", properties={"value": False}
     )
     # --- Tstat Refactoring End ---
 
     # LeadLagCycles block to rotate the two pumps.
     lead_lag_properties = {"numberOutputs": 2, "maxRuntime": "40h"}
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_Rotator", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_Rotator", properties=lead_lag_properties)
 
     # Counters to track the number of starts for each pump.
-    builder.add_component("kitControl:Counter", "Pump_A_Start_Counter")
-    builder.add_component("kitControl:Counter", "Pump_B_Start_Counter")
+    builder.add_counter("Pump_A_Start_Counter")
+    builder.add_counter("Pump_B_Start_Counter")
 
     # BooleanDelay blocks to delay the start command to each pump.
     delay_properties = {"onDelay": "30000"}
-    builder.add_component(
-        "kitControl:BooleanDelay", "Pump_A_Start_Delay", properties=delay_properties
+    builder.add_boolean_delay(
+        "Pump_A_Start_Delay", on_delay=delay_properties["onDelay"]
     )
-    builder.add_component(
-        "kitControl:BooleanDelay", "Pump_B_Start_Delay", properties=delay_properties
+    builder.add_boolean_delay(
+        "Pump_B_Start_Delay", on_delay=delay_properties["onDelay"]
     )
 
     # OR gate to combine pump status signals for feedback.
-    builder.add_component("kitControl:Or", "Pump_Feedback_Or")
+    builder.add_or("Pump_Feedback_Or")
 
     builder.end_sub_folder()
 
@@ -1065,6 +1041,185 @@ def main():
     out = os.path.join(args.output_dir, "simple_chiller_plant.bog")
     builder.save(out)
     print(f"Created {out}")
+
+
+if __name__ == "__main__":
+    main()
+=== CODE END ===
+
+=== FILE: hvac_simple_chiller_plant_two.py ===
+DIR: .
+=== CODE START ===
+"""
+Human asks via Chat input:
+
+Create a Niagara .bog file for a plant with three chillers and three primary pumps.
+Each chiller shall be staged for lead, lag, and standby based on runtime.
+Each primary pump shall be staged for lead, lag, and standby based on runtime.
+Calculate the total number of running chillers. Use this count as the demand signal
+for the pumps (e.g., if 2 chillers are running, then run a minimum of 2 pumps).
+Track runtime for all 6 pieces of equipment and expose the runtime in seconds as top-level outputs.
+"""
+
+import os
+import argparse
+from bog_builder import BogFolderBuilder
+
+
+def main():
+
+    # --- Setup argument parser ---
+    parser = argparse.ArgumentParser(
+        description="Build a chiller plant staging logic with runtime-based rotation."
+    )
+    parser.add_argument(
+        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+    )
+    args = parser.parse_args()
+
+    # Initialize the BogFolderBuilder with the top-level folder name.
+    builder = BogFolderBuilder("Chiller_Pump_Staging", debug=True)
+
+    # --- Configuration Constants ---
+    NUM_EQUIPMENT = 3
+    CHILLER_MAX_RUNTIME = "200h"
+    PUMP_MAX_RUNTIME = "200h"
+    TIMER_PERIOD_MS = "1000"  # 1 second pulse for runtime accumulation
+
+    # --- Top-Level Inputs & Outputs ---
+    print("--- Creating Top-Level Inputs & Outputs ---")
+
+    # System Master Input: Number of chillers requested to run (0-3)
+    builder.add_numeric_writable("Chiller_Demand", default_value=0.0)
+
+    # Equipment Command & Runtime Outputs
+    chiller_names = [f"Chiller_{i+1}" for i in range(NUM_EQUIPMENT)]
+    pump_names = [f"Pump_{i+1}" for i in range(NUM_EQUIPMENT)]
+
+    for name in chiller_names:
+        builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
+        builder.add_numeric_writable(f"{name}_Runtime_Seconds", default_value=0.0)
+
+    for name in pump_names:
+        builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
+        builder.add_numeric_writable(f"{name}_Runtime_Seconds", default_value=0.0)
+
+    # Intermediate Logic Outputs for Visibility
+    builder.add_numeric_writable("Total_Chillers_Running", default_value=0.0)
+    builder.add_numeric_writable("Pump_Demand", default_value=0.0)
+
+    # --- Logic Components (organized inside a single sub-folder) ---
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
+
+    # --- Staging Blocks ---
+    builder.add_lead_lag_runtime(
+        "Chiller_LeadLag",
+        properties={"numberOutputs": NUM_EQUIPMENT, "maxRuntime": CHILLER_MAX_RUNTIME},
+    )
+    builder.add_lead_lag_runtime(
+        "Pump_LeadLag",
+        properties={"numberOutputs": NUM_EQUIPMENT, "maxRuntime": PUMP_MAX_RUNTIME},
+    )
+
+    # --- Runtime Accumulation Timer ---
+    builder.add_multi_vibrator("One_Second_Timer", period_ms=TIMER_PERIOD_MS)
+    builder.add_one_shot("Timer_Pulse")
+    builder.add_numeric_const("Increment_Value", value=1.0)
+
+    # --- Runtime Logic for each piece of equipment ---
+    for name in chiller_names + pump_names:
+        builder.add_counter(f"{name}_RuntimeCounter")
+        builder.add_and(f"{name}_IncrementGate")
+
+    # --- Interlock: Count Running Chillers to determine Pump Demand ---
+    builder.add_numeric_const("Const_1", value=1.0)
+    for name in chiller_names:
+        builder.add_numeric_switch(f"{name}_BoolToNum")
+
+    builder.add_add("Sum_Running_Chillers")
+
+    builder.end_sub_folder()
+
+    # --- Wiring ---
+    print("\n--- Wiring Components ---")
+
+    # --- 1. Wire Master Timer ---
+    # MultiVibrator output triggers OneShot to create a clean pulse every second.
+    builder.add_link("One_Second_Timer", "out", "Timer_Pulse", "in")
+
+    # --- 2. Wire Chiller Staging ---
+    # External demand signal drives the chiller lead/lag block.
+    builder.add_link("Chiller_Demand", "out", "Chiller_LeadLag", "in")
+
+    # --- 3. Wire Runtime and Commands for Chillers and Pumps ---
+    equip_map = {
+        "A": (chiller_names[0], pump_names[0]),
+        "B": (chiller_names[1], pump_names[1]),
+        "C": (chiller_names[2], pump_names[2]),
+    }
+
+    for slot, (chiller_name, pump_name) in equip_map.items():
+        # --- Chiller Command and Runtime Calculation ---
+        # LeadLag output -> Chiller Command output point
+        builder.add_link(f"Chiller_LeadLag", f"out{slot}", f"{chiller_name}_Cmd", "in16")
+        # Runtime Gate: Timer_Pulse AND Chiller_Cmd must both be true to increment counter.
+        builder.add_link("Timer_Pulse", "out", f"{chiller_name}_IncrementGate", "inA")
+        builder.add_link(f"{chiller_name}_Cmd", "out", f"{chiller_name}_IncrementGate", "inB")
+        builder.add_link(
+            f"{chiller_name}_IncrementGate", "out", f"{chiller_name}_RuntimeCounter", "countUp"
+        )
+        # Set counter increment value to 1.
+        builder.add_link(
+            "Increment_Value", "out", f"{chiller_name}_RuntimeCounter", "countIncrement"
+        )
+        # Counter output -> Runtime_Seconds output point
+        builder.add_link(
+            f"{chiller_name}_RuntimeCounter", "out", f"{chiller_name}_Runtime_Seconds", "in16"
+        )
+        # Feedback loop: Counter output -> LeadLag runtime input (converts seconds to runtime format)
+        builder.add_link(
+            f"{chiller_name}_RuntimeCounter", "out", "Chiller_LeadLag", f"runtime{slot}"
+        )
+
+        # --- Pump Command and Runtime Calculation (identical logic) ---
+        builder.add_link(f"Pump_LeadLag", f"out{slot}", f"{pump_name}_Cmd", "in16")
+        builder.add_link("Timer_Pulse", "out", f"{pump_name}_IncrementGate", "inA")
+        builder.add_link(f"{pump_name}_Cmd", "out", f"{pump_name}_IncrementGate", "inB")
+        builder.add_link(
+            f"{pump_name}_IncrementGate", "out", f"{pump_name}_RuntimeCounter", "countUp"
+        )
+        builder.add_link(
+            "Increment_Value", "out", f"{pump_name}_RuntimeCounter", "countIncrement"
+        )
+        builder.add_link(
+            f"{pump_name}_RuntimeCounter", "out", f"{pump_name}_Runtime_Seconds", "in16"
+        )
+        builder.add_link(
+            f"{pump_name}_RuntimeCounter", "out", "Pump_LeadLag", f"runtime{slot}"
+        )
+
+    # --- 4. Wire Interlock Logic ---
+    # Convert each chiller command boolean to a number (1 if true, 0 if false)
+    for i, name in enumerate(chiller_names):
+        slot_letter = chr(ord('A') + i)
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_BoolToNum", "inSwitch")
+        builder.add_link("Const_1", "out", f"{name}_BoolToNum", "inTrue")
+        # inFalse defaults to 0.0, so no explicit link needed.
+        builder.add_link(f"{name}_BoolToNum", "out", "Sum_Running_Chillers", f"in{slot_letter}")
+
+    # The sum of running chillers drives the pump demand.
+    builder.add_link("Sum_Running_Chillers", "out", "Total_Chillers_Running", "in16")
+    builder.add_link("Sum_Running_Chillers", "out", "Pump_Demand", "in16")
+    builder.add_link("Sum_Running_Chillers", "out", "Pump_LeadLag", "in")
+
+    # --- Save the .bog file ---
+    os.makedirs(args.output_dir, exist_ok=True)
+    bog_filename = "chiller_pump_staging.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
 
 
 if __name__ == "__main__":
@@ -1166,16 +1321,14 @@ def main():
         "feedbackDelay": "30",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_Rotator_Block", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_Rotator_Block", properties=lead_lag_properties)
 
     # A counter for each pump to track start/stop cycles for rotation logic.
     for name in pump_names:
-        builder.add_component("kitControl:Counter", f"{name}_CycleCounter")
+        builder.add_counter(f"{name}_CycleCounter")
 
     # An OR gate combines the 2 status signals into a single signal.
-    builder.add_component("kitControl:Or", "Feedback_Or")
+    builder.add_or("Feedback_Or")
 
     # --- Component Wiring ---
 
@@ -1214,7 +1367,7 @@ def main():
 
     # --- Save the .bog file ---
     # The final .bog filename is hardcoded within the script.
-    bog_filename = "two_pump_rotator_status_driven.bog"
+    bog_filename = "two_pump_rotator_rotator.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
@@ -1302,16 +1455,14 @@ def main():
         "feedbackDelay": "10s",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_LeadLag", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_LeadLag", properties=lead_lag_properties)
 
     # The Counter for each pump is also part of the internal logic.
     for pump in pump_names:
         builder.add_counter(f"Pump_{pump}_Counter")
 
     # The Feedback logic is internal to the calculation as well.
-    builder.add_component("kitControl:Or", "Feedback_Or")
+    builder.add_or("Feedback_Or")
 
     builder.end_sub_folder()
     print("--- Exited 'Logic' sub-folder ---")
@@ -1436,9 +1587,7 @@ def main():
         builder.add_boolean_writable(f"Chiller_{chiller}_Cmd")
         builder.add_numeric_writable(f"Chiller_{chiller}_Runtime")
 
-    builder.add_component(
-        "kitControl:NumericConst", "Rotate_Seconds", properties={"value": 30.0}
-    )
+    builder.add_numeric_const("Rotate_Seconds", properties={"value": 30.0})
 
     # --- Logic Components (organized inside a sub-folder) ---
     print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
@@ -1450,27 +1599,19 @@ def main():
         "feedbackDelay": "10s",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagRuntime", "Chiller_LeadLag", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_runtime("Chiller_LeadLag", properties=lead_lag_properties)
 
-    builder.add_component("kitControl:Or", "Feedback_Or")
-    builder.add_component(
-        "kitControl:MultiVibrator", "OneSecondTimer", properties={"period": "5s"}
-    )
-    builder.add_component("kitControl:OneShot", "TimerPulse")
-    builder.add_component(
-        "kitControl:NumericConst", "Count_Increment_Value", properties={"value": 5.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_1000_ms", properties={"value": 1000.0}
-    )
-    builder.add_component("kitControl:Multiply", "Calc_MaxRuntime_ms")
+    builder.add_or("Feedback_Or")
+    builder.add_multi_vibrator("OneSecondTimer", period_ms="5s")
+    builder.add_one_shot("TimerPulse")
+    builder.add_numeric_const("Count_Increment_Value", properties={"value": 5.0})
+    builder.add_numeric_const("Const_1000_ms", properties={"value": 1000.0})
+    builder.add_multiply("Calc_MaxRuntime_ms")
 
     # --- Runtime Accumulation and Latching Logic ---
     for chiller in chiller_names:
         builder.add_counter(f"Chiller_{chiller}_RuntimeCounter")
-        builder.add_component("kitControl:And", f"Chiller_{chiller}_IncrementGate")
+        builder.add_and(f"Chiller_{chiller}_IncrementGate")
 
     builder.end_sub_folder()
 
@@ -1620,7 +1761,8 @@ def main():
         "outputLowLimit": {"value": 180.0},
         "outputHighLimit": {"value": 140.0},
     }
-    b.add_component("kitControl:Reset", "HotWaterReset", properties=hw_props)
+    # Use dedicated wrapper for reset block
+    b.add_reset("HotWaterReset", properties=hw_props)
     b.end_sub_folder()
 
     # ---------------------------------------------------------------------
@@ -1641,7 +1783,7 @@ def main():
         "outputLowLimit": {"value": 70.0},  # at OAT_LOW
         "outputHighLimit": {"value": 55.0},  # at OAT_HIGH
     }
-    b.add_component("kitControl:Reset", "SAT_Reset", properties=sat_props)
+    b.add_reset("SAT_Reset", properties=sat_props)
     b.end_sub_folder()
 
     # ---------------------------------------------------------------------
@@ -1662,7 +1804,7 @@ def main():
         "outputLowLimit": {"value": 44.0},
         "outputHighLimit": {"value": 50.0},
     }
-    b.add_component("kitControl:Reset", "ChilledWaterReset", properties=chw_props)
+    b.add_reset("ChilledWaterReset", properties=chw_props)
     b.end_sub_folder()
 
     # ===========================
@@ -1754,7 +1896,8 @@ def build_pid_loop(output_directory: str) -> str:
         "proportionalConstant": {"value": 5.0},
         "integralConstant": {"value": 0.05},
     }
-    builder.add_component("kitControl:LoopPoint", "LoopPoint", properties=lp_props)
+    # Use the dedicated wrapper for the LoopPoint component
+    builder.add_loop_point("LoopPoint", properties=lp_props)
 
     # Define an output writable for the PID result
     builder.add_numeric_writable("Output")
@@ -1879,41 +2022,34 @@ def main():
     # Calculate default onDelay from StartupDelaySeconds input (default 5 seconds)
     default_startup_delay_ms = str(int(5.0 * 1000))
 
-    b.add_component(
-        "kitControl:BooleanDelay",
-        "StartupDelay",
-        properties={"onDelay": default_startup_delay_ms, "offDelay": "0"},
+    # BooleanDelay with explicit on/off delays
+    b.add_boolean_delay(
+        "StartupDelay", on_delay=default_startup_delay_ms, off_delay="0"
     )
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
-    )
-    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_and("RunLogicEnable")
+    b.add_numeric_const("Const_1000", value=1000.0)
+    b.add_multiply("Delay_ms_Calc")
 
     # Update Timer
     default_period_ms = "1000"
 
-    b.add_component(
-        "kitControl:MultiVibrator",
-        "UpdateTimer",
-        properties={"period": default_period_ms},
-    )
-    b.add_component("kitControl:Multiply", "Update_ms_Calc")
-    b.add_component("kitControl:OneShot", "UpdatePulse")
-    b.add_component("kitControl:And", "PulseGate")
+    b.add_multi_vibrator("UpdateTimer", period_ms=default_period_ms)
+    b.add_multiply("Update_ms_Calc")
+    b.add_one_shot("UpdatePulse")
+    b.add_and("PulseGate")
 
     # Custom Counter Core
-    b.add_component("kitControl:NumericLatch", "ValueLatch")
-    b.add_component("kitControl:Add", "AddStep")
-    b.add_component("kitControl:Subtract", "SubtractStep")
+    b.add_numeric_latch("ValueLatch")
+    b.add_add("AddStep")
+    b.add_subtract("SubtractStep")
     b.add_numeric_switch("DirectionSwitch")
     b.add_numeric_switch("FinalOutputSwitch")
 
     # Direction Control Logic
-    b.add_component("kitControl:GreaterThanEqual", "HitUpperLimit")
-    b.add_component("kitControl:LessThanEqual", "HitLowerLimit")
-    b.add_component("kitControl:Or", "HitAnyLimit")
-    b.add_component("kitControl:BooleanLatch", "DirectionLatch")
+    b.add_greater_than_equal("HitUpperLimit")
+    b.add_less_than_equal("HitLowerLimit")
+    b.add_or("HitAnyLimit")
+    b.add_boolean_latch("DirectionLatch")
 
     b.end_sub_folder()
 
@@ -2053,7 +2189,7 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
     # ==========================================================================
     # 1. TOP-LEVEL I/O AND CONFIGURATION
     # ==========================================================================
-    b.add_component("kitControl:SineWave", "FastChangingInput")
+    b.add_sine_wave("FastChangingInput")
     b.add_numeric_writable("MaxChangePerSecond", default_value=5.0)
 
     # New configurable time delta
@@ -2069,36 +2205,31 @@ def build_rate_limiter(b: BogFolderBuilder) -> None:
 
     # --- Timer for periodic updates ---
     # The initial period is set from the default value.
-    b.add_component(
-        "kitControl:MultiVibrator",
+    b.add_multi_vibrator(
         "UpdateTimer",
-        properties={"period": str(int(update_seconds_default * 1000))},
+        period_ms=str(int(update_seconds_default * 1000)),
     )
-    b.add_component("kitControl:OneShot", "UpdateTick")
+    b.add_one_shot("UpdateTick")
 
     # --- Visual feedback for timer period in milliseconds ---
-    b.add_component(
-        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
-    )
-    b.add_component("kitControl:Multiply", "Update_ms_Display")
+    b.add_numeric_const("Const_1000", properties={"value": 1000.0})
+    b.add_multiply("Update_ms_Display")
     b.add_numeric_writable("CalculatedPeriod_ms")
 
     # --- Memory to hold the last output value ---
-    b.add_component("kitControl:NumericLatch", "PreviousOutput_Latch")
+    b.add_numeric_latch("PreviousOutput_Latch")
 
     # --- Calculate the desired change (Delta) ---
-    b.add_component("kitControl:Subtract", "CalculateDelta")
+    b.add_subtract("CalculateDelta")
 
     # --- Logic to clamp the change within limits (using Multiply by -1) ---
-    b.add_component(
-        "kitControl:NumericConst", "Const_Neg_1", properties={"value": -1.0}
-    )
-    b.add_component("kitControl:Multiply", "CreateNegativeLimit")
-    b.add_component("kitControl:Maximum", "Clamp_Low")
-    b.add_component("kitControl:Minimum", "Clamp_High")
+    b.add_numeric_const("Const_Neg_1", properties={"value": -1.0})
+    b.add_multiply("CreateNegativeLimit")
+    b.add_maximum("Clamp_Low")
+    b.add_minimum("Clamp_High")
 
     # --- Calculate the new rate-limited output ---
-    b.add_component("kitControl:Add", "CalculateNewOutput")
+    b.add_add("CalculateNewOutput")
 
     b.end_sub_folder()
 
@@ -2248,9 +2379,7 @@ def build_boolean_schedule_example(output_directory: str) -> str:
         if day["day"].get("time"):
             day["day"]["time"]["effectiveValue"] = {"value": True}
 
-    builder.add_component(
-        "sch:BooleanSchedule", "BooleanSchedule", properties=boolean_props
-    )
+    builder.add_boolean_schedule("BooleanSchedule", properties=boolean_props)
     builder.add_boolean_writable("BooleanWritable")
     builder.add_link("BooleanSchedule", "out", "BooleanWritable", "in16")
 
@@ -2406,9 +2535,7 @@ def build_enum_schedule_example(output_directory: str) -> str:
         "out": {"value": "1"},  # Current value is duty1
     }
 
-    builder.add_component(
-        "sch:EnumSchedule", "EnumSchedule", properties=enum_schedule_props
-    )
+    builder.add_enum_schedule("EnumSchedule", properties=enum_schedule_props)
     builder.add_enum_writable("EnumWritable", facets=facets_str, default_value="1")
     builder.add_link("EnumSchedule", "out", "EnumWritable", "in16")
 
@@ -2544,7 +2671,8 @@ def build_numeric_schedule(output_directory: str) -> str:
         "out": {"value": 1.0},
     }
 
-    builder.add_component("sch:NumericSchedule", "NumericSchedule", properties=props)
+    # Create the numeric schedule using the dedicated helper
+    builder.add_numeric_schedule("NumericSchedule", properties=props)
     builder.add_numeric_writable("NumericWritable")
     builder.add_link("NumericSchedule", "out", "NumericWritable", "in16")
 
@@ -2599,7 +2727,7 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     max_switch_name = f"MaxSwitch_{node_id}"
     min_switch_name = f"MinSwitch_{node_id}"
 
-    builder.add_component("kitControl:GreaterThan", gt_name)
+    builder.add_greater_than(gt_name)
     builder.add_numeric_switch(max_switch_name)
     builder.add_numeric_switch(min_switch_name)
 

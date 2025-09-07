@@ -74,13 +74,11 @@ def main():
 
     # --- Logic Components ---
     b.start_sub_folder("Logic")
-    b.add_component("kitControl:And", "EnableGate")
-    b.add_component("kitControl:BooleanDelay", "StartupDelay")
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_60000", properties={"value": 60000.0}
-    )
-    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_and("EnableGate")
+    b.add_boolean_delay("StartupDelay")
+    b.add_and("RunLogicEnable")
+    b.add_numeric_const("Const_60000", properties={"value": 60000.0})
+    b.add_multiply("Delay_ms_Calc")
 
     # this correct some odd quark in flow programming to smooth
     # start up values after startup delay expires
@@ -88,31 +86,31 @@ def main():
     b.add_numeric_writable("MinClampDelayMinutes", default_value=1.0)
 
     # Update Timer
-    b.add_component("kitControl:MultiVibrator", "UpdateTimer")
-    b.add_component("kitControl:Multiply", "Update_ms_Calc")
-    b.add_component("kitControl:OneShot", "UpdatePulse")
-    b.add_component("kitControl:And", "PulseGate")
+    b.add_multi_vibrator("UpdateTimer")
+    b.add_multiply("Update_ms_Calc")
+    b.add_one_shot("UpdatePulse")
+    b.add_and("PulseGate")
 
     # Trim vs Respond Logic
-    b.add_component("kitControl:GreaterThan", "IsRespondCondition")
-    b.add_component("kitControl:Subtract", "ExcessRequests")
+    b.add_greater_than("IsRespondCondition")
+    b.add_subtract("ExcessRequests")
 
-    b.add_component("kitControl:Multiply", "ProportionalResponse")
-    b.add_component(
-        "kitControl:Maximum", "CappedResponse"
+    b.add_multiply("ProportionalResponse")
+    b.add_maximum(
+        "CappedResponse"
     )  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 
     # tMaxState Counter Core
-    b.add_component("kitControl:NumericLatch", "tMaxState_Latch")
-    b.add_component("kitControl:Add", "New_tMaxState_Unclamped")
-    b.add_component("kitControl:Minimum", "tMaxState_Clamp_Hi")
-    b.add_component("kitControl:Maximum", "tMaxState_Clamp_Lo")
+    b.add_numeric_latch("tMaxState_Latch")
+    b.add_add("New_tMaxState_Unclamped")
+    b.add_minimum("tMaxState_Clamp_Hi")
+    b.add_maximum("tMaxState_Clamp_Lo")
     b.add_numeric_switch("ResetSwitch")
 
     # Latch Initialization Logic (like duct static version)
-    b.add_component("kitControl:OneShot", "InitializeLatchPulse")
+    b.add_one_shot("InitializeLatchPulse")
     b.add_numeric_switch("LatchInputSwitch")
 
     # Dynamic Minimum Clamp Logic (like duct static version)
@@ -120,15 +118,15 @@ def main():
 
     # dont define a properties={"": 0.5} for NumericDelay just
     # wire in a numeric writeable for that as shown below
-    b.add_component("kitControl:NumericDelay", "MinClampDelay")
-    b.add_component("kitControl:Multiply", "MinClampDelay_ms_Calc")
+    b.add_numeric_delay("MinClampDelay")
+    b.add_multiply("MinClampDelay_ms_Calc")
 
     # Reset Logic
-    b.add_component("kitControl:Not", "FanIsOff")
-    b.add_component("kitControl:Or", "ResetTrigger")
-    b.add_component("kitControl:OneShot", "ResetPulse")
+    b.add_not("FanIsOff")
+    b.add_or("ResetTrigger")
+    b.add_one_shot("ResetPulse")
 
-    b.add_component("kitControl:Reset", "SAT_Reset_By_OAT")
+    b.add_reset("SAT_Reset_By_OAT")
     b.end_sub_folder()
 
     # --- Wiring ---

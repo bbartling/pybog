@@ -49,47 +49,37 @@ def main():
     print("Creating and organizing logic components in sub-folders...")
 
     builder.start_sub_folder("PercentageCalculations")
-    builder.add_component("kitControl:Multiply", "Calc_50_percent")
-    builder.add_component("kitControl:Multiply", "Calc_70_percent")
-    builder.add_component(
-        "kitControl:NumericConst", "Const_0_5", properties={"out": 0.5}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_0_7", properties={"out": 0.7}
-    )
+    builder.add_multiply("Calc_50_percent")
+    builder.add_multiply("Calc_70_percent")
+    builder.add_numeric_const("Const_0_5", properties={"out": 0.5})
+    builder.add_numeric_const("Const_0_7", properties={"out": 0.7})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate3RequestsLogic")
-    builder.add_component("kitControl:LessThan", "LessThan_Flow_50pct")
-    builder.add_component("kitControl:GreaterThan", "GreaterThan_Damper_95")
-    builder.add_component("kitControl:And", "Generate3requests")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay1", properties={"onDelay": "60000"}
-    )
+    builder.add_less_than("LessThan_Flow_50pct")
+    builder.add_greater_than("GreaterThan_Damper_95")
+    builder.add_and("Generate3requests")
+    builder.add_boolean_delay("Timer_1min_Delay1", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_component("kitControl:NumericConst", "Const_3", properties={"out": 3.0})
+    builder.add_numeric_const("Const_3", properties={"out": 3.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate2RequestsLogic")
-    builder.add_component("kitControl:LessThan", "LessThan_Flow_70pct")
-    builder.add_component("kitControl:And", "Generate2requests")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay2", properties={"onDelay": "60000"}
-    )
+    builder.add_less_than("LessThan_Flow_70pct")
+    builder.add_and("Generate2requests")
+    builder.add_boolean_delay("Timer_1min_Delay2", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_component("kitControl:NumericConst", "Const_2", properties={"out": 2.0})
+    builder.add_numeric_const("Const_2", properties={"out": 2.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate1RequestLogic")
-    builder.add_component(
-        "kitControl:BooleanDelay", "Timer_1min_Delay", properties={"onDelay": "60000"}
-    )
+    builder.add_boolean_delay("Timer_1min_Delay", on_delay="60000")
     builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
+    builder.add_numeric_const("Const_1", properties={"out": 1.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Prioritization")
-    builder.add_component("kitControl:Maximum", "Maximum")
+    builder.add_maximum("Maximum")
     builder.end_sub_folder()
 
     print("Wiring components across all folders...")

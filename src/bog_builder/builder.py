@@ -228,37 +228,28 @@ class BogFolderBuilder:
         range_part = "{" + ",".join(f"{k}={v}" for k, v in mapping.items()) + "}"
         value_str = f"{ord_}@{range_part}"
 
-        self.add_component(
+        self._add_component(
             "kitControl:EnumConst",
             component_name,
             properties={"facets": facets_str, "value": value_str},
         )
 
     # ------------------------------------------------------------------
-    # Component creation
+    # Internal component creation
     # ------------------------------------------------------------------
-    def add_component(
+    def _add_component(
         self,
         comp_type: str,
         name: str,
         properties: dict | None = None,
         actions: dict | None = None,
     ) -> None:
-        """Registers a component in the current folder context with strict validation.
+        """Internal helper to register a component with validation.
 
-        This method validates the component definition using a Pydantic model.  It
-        enforces naming conventions (names cannot start with a number and must be
-        composed of letters, digits and underscores) and ensures the component
-        type follows the expected "palette:TypeName" format.  Time‑based
-        properties (e.g. 'onDelay', 'offDelay', 'period') are automatically
-        converted to millisecond strings if supplied in a human‑friendly format
-        ("1m" -> "60000").
-
-        Raises
-        ------
-        ValueError
-            If the component definition is invalid or if the name already exists in
-            the current builder state.
+        This method should not be called directly from user code.  It performs
+        validation on the component type and name, converts time‑based
+        properties into millisecond strings, and stores the component in the
+        builder's internal state.
         """
         properties = properties or {}
         actions = actions or {}
@@ -296,6 +287,14 @@ class BogFolderBuilder:
         }
         self._component_to_folder[comp_def.name] = self._current_folder_path
 
+    def add_component(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """Public API disabled. Use the typed wrapper methods instead."""
+        raise RuntimeError("add_component is internal; use the typed wrapper methods on BogFolderBuilder")
+
     def add_numeric_writable(
         self,
         name: str,
@@ -331,7 +330,7 @@ class BogFolderBuilder:
                 f"Original error: {e}"
             )
 
-        self.add_component(
+        self._add_component(
             "control:NumericWritable",
             name,
             properties={
@@ -343,7 +342,7 @@ class BogFolderBuilder:
 
     def add_boolean_writable(self, name: str, default_value: bool = False) -> None:
         """Add a BooleanWritable with a default value."""
-        self.add_component(
+        self._add_component(
             "control:BooleanWritable",
             name,
             properties={"fallback": {"value": str(default_value).lower()}},
@@ -367,7 +366,7 @@ class BogFolderBuilder:
             plain integer.  Defaults to ``"0"``.
         """
         dv = default_value if isinstance(default_value, str) else str(default_value)
-        self.add_component(
+        self._add_component(
             "control:EnumWritable",
             name,
             properties={
@@ -378,15 +377,15 @@ class BogFolderBuilder:
 
     def add_numeric_switch(self, name: str) -> None:
         """Add a kitControl NumericSwitch component."""
-        self.add_component("kitControl:NumericSwitch", name)
+        self._add_component("kitControl:NumericSwitch", name)
 
     def add_boolean_switch(self, name: str) -> None:
         """Add a kitControl BooleanSwitch component."""
-        self.add_component("kitControl:BooleanSwitch", name)
+        self._add_component("kitControl:BooleanSwitch", name)
 
     def add_numeric_select(self, name: str) -> None:
         """Adds a NumericSelect component with default 10 inputs (A‑J)."""
-        self.add_component(
+        self._add_component(
             "kitControl:NumericSelect", name, properties={"numberValues": "10"}
         )
 
@@ -402,7 +401,7 @@ class BogFolderBuilder:
             value is converted to a string and emitted as a ``b:RelTime`` in the
             XML output.
         """
-        self.add_component(
+        self._add_component(
             "kitControl:MultiVibrator", name, properties={"period": str(period_ms)}
         )
 
@@ -432,7 +431,134 @@ class BogFolderBuilder:
         props.setdefault("countIncrement", count_increment)
         if precision is not None:
             props["precision"] = int(precision)
-        self.add_component("kitControl:Counter", name, properties=props)
+        self._add_component("kitControl:Counter", name, properties=props)
+
+    # ------------------------------------------------------------------
+    # New typed wrapper methods
+    # ------------------------------------------------------------------
+    def add_add(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Add", name, properties=properties, actions=actions)
+
+    def add_subtract(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Subtract", name, properties=properties, actions=actions)
+
+    def add_multiply(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Multiply", name, properties=properties, actions=actions)
+
+    def add_divide(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Divide", name, properties=properties, actions=actions)
+
+    def add_average(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Average", name, properties=properties, actions=actions)
+
+    def add_minimum(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Minimum", name, properties=properties, actions=actions)
+
+    def add_maximum(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Maximum", name, properties=properties, actions=actions)
+
+    def add_sine_wave(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:SineWave", name, properties=properties, actions=actions)
+
+    def add_numeric_latch(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:NumericLatch", name, properties=properties, actions=actions)
+
+    def add_boolean_latch(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:BooleanLatch", name, properties=properties, actions=actions)
+
+    def add_numeric_delay(self, name: str, update_time: str | int | None = None, max_step_size: float | None = None, properties: dict | None = None) -> None:
+        props = dict(properties or {})
+        if update_time is not None:
+            props["updateTime"] = update_time
+        if max_step_size is not None:
+            props["maxStepSize"] = max_step_size
+        self._add_component("kitControl:NumericDelay", name, properties=props)
+
+    def add_boolean_delay(self, name: str, on_delay: str | int | None = None, off_delay: str | int | None = None, properties: dict | None = None) -> None:
+        props = dict(properties or {})
+        if on_delay is not None:
+            props["onDelay"] = on_delay
+        if off_delay is not None:
+            props["offDelay"] = off_delay
+        self._add_component("kitControl:BooleanDelay", name, properties=props)
+
+    def add_numeric_const(self, name: str, value: float | None = None, properties: dict | None = None) -> None:
+        props = dict(properties or {})
+        if value is not None:
+            props.setdefault("value", value)
+        self._add_component("kitControl:NumericConst", name, properties=props)
+
+    def add_boolean_const(self, name: str, value: bool | None = None, properties: dict | None = None) -> None:
+        props = dict(properties or {})
+        if value is not None:
+            props.setdefault("value", value)
+        self._add_component("kitControl:BooleanConst", name, properties=props)
+
+    def add_enum_const(self, name: str, facets: str | None = None, value: str | None = None, properties: dict | None = None) -> None:
+        props = dict(properties or {})
+        if facets is not None:
+            props.setdefault("facets", facets)
+        if value is not None:
+            props.setdefault("value", value)
+        self._add_component("kitControl:EnumConst", name, properties=props)
+
+    def add_tstat(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Tstat", name, properties=properties, actions=actions)
+
+    def add_reset(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Reset", name, properties=properties, actions=actions)
+
+    def add_one_shot(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:OneShot", name, properties=properties, actions=actions)
+
+    def add_lead_lag_cycles(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:LeadLagCycles", name, properties=properties, actions=actions)
+
+    def add_lead_lag_runtime(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:LeadLagRuntime", name, properties=properties, actions=actions)
+
+    def add_loop_point(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:LoopPoint", name, properties=properties, actions=actions)
+
+    def add_equal(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Equal", name, properties=properties, actions=actions)
+
+    def add_not_equal(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:NotEqual", name, properties=properties, actions=actions)
+
+    def add_greater_than(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:GreaterThan", name, properties=properties, actions=actions)
+
+    def add_greater_than_equal(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:GreaterThanEqual", name, properties=properties, actions=actions)
+
+    def add_less_than(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:LessThan", name, properties=properties, actions=actions)
+
+    def add_less_than_equal(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:LessThanEqual", name, properties=properties, actions=actions)
+
+    def add_and(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:And", name, properties=properties, actions=actions)
+
+    def add_or(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Or", name, properties=properties, actions=actions)
+
+    def add_xor(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Xor", name, properties=properties, actions=actions)
+
+    def add_not(self, name: str, properties: dict | None = None, actions: dict | None = None) -> None:
+        self._add_component("kitControl:Not", name, properties=properties, actions=actions)
+
+    # Schedule wrappers
+    def add_boolean_schedule(self, name: str, properties: dict) -> None:
+        self._add_component("sch:BooleanSchedule", name, properties=properties)
+
+    def add_numeric_schedule(self, name: str, properties: dict) -> None:
+        self._add_component("sch:NumericSchedule", name, properties=properties)
+
+    def add_enum_schedule(self, name: str, properties: dict) -> None:
+        self._add_component("sch:EnumSchedule", name, properties=properties)
 
     # ------------------------------------------------------------------
     # Linking
@@ -719,14 +845,14 @@ class BogFolderBuilder:
             for i in range(0, len(current_inputs), MAX_INPUTS):
                 chunk = current_inputs[i : i + MAX_INPUTS]
                 node_name = f"{red_def.block_type}_T{tier}_{i // MAX_INPUTS}"
-                self.add_component(f"kitControl:{red_def.block_type}", node_name)
+                self._add_component(f"kitControl:{red_def.block_type}", node_name)
                 for j, input_name in enumerate(chunk):
                     self.add_link(input_name, "out", node_name, f"in{chr(65 + j)}")
                 tier_outputs.append(node_name)
             current_inputs = tier_outputs
             tier += 1
         final_block = f"{red_def.block_type}_T{tier}_final"
-        self.add_component(f"kitControl:{red_def.block_type}", final_block)
+        self._add_component(f"kitControl:{red_def.block_type}", final_block)
         for j, input_name in enumerate(current_inputs):
             self.add_link(input_name, "out", final_block, f"in{chr(65 + j)}")
         self.end_sub_folder()

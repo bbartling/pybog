@@ -69,7 +69,8 @@ def main():
         "outputLowLimit": {"value": 180.0},
         "outputHighLimit": {"value": 140.0},
     }
-    b.add_component("kitControl:Reset", "HotWaterReset", properties=hw_props)
+    # Use dedicated wrapper for reset block
+    b.add_reset("HotWaterReset", properties=hw_props)
     b.end_sub_folder()
 
     # ---------------------------------------------------------------------
@@ -90,7 +91,7 @@ def main():
         "outputLowLimit": {"value": 70.0},  # at OAT_LOW
         "outputHighLimit": {"value": 55.0},  # at OAT_HIGH
     }
-    b.add_component("kitControl:Reset", "SAT_Reset", properties=sat_props)
+    b.add_reset("SAT_Reset", properties=sat_props)
     b.end_sub_folder()
 
     # ---------------------------------------------------------------------
@@ -111,7 +112,7 @@ def main():
         "outputLowLimit": {"value": 44.0},
         "outputHighLimit": {"value": 50.0},
     }
-    b.add_component("kitControl:Reset", "ChilledWaterReset", properties=chw_props)
+    b.add_reset("ChilledWaterReset", properties=chw_props)
     b.end_sub_folder()
 
     # ===========================

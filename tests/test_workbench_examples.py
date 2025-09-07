@@ -33,11 +33,11 @@ def test_workbench_bool_latch_play_ground(tmp_path: Path) -> None:
     builder.add_boolean_writable("CountDown", default_value=False)
     # Logic sub‑folder
     builder.start_sub_folder("LatchSandbox")
-    builder.add_component("kitControl:SineWave", "SineWave")
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEq")
-    builder.add_component("kitControl:Or", "Or_Block")
-    builder.add_component("kitControl:BooleanLatch", "BooleanLatch")
+    builder.add_sine_wave("SineWave")
+    builder.add_greater_than_equal("GreaterThanEq")
+    builder.add_less_than_equal("LessThanEq")
+    builder.add_or("Or_Block")
+    builder.add_boolean_latch("BooleanLatch")
     builder.end_sub_folder()
     # Wiring
     builder.add_link("SineWave", "out", "GreaterThanEq", "inA")
@@ -62,7 +62,7 @@ def _compare_pair(
     gt = f"GT_{node_id}"
     max_sw = f"MaxSwitch_{node_id}"
     min_sw = f"MinSwitch_{node_id}"
-    builder.add_component("kitControl:GreaterThan", gt)
+    builder.add_greater_than(gt)
     builder.add_numeric_switch(max_sw)
     builder.add_numeric_switch(min_sw)
     builder.add_link(a, "out", gt, "inA")
@@ -129,24 +129,24 @@ def test_workbench_manual_average_min_max(tmp_path: Path) -> None:
     builder.add_numeric_writable("Avg_Final")
     # Average subfolder
     builder.start_sub_folder("AverageLogic")
-    builder.add_component("kitControl:Average", "Avg1")
-    builder.add_component("kitControl:Average", "Avg2")
-    builder.add_component("kitControl:Average", "Avg3")
-    builder.add_component("kitControl:Average", "Avg4")
+    builder.add_average("Avg1")
+    builder.add_average("Avg2")
+    builder.add_average("Avg3")
+    builder.add_average("Avg4")
     builder.end_sub_folder()
     # Minimum subfolder
     builder.start_sub_folder("MinimumLogic")
-    builder.add_component("kitControl:Minimum", "Min1")
-    builder.add_component("kitControl:Minimum", "Min2")
-    builder.add_component("kitControl:Minimum", "Min3")
-    builder.add_component("kitControl:Minimum", "Min4")
+    builder.add_minimum("Min1")
+    builder.add_minimum("Min2")
+    builder.add_minimum("Min3")
+    builder.add_minimum("Min4")
     builder.end_sub_folder()
     # Maximum subfolder
     builder.start_sub_folder("MaximumLogic")
-    builder.add_component("kitControl:Maximum", "Max1")
-    builder.add_component("kitControl:Maximum", "Max2")
-    builder.add_component("kitControl:Maximum", "Max3")
-    builder.add_component("kitControl:Maximum", "Max4")
+    builder.add_maximum("Max1")
+    builder.add_maximum("Max2")
+    builder.add_maximum("Max3")
+    builder.add_maximum("Max4")
     builder.end_sub_folder()
     # Average wiring
     builder.add_link("Input1", "out", "Avg1", "inA")
@@ -217,19 +217,17 @@ def test_workbench_ping_pong_counter(tmp_path: Path) -> None:
 
     # ---- Logic subfolder ----
     b.start_sub_folder("Logic")
-    b.add_component(
-        "kitControl:MultiVibrator", "MultiVibrator", properties={"period": "2000"}
-    )
-    b.add_component("kitControl:OneShot", "FireOneShot")
-    b.add_component("kitControl:And", "And")
-    b.add_component("kitControl:Counter", "Counter")
-    b.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
-    b.add_component("kitControl:LessThanEqual", "LessThanEq")
-    b.add_component("kitControl:Or", "Or1")
-    b.add_component("kitControl:BooleanLatch", "BooleanLatch")
+    b.add_multi_vibrator("MultiVibrator", period_ms="2000")
+    b.add_one_shot("FireOneShot")
+    b.add_and("And")
+    b.add_counter("Counter")
+    b.add_greater_than_equal("GreaterThanEq")
+    b.add_less_than_equal("LessThanEq")
+    b.add_or("Or1")
+    b.add_boolean_latch("BooleanLatch")
     b.add_boolean_switch("CountDown")
     b.add_boolean_switch("CountUp")
-    b.add_component("kitControl:OneShot", "ResetOneShot")
+    b.add_one_shot("ResetOneShot")
 
     b.end_sub_folder()
 
@@ -273,25 +271,21 @@ def test_workbench_test_periodic_trigger(tmp_path: Path) -> None:
     builder.add_numeric_writable("Counter_Out", 0.0)
     # Interval
     builder.start_sub_folder("Interval")
-    builder.add_component(
-        "kitControl:BooleanDelay", "TickDelay", properties={"onDelay": "5000"}
-    )
-    builder.add_component("kitControl:OneShot", "TickPulse")
-    builder.add_component("kitControl:Not", "PulseNot")
-    builder.add_component("kitControl:And", "Enable_AND_Hold")
+    builder.add_boolean_delay("TickDelay", on_delay="5000")
+    builder.add_one_shot("TickPulse")
+    builder.add_not("PulseNot")
+    builder.add_and("Enable_AND_Hold")
     builder.end_sub_folder()
     # Compare
     builder.start_sub_folder("Compare")
-    builder.add_component("kitControl:GreaterThanEqual", "Reached_GE_Target")
-    builder.add_component("kitControl:Not", "NotReached")
-    builder.add_component("kitControl:And", "Enable_AND_NotReached")
+    builder.add_greater_than_equal("Reached_GE_Target")
+    builder.add_not("NotReached")
+    builder.add_and("Enable_AND_NotReached")
     builder.end_sub_folder()
     # Increment
     builder.start_sub_folder("Increment")
-    builder.add_component("kitControl:Add", "CounterPlusStep")
-    builder.add_component(
-        "kitControl:NumericDelay", "UnitDelay", properties={"delayMs": "10"}
-    )
+    builder.add_add("CounterPlusStep")
+    builder.add_numeric_delay("UnitDelay", update_time="10")
     builder.add_numeric_switch("PulseGate")
     builder.end_sub_folder()
     # Output stage

@@ -61,28 +61,28 @@ def main():
     builder.start_sub_folder("Logic")
 
     # --- Manual Maximum Calculation ---
-    builder.add_component("kitControl:Maximum", "Max1")
-    builder.add_component("kitControl:Maximum", "Max2")
-    builder.add_component("kitControl:Maximum", "Max3")
-    builder.add_component("kitControl:Maximum", "Max_Final")
+    builder.add_maximum("Max1")
+    builder.add_maximum("Max2")
+    builder.add_maximum("Max3")
+    builder.add_maximum("Max_Final")
 
     # --- Hysteresis (SR Latch) Logic ---
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Setpoint", properties={"value": 30.0}
+    builder.add_numeric_const(
+        "Enable_Setpoint", properties={"value": 30.0}
     )
-    builder.add_component(
-        "kitControl:NumericConst", "Disable_Setpoint", properties={"value": 15.0}
+    builder.add_numeric_const(
+        "Disable_Setpoint", properties={"value": 15.0}
     )
-    builder.add_component("kitControl:GreaterThan", "Set_Condition")
-    builder.add_component("kitControl:LessThan", "Reset_Condition_Raw")
-    builder.add_component("kitControl:Not", "Reset_Condition")
-    builder.add_component("kitControl:Or", "Latch_Set_Logic")
-    builder.add_component("kitControl:And", "Raw_Chiller_Request")
+    builder.add_greater_than("Set_Condition")
+    builder.add_less_than("Reset_Condition_Raw")
+    builder.add_not("Reset_Condition")
+    builder.add_or("Latch_Set_Logic")
+    builder.add_and("Raw_Chiller_Request")
 
     # --- Anti-Short-Cycle Delay ---
-    builder.add_component("kitControl:BooleanDelay", "Anti_Short_Cycle_Delay")
-    builder.add_component(
-        "kitControl:NumericConst", "Off_Delay_Constant", properties={"value": 1800000.0}
+    builder.add_boolean_delay("Anti_Short_Cycle_Delay")
+    builder.add_numeric_const(
+        "Off_Delay_Constant", properties={"value": 1800000.0}
     )  # 30 minutes
 
     builder.end_sub_folder()

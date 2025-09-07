@@ -20,7 +20,7 @@ def create_comparison_node(builder, input_a_name, input_b_name, node_id):
     max_switch_name = f"MaxSwitch_{node_id}"
     min_switch_name = f"MinSwitch_{node_id}"
 
-    builder.add_component("kitControl:GreaterThan", gt_name)
+    builder.add_greater_than(gt_name)
     builder.add_numeric_switch(max_switch_name)
     builder.add_numeric_switch(min_switch_name)
 

@@ -119,9 +119,7 @@ def build_enum_schedule_example(output_directory: str) -> str:
         "out": {"value": "1"},  # Current value is duty1
     }
 
-    builder.add_component(
-        "sch:EnumSchedule", "EnumSchedule", properties=enum_schedule_props
-    )
+    builder.add_enum_schedule("EnumSchedule", properties=enum_schedule_props)
     builder.add_enum_writable("EnumWritable", facets=facets_str, default_value="1")
     builder.add_link("EnumSchedule", "out", "EnumWritable", "in16")
 

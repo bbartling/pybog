@@ -74,9 +74,7 @@ def build_boolean_schedule_example(output_directory: str) -> str:
         if day["day"].get("time"):
             day["day"]["time"]["effectiveValue"] = {"value": True}
 
-    builder.add_component(
-        "sch:BooleanSchedule", "BooleanSchedule", properties=boolean_props
-    )
+    builder.add_boolean_schedule("BooleanSchedule", properties=boolean_props)
     builder.add_boolean_writable("BooleanWritable")
     builder.add_link("BooleanSchedule", "out", "BooleanWritable", "in16")
 

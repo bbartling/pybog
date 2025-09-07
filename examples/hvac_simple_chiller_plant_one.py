@@ -46,42 +46,36 @@ def main():
 
     # --- Tstat Refactoring Start ---
     # 1. Add Tstat component without complex properties.
-    builder.add_component("kitControl:Tstat", "Plant_Enable_Tstat")
+    builder.add_tstat("Plant_Enable_Tstat")
 
     # 2. Create explicit constants for Tstat configuration.
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Setpoint", properties={"value": 60.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Enable_Differential", properties={"value": 2.0}
-    )
+    builder.add_numeric_const("Enable_Setpoint", properties={"value": 60.0})
+    builder.add_numeric_const("Enable_Differential", properties={"value": 2.0})
     # action=False means direct-acting.
-    builder.add_component(
-        "kitControl:BooleanConst", "Enable_Action_Direct", properties={"value": False}
+    builder.add_boolean_const(
+        "Enable_Action_Direct", properties={"value": False}
     )
     # --- Tstat Refactoring End ---
 
     # LeadLagCycles block to rotate the two pumps.
     lead_lag_properties = {"numberOutputs": 2, "maxRuntime": "40h"}
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_Rotator", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_Rotator", properties=lead_lag_properties)
 
     # Counters to track the number of starts for each pump.
-    builder.add_component("kitControl:Counter", "Pump_A_Start_Counter")
-    builder.add_component("kitControl:Counter", "Pump_B_Start_Counter")
+    builder.add_counter("Pump_A_Start_Counter")
+    builder.add_counter("Pump_B_Start_Counter")
 
     # BooleanDelay blocks to delay the start command to each pump.
     delay_properties = {"onDelay": "30000"}
-    builder.add_component(
-        "kitControl:BooleanDelay", "Pump_A_Start_Delay", properties=delay_properties
+    builder.add_boolean_delay(
+        "Pump_A_Start_Delay", on_delay=delay_properties["onDelay"]
     )
-    builder.add_component(
-        "kitControl:BooleanDelay", "Pump_B_Start_Delay", properties=delay_properties
+    builder.add_boolean_delay(
+        "Pump_B_Start_Delay", on_delay=delay_properties["onDelay"]
     )
 
     # OR gate to combine pump status signals for feedback.
-    builder.add_component("kitControl:Or", "Pump_Feedback_Or")
+    builder.add_or("Pump_Feedback_Or")
 
     builder.end_sub_folder()
 

@@ -47,21 +47,21 @@ def main():
 
     builder.start_sub_folder("BooleanLogic")
 
-    builder.add_component("kitControl:And", "And_Block")
-    builder.add_component("kitControl:Or", "Or_Block")
-    builder.add_component("kitControl:Xor", "Xor_Block")
-    builder.add_component("kitControl:Not", "Not_Block")
+    builder.add_and("And_Block")
+    builder.add_or("Or_Block")
+    builder.add_xor("Xor_Block")
+    builder.add_not("Not_Block")
 
     builder.end_sub_folder()
 
     builder.start_sub_folder("ComparisonLogic")
 
-    builder.add_component("kitControl:Equal", "Equal_Block")
-    builder.add_component("kitControl:NotEqual", "NotEqual_Block")
-    builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual_Block")
-    builder.add_component("kitControl:LessThan", "LessThan_Block")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
+    builder.add_equal("Equal_Block")
+    builder.add_not_equal("NotEqual_Block")
+    builder.add_greater_than("GreaterThan_Block")
+    builder.add_greater_than_equal("GreaterThanEqual_Block")
+    builder.add_less_than("LessThan_Block")
+    builder.add_less_than_equal("LessThanEqual_Block")
 
     builder.end_sub_folder()
 

@@ -36,7 +36,7 @@ def test_enum_comparison_with_new_api(tmp_path: Path) -> None:
     builder.add_enum_const_by_name("EnumCons", enum_name="Mode", value_tag="Occupied")
 
     # 3. Add the rest of the logic
-    builder.add_component("kitControl:Equal", "Equal_Enum")
+    builder.add_equal("Equal_Enum")
     builder.add_boolean_writable("ComparisonResult")
 
     # 4. Wire the components

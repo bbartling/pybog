@@ -26,7 +26,7 @@ def create_max_pair(builder, input_a_name, input_b_name, pair_id):
     switch_name = f"Switch_{pair_id}"
 
     # Add the necessary logic blocks for the comparison
-    builder.add_component("kitControl:GreaterThan", gt_name)
+    builder.add_greater_than(gt_name)
     builder.add_numeric_switch(switch_name)
 
     # Wire the two inputs to the GreaterThan block

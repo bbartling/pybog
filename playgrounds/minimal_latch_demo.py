@@ -29,7 +29,7 @@ def main():
     builder = BogFolderBuilder("Minimal_Latch_Demo", debug=True)
     builder.add_boolean_writable("Input_Signal", default_value=False)
     builder.add_boolean_writable("Clock_Signal", default_value=False)
-    builder.add_component("kitControl:BooleanLatch", "My_Latch")
+    builder.add_boolean_latch("My_Latch")
     builder.add_boolean_writable("Latched_Output", default_value=False)
 
     builder.add_link("Input_Signal", "out", "My_Latch", "in")

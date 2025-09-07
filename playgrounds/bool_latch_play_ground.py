@@ -32,12 +32,12 @@ def main():
     builder.add_numeric_writable("TOP", default_value=90.0, precision=2)
     builder.add_numeric_writable("BOTTOM", default_value=10.0, precision=2)
     builder.add_boolean_writable("CountDown", default_value=False)  # display latch OUT
-    builder.add_component("kitControl:SineWave", "SineWave")
+    builder.add_sine_wave("SineWave")
 
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEq")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEq")
-    builder.add_component("kitControl:Or", "Or_Block")
-    builder.add_component("kitControl:BooleanLatch", "BooleanLatch")
+    builder.add_greater_than_equal("GreaterThanEq")
+    builder.add_less_than_equal("LessThanEq")
+    builder.add_or("Or_Block")
+    builder.add_boolean_latch("BooleanLatch")
 
     # -------- Wiring (match GOOD.xml exactly) --------
     # Sine wave to both comparators (inA)

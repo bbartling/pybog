@@ -55,39 +55,35 @@ def build_thermostat(builder: BogFolderBuilder) -> None:
     builder.start_sub_folder("ThermostatLogic")
 
     # Constants (1 and 2) for Mode comparisons
-    builder.add_component("kitControl:NumericConst", "Const1", properties={"value": 1})
-    builder.add_component("kitControl:NumericConst", "Const2", properties={"value": 2})
+    builder.add_numeric_const("Const1", properties={"value": 1})
+    builder.add_numeric_const("Const2", properties={"value": 2})
 
     # Mode == 1 (Heat): Mode ≥ 1 AND Mode ≤ 1
-    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_1")
-    builder.add_component("kitControl:LessThanEqual", "Mode_LE_1")
-    builder.add_component("kitControl:And", "IsHeatMode")
+    builder.add_greater_than_equal("Mode_GE_1")
+    builder.add_less_than_equal("Mode_LE_1")
+    builder.add_and("IsHeatMode")
 
     # Mode == 2 (Cool): Mode ≥ 2 AND Mode ≤ 2
-    builder.add_component("kitControl:GreaterThanEqual", "Mode_GE_2")
-    builder.add_component("kitControl:LessThanEqual", "Mode_LE_2")
-    builder.add_component("kitControl:And", "IsCoolMode")
+    builder.add_greater_than_equal("Mode_GE_2")
+    builder.add_less_than_equal("Mode_LE_2")
+    builder.add_and("IsCoolMode")
 
     # Sum blocks for hysteresis
-    builder.add_component("kitControl:Add", "SpacePlusHyst")
-    builder.add_component("kitControl:Add", "CoolSP_plus_Hyst")
+    builder.add_add("SpacePlusHyst")
+    builder.add_add("CoolSP_plus_Hyst")
 
     # Threshold compares
-    builder.add_component(
-        "kitControl:LessThanEqual", "IsBelowHeat"
-    )  # Space+Hyst <= HeatSP
-    builder.add_component(
-        "kitControl:GreaterThanEqual", "IsAboveCool"
-    )  # Space >= CoolSP+Hyst
+    builder.add_less_than_equal("IsBelowHeat")  # Space+Hyst <= HeatSP
+    builder.add_greater_than_equal("IsAboveCool")  # Space >= CoolSP+Hyst
 
     # Command gates
-    builder.add_component("kitControl:And", "HeatCmdGate")  # IsHeatMode AND IsBelowHeat
-    builder.add_component("kitControl:And", "CoolCmdGate")  # IsCoolMode AND IsAboveCool
+    builder.add_and("HeatCmdGate")  # IsHeatMode AND IsBelowHeat
+    builder.add_and("CoolCmdGate")  # IsCoolMode AND IsAboveCool
 
     # Fan logic: (HeatCmd OR CoolCmd) OR (NOT FanAuto)
-    builder.add_component("kitControl:Or", "HeatOrCool")
-    builder.add_component("kitControl:Not", "FanAutoNot")
-    builder.add_component("kitControl:Or", "FanCmdGate")
+    builder.add_or("HeatOrCool")
+    builder.add_not("FanAutoNot")
+    builder.add_or("FanCmdGate")
 
     # ---- Wiring: Mode == 1 (Heat) ----
     builder.add_link("Mode", "out", "Mode_GE_1", "inA")

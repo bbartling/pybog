@@ -72,16 +72,14 @@ def main():
         "feedbackDelay": "10s",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagCycles", "Pump_LeadLag", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_cycles("Pump_LeadLag", properties=lead_lag_properties)
 
     # The Counter for each pump is also part of the internal logic.
     for pump in pump_names:
         builder.add_counter(f"Pump_{pump}_Counter")
 
     # The Feedback logic is internal to the calculation as well.
-    builder.add_component("kitControl:Or", "Feedback_Or")
+    builder.add_or("Feedback_Or")
 
     builder.end_sub_folder()
     print("--- Exited 'Logic' sub-folder ---")

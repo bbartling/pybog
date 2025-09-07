@@ -25,22 +25,20 @@ def main():
     b = BogFolderBuilder("BooleanLogicNumericSwitch", debug=True)
 
     # Inputs/Output
-    b.add_component("kitControl:NumericConst", "Input_A", properties={"value": 100.05})
-    b.add_component("kitControl:NumericConst", "Input_B", properties={"value": 42.2})
+    b.add_numeric_const("Input_A", properties={"value": 100.05})
+    b.add_numeric_const("Input_B", properties={"value": 42.2})
 
     b.add_boolean_writable("BooleanWritable", default_value=False)
     b.add_numeric_writable("Output")
 
     # Logic subfolder
     b.start_sub_folder("CalculationLogic")
-    b.add_component("kitControl:Add", "Add")
-    b.add_component("kitControl:Subtract", "Subtract")
+    b.add_add("Add")
+    b.add_subtract("Subtract")
     b.add_numeric_switch("NumericSwitch")
     b.add_boolean_switch("ModeSwitch")  # <-- your new helper
-    b.add_component("kitControl:BooleanConst", "ConstTrue", properties={"value": True})
-    b.add_component(
-        "kitControl:BooleanConst", "ConstFalse", properties={"value": False}
-    )
+    b.add_boolean_const("ConstTrue", properties={"value": True})
+    b.add_boolean_const("ConstFalse", properties={"value": False})
     b.end_sub_folder()
 
     # Wire math

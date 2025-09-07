@@ -1,9 +1,10 @@
 hvac_demand_based_chiller_enable.py	.
 hvac_g36_ahu_duct_static_reset.py	.
 hvac_g36_ahu_supply_temp_reset.py	.
-hvac_gl36_box_pressure_request_logic.py	.
 hvac_gl36_vav_box_cooling_request_logic.py	.
-hvac_simple_chiller_plant.py	.
+hvac_gl36_vav_box_pressure_request_logic.py	.
+hvac_simple_chiller_plant_one.py	.
+hvac_simple_chiller_plant_two.py	.
 hvac_two_pump_rotator.py	.
 lead_lag_cycles_block_playground.py	.
 lead_lag_runtime_block_playground.py	.

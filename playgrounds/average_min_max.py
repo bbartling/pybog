@@ -46,26 +46,26 @@ def main():
 
     # --- Average Calculation Sub-Folder ---
     builder.start_sub_folder("AverageLogic")
-    builder.add_component(comp_type="kitControl:Average", name="Avg1")
-    builder.add_component(comp_type="kitControl:Average", name="Avg2")
-    builder.add_component(comp_type="kitControl:Average", name="Avg3")
-    builder.add_component(comp_type="kitControl:Average", name="Avg4")
+    builder.add_average("Avg1")
+    builder.add_average("Avg2")
+    builder.add_average("Avg3")
+    builder.add_average("Avg4")
     builder.end_sub_folder()
 
     # --- Minimum Calculation Sub-Folder ---
     builder.start_sub_folder("MinimumLogic")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min1")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min2")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min3")
-    builder.add_component(comp_type="kitControl:Minimum", name="Min4")
+    builder.add_minimum("Min1")
+    builder.add_minimum("Min2")
+    builder.add_minimum("Min3")
+    builder.add_minimum("Min4")
     builder.end_sub_folder()
 
     # --- Maximum Calculation Sub-Folder ---
     builder.start_sub_folder("MaximumLogic")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max1")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max2")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max3")
-    builder.add_component(comp_type="kitControl:Maximum", name="Max4")
+    builder.add_maximum("Max1")
+    builder.add_maximum("Max2")
+    builder.add_maximum("Max3")
+    builder.add_maximum("Max4")
     builder.end_sub_folder()
 
     builder.add_link("Input1", "out", "Avg1", "inA")

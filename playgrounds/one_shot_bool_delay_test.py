@@ -30,12 +30,8 @@ def main():
 
     # --- Subfolder ---
     builder.start_sub_folder("PulseDelay")
-    builder.add_component("kitControl:OneShot", "OneShot1")
-    builder.add_component(
-        "kitControl:BooleanDelay",
-        "BooleanDelay",
-        properties={"onDelay": "2000", "offDelay": "0"},  # 2-second hold time
-    )
+    builder.add_one_shot("OneShot1")
+    builder.add_boolean_delay("BooleanDelay", on_delay="2000", off_delay="0")
     builder.end_sub_folder()
 
     # --- Wiring ---

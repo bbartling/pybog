@@ -43,7 +43,7 @@ def main():
 
     # --- Delay block ---
     # No fixed properties, inputs will be wired.
-    builder.add_component("kitControl:BooleanDelay", "BoolDelay")
+    builder.add_boolean_delay("BoolDelay")
 
     # --- Wiring ---
     builder.add_link("Bool_Input", "out", "BoolDelay", "in")

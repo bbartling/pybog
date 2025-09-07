@@ -19,9 +19,10 @@ def test_addition_complicated(tmp_path: Path) -> None:
     # Output
     builder.add_numeric_writable("Total")
     builder.start_sub_folder("AdditionLogic")
-    builder.add_component("kitControl:Add", "Add1")
-    builder.add_component("kitControl:Add", "Add2")
-    builder.add_component("kitControl:Add", "Add3")
+    # Use the dedicated helper methods instead of the generic add_component
+    builder.add_add("Add1")
+    builder.add_add("Add2")
+    builder.add_add("Add3")
     builder.end_sub_folder()
     # Wiring
     builder.add_link("Input1", "out", "Add1", "inA")
@@ -52,17 +53,18 @@ def test_average_min_max(tmp_path: Path) -> None:
     # Average Logic
     builder.start_sub_folder("AverageLogic")
     for j in range(1, 5):
-        builder.add_component("kitControl:Average", f"Avg{j}")
+        # Average blocks should be created via the helper
+        builder.add_average(f"Avg{j}")
     builder.end_sub_folder()
     # Minimum Logic
     builder.start_sub_folder("MinimumLogic")
     for j in range(1, 5):
-        builder.add_component("kitControl:Minimum", f"Min{j}")
+        builder.add_minimum(f"Min{j}")
     builder.end_sub_folder()
     # Maximum Logic
     builder.start_sub_folder("MaximumLogic")
     for j in range(1, 5):
-        builder.add_component("kitControl:Maximum", f"Max{j}")
+        builder.add_maximum(f"Max{j}")
     builder.end_sub_folder()
     # Wiring for Average
     links = [
@@ -153,18 +155,18 @@ def test_bool_logic_playground(tmp_path: Path) -> None:
         builder.add_boolean_writable(o)
     # Subfolders
     builder.start_sub_folder("BooleanLogic")
-    builder.add_component("kitControl:And", "And_Block")
-    builder.add_component("kitControl:Or", "Or_Block")
-    builder.add_component("kitControl:Xor", "Xor_Block")
-    builder.add_component("kitControl:Not", "Not_Block")
+    builder.add_and("And_Block")
+    builder.add_or("Or_Block")
+    builder.add_xor("Xor_Block")
+    builder.add_not("Not_Block")
     builder.end_sub_folder()
     builder.start_sub_folder("ComparisonLogic")
-    builder.add_component("kitControl:Equal", "Equal_Block")
-    builder.add_component("kitControl:NotEqual", "NotEqual_Block")
-    builder.add_component("kitControl:GreaterThan", "GreaterThan_Block")
-    builder.add_component("kitControl:GreaterThanEqual", "GreaterThanEqual_Block")
-    builder.add_component("kitControl:LessThan", "LessThan_Block")
-    builder.add_component("kitControl:LessThanEqual", "LessThanEqual_Block")
+    builder.add_equal("Equal_Block")
+    builder.add_not_equal("NotEqual_Block")
+    builder.add_greater_than("GreaterThan_Block")
+    builder.add_greater_than_equal("GreaterThanEqual_Block")
+    builder.add_less_than("LessThan_Block")
+    builder.add_less_than_equal("LessThanEqual_Block")
     builder.end_sub_folder()
     # Wiring Boolean logic
     builder.add_link("Bool_A", "out", "And_Block", "inA")
@@ -209,9 +211,9 @@ def test_boolean_numeric_switch(tmp_path: Path) -> None:
     builder.add_boolean_writable("BooleanWritable", default_value=False)
     builder.add_numeric_writable("Output")
     builder.start_sub_folder("CalculationLogic")
-    builder.add_component("kitControl:Add", "Add")
-    builder.add_component("kitControl:Subtract", "Subtract")
-    builder.add_component("kitControl:Equal", "Equal")
+    builder.add_add("Add")
+    builder.add_subtract("Subtract")
+    builder.add_equal("Equal")
     builder.add_numeric_switch("NumericSwitch")
     builder.add_numeric_writable("Const_True", default_value=1.0)
     builder.end_sub_folder()
@@ -248,7 +250,7 @@ def test_find_max_value(tmp_path: Path) -> None:
             pair_id = f"T{tier_num}_P{i}"
             gt_name = f"GT_{pair_id}"
             switch_name = f"Switch_{pair_id}"
-            builder.add_component("kitControl:GreaterThan", gt_name)
+            builder.add_greater_than(gt_name)
             builder.add_numeric_switch(switch_name)
             builder.add_link(input_a, "out", gt_name, "inA")
             builder.add_link(input_b, "out", gt_name, "inB")
@@ -273,7 +275,7 @@ def test_minimal_latch_demo(tmp_path: Path) -> None:
     builder = BogFolderBuilder("Minimal_Latch_Demo", debug=False)
     builder.add_boolean_writable("Input_Signal", default_value=False)
     builder.add_boolean_writable("Clock_Signal", default_value=False)
-    builder.add_component("kitControl:BooleanLatch", "My_Latch")
+    builder.add_boolean_latch("My_Latch")
     builder.add_boolean_writable("Latched_Output", default_value=False)
     builder.add_link("Input_Signal", "out", "My_Latch", "in")
     builder.add_link("Clock_Signal", "out", "My_Latch", "clock")
@@ -316,7 +318,7 @@ def test_numeric_switch_test(tmp_path: Path) -> None:
     builder.add_boolean_writable("Switch_Control", default_value=True)
     builder.add_numeric_writable("Final_Output")
     builder.start_sub_folder("CalculationLogic")
-    builder.add_component("kitControl:NumericConst", "Const_1", properties={"out": 1.0})
+    builder.add_numeric_const("Const_1", properties={"out": 1.0})
     builder.add_numeric_switch("Test_NumericSwitch")
     builder.end_sub_folder()
     builder.add_link("Switch_Control", "out", "Test_NumericSwitch", "inSwitch")
@@ -332,9 +334,9 @@ def test_one_shot_bool_delay_test(tmp_path: Path) -> None:
     builder.add_boolean_writable("Trigger", default_value=False)
     builder.add_boolean_writable("Output", default_value=False)
     builder.start_sub_folder("PulseDelay")
-    builder.add_component("kitControl:OneShot", "OneShot1")
-    builder.add_component(
-        "kitControl:BooleanDelay",
+    builder.add_one_shot("OneShot1")
+    # BooleanDelay uses the dedicated helper; passing the delay values via properties preserves behaviour
+    builder.add_boolean_delay(
         "BooleanDelay",
         properties={"onDelay": "2000", "offDelay": "0"},
     )

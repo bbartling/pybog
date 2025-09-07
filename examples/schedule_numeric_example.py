@@ -99,7 +99,8 @@ def build_numeric_schedule(output_directory: str) -> str:
         "out": {"value": 1.0},
     }
 
-    builder.add_component("sch:NumericSchedule", "NumericSchedule", properties=props)
+    # Create the numeric schedule using the dedicated helper
+    builder.add_numeric_schedule("NumericSchedule", properties=props)
     builder.add_numeric_writable("NumericWritable")
     builder.add_link("NumericSchedule", "out", "NumericWritable", "in16")
 

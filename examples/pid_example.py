@@ -45,7 +45,8 @@ def build_pid_loop(output_directory: str) -> str:
         "proportionalConstant": {"value": 5.0},
         "integralConstant": {"value": 0.05},
     }
-    builder.add_component("kitControl:LoopPoint", "LoopPoint", properties=lp_props)
+    # Use the dedicated wrapper for the LoopPoint component
+    builder.add_loop_point("LoopPoint", properties=lp_props)
 
     # Define an output writable for the PID result
     builder.add_numeric_writable("Output")

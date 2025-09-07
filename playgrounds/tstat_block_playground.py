@@ -56,25 +56,15 @@ def main():
     builder.add_numeric_writable("HeatEnableSp", default_value=50.0, precision=1)
 
     # --- Configuration (Fixed constants) ---
-    builder.add_component(
-        "kitControl:NumericConst", "Differential", properties={"value": 2.0}
-    )
+    builder.add_numeric_const("Differential", value=2.0)
     # Action=True corresponds to 'Reverse' for heating logic
-    builder.add_component(
-        "kitControl:BooleanConst", "Action_Reverse", properties={"value": True}
-    )
-    builder.add_component(
-        "kitControl:BooleanConst",
-        "NullOnInControl_Setting",
-        properties={"value": False},
-    )
+    builder.add_boolean_const("Action_Reverse", value=True)
+    builder.add_boolean_const("NullOnInControl_Setting", value=False)
     # NEW: Add component to test nullOnInactive slot
-    builder.add_component(
-        "kitControl:BooleanConst", "NullOnInactive_Setting", properties={"value": False}
-    )
+    builder.add_boolean_const("NullOnInactive_Setting", value=False)
 
     # --- Core Logic Block ---
-    builder.add_component("kitControl:Tstat", "Tstat")
+    builder.add_tstat("Tstat")
 
     # --- Output ---
     builder.add_boolean_writable("HeatCommand")

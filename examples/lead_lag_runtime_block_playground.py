@@ -72,9 +72,7 @@ def main():
         builder.add_boolean_writable(f"Chiller_{chiller}_Cmd")
         builder.add_numeric_writable(f"Chiller_{chiller}_Runtime")
 
-    builder.add_component(
-        "kitControl:NumericConst", "Rotate_Seconds", properties={"value": 30.0}
-    )
+    builder.add_numeric_const("Rotate_Seconds", properties={"value": 30.0})
 
     # --- Logic Components (organized inside a sub-folder) ---
     print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
@@ -86,27 +84,19 @@ def main():
         "feedbackDelay": "10s",
         "clearAlarmTime": "1m",
     }
-    builder.add_component(
-        "kitControl:LeadLagRuntime", "Chiller_LeadLag", properties=lead_lag_properties
-    )
+    builder.add_lead_lag_runtime("Chiller_LeadLag", properties=lead_lag_properties)
 
-    builder.add_component("kitControl:Or", "Feedback_Or")
-    builder.add_component(
-        "kitControl:MultiVibrator", "OneSecondTimer", properties={"period": "5s"}
-    )
-    builder.add_component("kitControl:OneShot", "TimerPulse")
-    builder.add_component(
-        "kitControl:NumericConst", "Count_Increment_Value", properties={"value": 5.0}
-    )
-    builder.add_component(
-        "kitControl:NumericConst", "Const_1000_ms", properties={"value": 1000.0}
-    )
-    builder.add_component("kitControl:Multiply", "Calc_MaxRuntime_ms")
+    builder.add_or("Feedback_Or")
+    builder.add_multi_vibrator("OneSecondTimer", period_ms="5s")
+    builder.add_one_shot("TimerPulse")
+    builder.add_numeric_const("Count_Increment_Value", properties={"value": 5.0})
+    builder.add_numeric_const("Const_1000_ms", properties={"value": 1000.0})
+    builder.add_multiply("Calc_MaxRuntime_ms")
 
     # --- Runtime Accumulation and Latching Logic ---
     for chiller in chiller_names:
         builder.add_counter(f"Chiller_{chiller}_RuntimeCounter")
-        builder.add_component("kitControl:And", f"Chiller_{chiller}_IncrementGate")
+        builder.add_and(f"Chiller_{chiller}_IncrementGate")
 
     builder.end_sub_folder()
 

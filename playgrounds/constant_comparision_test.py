@@ -28,10 +28,8 @@ def main():
 
     # -------- Boolean (No Change) --------
     b.add_boolean_writable("BooleanWrit", default_value=True)
-    b.add_component(
-        "kitControl:BooleanConst", "BooleanCons", properties={"value": True}
-    )
-    b.add_component("kitControl:Equal", "Equal_Bool")
+    b.add_boolean_const("BooleanCons", value=True)
+    b.add_equal("Equal_Bool")
     b.add_boolean_writable("BoolTrue")
     b.add_link("BooleanWrit", "out", "Equal_Bool", "inA")
     b.add_link("BooleanCons", "out", "Equal_Bool", "inB")
@@ -39,8 +37,8 @@ def main():
 
     # -------- Numeric (No Change) --------
     b.add_numeric_writable("NumericWrit", default_value=1.0)
-    b.add_component("kitControl:NumericConst", "NumericCons", properties={"value": 1.0})
-    b.add_component("kitControl:Equal", "Equal_Num")
+    b.add_numeric_const("NumericCons", value=1.0)
+    b.add_equal("Equal_Num")
     b.add_boolean_writable("NumericTrue")
     b.add_link("NumericWrit", "out", "Equal_Num", "inA")
     b.add_link("NumericCons", "out", "Equal_Num", "inB")
@@ -59,7 +57,7 @@ def main():
     b.add_enum_const_by_name("EnumCons", enum_name="Mode", value_tag="Startup")
 
     # The rest of the logic is unchanged
-    b.add_component("kitControl:Equal", "Equal_Enum")
+    b.add_equal("Equal_Enum")
     b.add_boolean_writable("EnumTrue")
 
     b.add_link("EnumWrit", "out", "Equal_Enum", "inA")

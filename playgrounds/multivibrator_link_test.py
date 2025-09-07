@@ -50,21 +50,15 @@ def main():
     builder.add_boolean_writable("PulseOutput")
 
     # A constant for converting seconds to milliseconds.
-    builder.add_component(
-        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
-    )
+    builder.add_numeric_const("Const_1000", properties={"value": 1000.0})
 
     # The block that performs the ms calculation.
-    builder.add_component("kitControl:Multiply", "Update_ms_Calc")
+    builder.add_multiply("Update_ms_Calc")
 
     # Update Timer
     default_period_ms = "1000"
 
-    builder.add_component(
-        "kitControl:MultiVibrator",
-        "TestMultiVibrator",
-        properties={"period": default_period_ms},
-    )
+    builder.add_multi_vibrator("TestMultiVibrator", period_ms=default_period_ms)
     print("\n--- Wiring Components ---")
 
     # Wire the seconds-to-milliseconds calculation

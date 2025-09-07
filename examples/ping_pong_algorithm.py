@@ -52,41 +52,34 @@ def main():
     # Calculate default onDelay from StartupDelaySeconds input (default 5 seconds)
     default_startup_delay_ms = str(int(5.0 * 1000))
 
-    b.add_component(
-        "kitControl:BooleanDelay",
-        "StartupDelay",
-        properties={"onDelay": default_startup_delay_ms, "offDelay": "0"},
+    # BooleanDelay with explicit on/off delays
+    b.add_boolean_delay(
+        "StartupDelay", on_delay=default_startup_delay_ms, off_delay="0"
     )
-    b.add_component("kitControl:And", "RunLogicEnable")
-    b.add_component(
-        "kitControl:NumericConst", "Const_1000", properties={"value": 1000.0}
-    )
-    b.add_component("kitControl:Multiply", "Delay_ms_Calc")
+    b.add_and("RunLogicEnable")
+    b.add_numeric_const("Const_1000", value=1000.0)
+    b.add_multiply("Delay_ms_Calc")
 
     # Update Timer
     default_period_ms = "1000"
 
-    b.add_component(
-        "kitControl:MultiVibrator",
-        "UpdateTimer",
-        properties={"period": default_period_ms},
-    )
-    b.add_component("kitControl:Multiply", "Update_ms_Calc")
-    b.add_component("kitControl:OneShot", "UpdatePulse")
-    b.add_component("kitControl:And", "PulseGate")
+    b.add_multi_vibrator("UpdateTimer", period_ms=default_period_ms)
+    b.add_multiply("Update_ms_Calc")
+    b.add_one_shot("UpdatePulse")
+    b.add_and("PulseGate")
 
     # Custom Counter Core
-    b.add_component("kitControl:NumericLatch", "ValueLatch")
-    b.add_component("kitControl:Add", "AddStep")
-    b.add_component("kitControl:Subtract", "SubtractStep")
+    b.add_numeric_latch("ValueLatch")
+    b.add_add("AddStep")
+    b.add_subtract("SubtractStep")
     b.add_numeric_switch("DirectionSwitch")
     b.add_numeric_switch("FinalOutputSwitch")
 
     # Direction Control Logic
-    b.add_component("kitControl:GreaterThanEqual", "HitUpperLimit")
-    b.add_component("kitControl:LessThanEqual", "HitLowerLimit")
-    b.add_component("kitControl:Or", "HitAnyLimit")
-    b.add_component("kitControl:BooleanLatch", "DirectionLatch")
+    b.add_greater_than_equal("HitUpperLimit")
+    b.add_less_than_equal("HitLowerLimit")
+    b.add_or("HitAnyLimit")
+    b.add_boolean_latch("DirectionLatch")
 
     b.end_sub_folder()
 
