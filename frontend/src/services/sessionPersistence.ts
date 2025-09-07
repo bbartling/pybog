@@ -326,18 +326,50 @@ class SessionPersistenceService {
     } catch (e) {}
   }
 
+
   /**
    * Restore all sessions from localStorage and database
    */
   async restoreAllSessions(): Promise<Map<string, PersistedSession>> {
     const sessions = new Map<string, PersistedSession>();
+    const processedIds = new Set<string>();
 
     // First load from localStorage
     const localIds = this.getLocalSessionIds();
     for (const id of localIds) {
-      const session = await this.loadSession(id);
-      if (session) {
-        sessions.set(id, session);
+      if (processedIds.has(id)) continue;
+      processedIds.add(id);
+      
+      try {
+        // Try to load from localStorage first
+        const localKey = `${this.SESSION_KEY_PREFIX}${id}`;
+        const localData = localStorage.getItem(localKey);
+        
+        if (localData) {
+          try {
+            const parsed = JSON.parse(localData);
+            const session: PersistedSession = {
+              ...parsed,
+              createdAt: new Date(parsed.createdAt),
+              messages: parsed.messages || [],
+            };
+            sessions.set(id, session);
+            console.log('[SessionPersistence] Loaded session from localStorage:', id);
+          } catch (e) {
+            // If localStorage data is corrupted, try database
+            console.warn('[SessionPersistence] Corrupted localStorage data for:', id);
+            const dbSession = await this.loadSession(id);
+            if (dbSession) {
+              sessions.set(id, dbSession);
+            } else {
+              // Remove orphaned session from localStorage
+              console.log('[SessionPersistence] Removing orphaned session:', id);
+              this.clearLocalSession(id);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[SessionPersistence] Error loading session:', id, error);
       }
     }
 
@@ -351,10 +383,15 @@ class SessionPersistenceService {
             console.warn('[SessionPersistence] Skipping invalid recent session id:', sid);
             continue;
           }
-          if (!sessions.has(sid)) {
-            const fullSession = await this.loadSession(sid);
-            if (fullSession) {
-              sessions.set(sid, fullSession);
+          if (!processedIds.has(sid) && !sessions.has(sid)) {
+            processedIds.add(sid);
+            try {
+              const fullSession = await this.loadSession(sid);
+              if (fullSession) {
+                sessions.set(sid, fullSession);
+              }
+            } catch (e) {
+              console.warn('[SessionPersistence] Failed to load session from DB:', sid, e);
             }
           }
         }

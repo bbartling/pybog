@@ -262,7 +262,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const stopAutoSave = sessionPersistence.startAutoSave(
       () => {
-        if (!activeSessionId || !activeSession) return null;
+        if (!activeSessionId || !activeSession || !activeSession.id) return null;
         return {
           id: activeSession.id,
           name: activeSession.name,
@@ -284,7 +284,7 @@ const App: React.FC = () => {
 
   // Save session when switching or when messages change
   useEffect(() => {
-    if (!activeSessionId || !activeSession) return;
+    if (!activeSessionId || !activeSession || !activeSession.id) return;
     
     const saveTimeout = setTimeout(async () => {
       await sessionPersistence.saveSession({

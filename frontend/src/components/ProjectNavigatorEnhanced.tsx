@@ -133,7 +133,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
       .map((m: any) => {
         const meta = m.metadata;
         // Extract clean filename from various possible fields
-        let fileName = meta.fileName || meta.filename || meta.file_id || 'Uploaded File';
+        let fileName = meta.fileName || meta.originalName || meta.filename || meta.file_id || 'Uploaded File';
         // Remove any path prefixes if present
         if (fileName.includes('/')) {
           fileName = fileName.split('/').pop() || fileName;
@@ -471,7 +471,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                         {/* Show stored files first (with preview URLs) */}
                         {storedFiles.map((file) => (
                           <div
-                            key={file.id}
+                            key={`stored-${file.id}`}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -492,6 +492,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                               e.currentTarget.style.borderColor = '#E5E7EB';
                               e.currentTarget.style.background = '#FFFFFF';
                             }}
+                            onClick={() => { if (file.previewUrl) window.open(file.previewUrl, '_blank'); }}
                           >
                             <FileText size={12} style={{ color: '#569BFF', marginRight: '6px' }} />
                             <span style={{ flex: 1, fontWeight: 500 }}>{file.name}</span>
@@ -511,7 +512,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                         {/* Show uploaded files (without preview URLs yet) */}
                         {uploadedFiles.map((file) => (
                           <div
-                            key={file.id}
+                            key={`uploaded-${file.id}`}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
