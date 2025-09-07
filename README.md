@@ -8,8 +8,7 @@
 
 📦 PyPI project page: [https://pypi.org/project/pybog/](https://pypi.org/project/pybog/)
 
-This project has been tested on **WSL (Windows Subsystem for Linux)** using a clean Python **3.12.x** environment.  
-A standard virtual environment (`venv`) with `pip` works out of the box.
+This project has been tested on **WSL (Windows Subsystem for Linux)** using a Python **3.12.x** environment with a standard virtual environment (`venv`) and `pip`.
 
 <details><summary><strong>Installation Details</strong></summary>
 
@@ -43,7 +42,7 @@ To uninstall bog_builer if developing:
 Make sure tests pass:
 > pytest
 
-Make Git PR and if it is a mega make over beyond submitting [examples](https://github.com/bbartling/pybog/tree/develop/examples) Python files give me a heads up prior please.
+PRs welcome for [examples](https://github.com/bbartling/pybog/tree/develop/examples) and beyond. If mega overhauls are in a PR please give me a heads up prior.
 
 </details>
 
