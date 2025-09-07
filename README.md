@@ -2,222 +2,90 @@
 
 `bog_builder` is a Python package for constructing Niagara Baja Object Graphs `.bog` files programmatically. The goal is for AI to assist human controls engineers in rapidly prototyping complex HVAC sequencing within wire sheet logic. If the software engineering community can prototype quickly, why shouldn’t the controls engineering community be able to do the same?
 
----
+![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
 
-<details><summary><strong>Python Project Setup</strong></summary>
 
-I use **WSL (Windows Subsystem for Linux)** but it make work just fine on ordinary Windows or Mac. Generating `bogs` can be done easily without setting up Python environments as shown further below via "ChatGPT Agent" mode and **The Bog Maker 4000** website. Both examples are demo'd on YouTube.
+## Python Project Setup
+I use **WSL (Windows Subsystem for Linux)** but it make work just fine on ordinary Windows or Mac. Generating `bogs` can be done easily without setting up Python enivornments as shown further below via "ChatGPT Agent" mode and `The Bog Maker 4000` website. Both examples are demo'd on YouTube.
+>
+> ```bash
+> pip install pybog
+> ```
+>
 
-```bash
-pip install pybog
-# or keep up to date
-pip install pybog --upgrade
-```
+The project may get frequent updates so try:
+>
+> ```bash
+> pip install pybog --upgrade
+> ```
+>
 
 ### Contribute to `pybog` via developing a local Python package
-```bash
-pip install .
-```
+>
+> ```bash
+> pip install .
+> ```
+>
 
-To uninstall `bog_builder` if developing:
-```bash
-pip uninstall bog_builder
-```
+To uninstall bog_builer if developing:
+> ```bash
+> pip uninstall bog_builder
+> ```
+>
 
-### Run tests
-```bash
-pytest
-```
-Make a Git PR — and if it is a mega‑makeover beyond submitting [examples](https://github.com/bbartling/pybog/tree/develop/examples) Python files, please give me a heads‑up first.
-</details>
+Make sure tests pass:
+> pytest
 
----
+Make Git PR and if it is a mega make over beyond submitting [examples](https://github.com/bbartling/pybog/tree/develop/examples) Python files give me a heads up prior please.
 
-<details><summary><strong>KitControl API Usage Examples</strong></summary>
+## Running Example Scripts with WSL
 
-The following examples illustrate how to instantiate and wire commonly used **kitControl** components using the `BogFolderBuilder` API. Each block lists its Niagara type, the corresponding builder method, input and output slot names, and a minimal code snippet showing how to create and link the component.
+Each example script can be executed directly in WSL to generate a `.bog` file and drop it straight into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
 
-#### Add (Math)
-- **Niagara Type:** `kitControl:Add`  
-- **Builder Method:** `add_add(name: str)`  
-- **Inputs:** `inA`, `inB`, `inC`, `inD`  
-- **Output:** `out`  
 
-```python
-# Create two numeric writables and an Add block, then link them.
-builder.add_numeric_writable("Input1", 50.0)
-builder.add_numeric_writable("Input2", 30.0)
-builder.add_add("Total")
-builder.add_link("Input1", "out", "Total", "inA")
-builder.add_link("Input2", "out", "Total", "inB")
-builder.add_link("Total", "out", "SomeOutputWritable", "in16")
-```
+1. **Run a specific example from project root directory**
+   Pass the Niagara Workbench path as the output directory (`-o` argument):
 
-#### NumericSwitch (Util)
-- **Niagara Type:** `kitControl:NumericSwitch`  
-- **Builder Method:** `add_numeric_switch(name: str)`  
-- **Inputs:** `inSwitch` (control), `inTrue` (value when true), `inFalse` (value when false)  
-- **Output:** `out`  
+   ```bash
+   python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
+   ```
 
-```python
-# Route between two values based on a BooleanWritable.
-builder.add_boolean_writable("Enable", True)
-builder.add_numeric_writable("LowValue", 0.0)
-builder.add_numeric_writable("HighValue", 100.0)
-builder.add_numeric_switch("ModeSwitch")
-builder.add_link("Enable", "out", "ModeSwitch", "inSwitch")
-builder.add_link("HighValue", "out", "ModeSwitch", "inTrue")
-builder.add_link("LowValue", "out", "ModeSwitch", "inFalse")
-```
+   This will create:
 
-#### GreaterThan (Logic)
-- **Niagara Type:** `kitControl:GreaterThan`  
-- **Builder Method:** `add_greater_than(name: str)`  
-- **Inputs:** `inA`, `inB`  
-- **Output:** `out`  
+   ```
+   /mnt/c/Users/ben/Niagara4.11/JENEsys/bool_latch_play_ground.bog
+   ```
 
-```python
-# Compare two numeric values and produce a Boolean result.
-builder.add_numeric_writable("TempA", 68.0)
-builder.add_numeric_writable("TempB", 70.0)
-builder.add_greater_than("IsWarmer")
-builder.add_link("TempA", "out", "IsWarmer", "inA")
-builder.add_link("TempB", "out", "IsWarmer", "inB")
-# The 'out' slot on IsWarmer can be linked to a Boolean input on another block.
-```
-These examples mirror the tested calls found in the `kitControlIntrol.txt` context file and demonstrate how to map each widget’s slot names to the builder API.
-</details>
+2. **Open Workbench**
+   Now you can import or open the generated `.bog` file inside your Niagara Workbench environment under the JENEsys station.
 
 ---
 
-<details><summary><strong>BogFolderBuilder Method Reference</strong></summary>
+⚡ **Tip:**
+If you don’t want to type `-o` every time, you can edit each example script and change the default in its argparse:
 
-Unless noted otherwise, each method accepts a `name: str` for the component and optional `properties: dict` and `actions: dict` to customize behaviour.
-
-- **Writable Points:** `add_numeric_writable`, `add_boolean_writable`, `add_enum_writable`  
-  Create settable points for user inputs or final outputs. You can specify default values, precision, units or facets as needed.
-
-- **Constants:** `add_numeric_const`, `add_boolean_const`, `add_enum_const`  
-  Produce fixed numeric, boolean or enumerated values.
-
-- **Switches & Selectors:** `add_numeric_switch`, `add_boolean_switch`, `add_numeric_select`  
-  Route one of two or more values based on a control input.
-
-- **Timers & Delays:** `add_numeric_delay`, `add_boolean_delay`, `add_one_shot`, `add_multi_vibrator`, `add_counter`  
-  Provide transient or periodic behaviour—e.g., pulse generation, on/off delays, and counting.
-
-- **Math:** `add_add`, `add_subtract`, `add_multiply`, `add_divide`, `add_average`, `add_minimum`, `add_maximum`, `add_sine_wave`, `add_reset`  
-  Perform arithmetic or waveform generation.
-
-- **Logic:** `add_and`, `add_or`, `add_xor`, `add_not`, `add_equal`, `add_not_equal`, `add_greater_than`, `add_greater_than_equal`, `add_less_than`, `add_less_than_equal`  
-  Create boolean logic gates and comparisons.
-
-- **Latches:** `add_boolean_latch`, `add_numeric_latch`  
-  Hold a value until explicitly reset.
-
-- **HVAC Helpers:** `add_lead_lag_cycles`, `add_lead_lag_runtime`, `add_loop_point`, `add_tstat`, `add_reset`  
-  Encapsulate common control sequences such as lead/lag rotation or thermostat logic.
-
-- **Enums & Schedules:** `add_enum_const`, `add_enum_writable`, `add_enum_writable_by_name`, `add_enum_const_by_name`, `add_boolean_schedule`, `add_numeric_schedule`, `add_enum_schedule`  
-  Work with enumerated values and schedules.
-
-- **Folder Management:** `start_sub_folder(name)`, `end_sub_folder()`  
-  Organise your components into nested folders for readability.
-
-- **Linking & Reduction:** `add_link(source, source_slot, target, target_slot)`, `add_reduction_block(block_type, final_output_name, input_names)`  
-  Connect slots between components or generate trees of Average/Minimum/Maximum blocks from many inputs.
-
-- **Saving:** `save(file_path)`  
-  Write the assembled graph to a `.bog` file.
-
-Refer to `bog_builder/builder.py` for complete argument descriptions and additional helpers.
-</details>
-
----
-
-<details><summary><strong>BogFolderBuilder API Overview</strong></summary>
-
-High‑level methods for constructing components and wiring them together (selected signatures):
-
-```python
-add_numeric_writable(name: str, default_value: float = 0.0, precision: int = 2, units: str = "u:null")
-add_boolean_writable(name: str, default_value: bool = False)
-add_enum_writable(name: str, facets: str, default_value: str = "0")
-
-add_numeric_switch(name: str)
-add_boolean_switch(name: str)
-add_numeric_select(name: str)
-
-add_multi_vibrator(name: str, period_ms: str | int = "10000")
-add_counter(name: str, count_increment: float = 1.0, precision: int | None = None, properties: dict | None = None)
-
-add_add(name: str); add_subtract(name: str); add_multiply(name: str); add_divide(name: str)
-add_average(name: str); add_minimum(name: str); add_maximum(name: str); add_sine_wave(name: str)
-
-add_numeric_latch(name: str); add_boolean_latch(name: str)
-
-add_numeric_delay(name: str, update_time: str | int | None = None, max_step_size: float | None = None)
-add_boolean_delay(name: str, on_delay: str | int | None = None, off_delay: str | int | None = None)
-
-add_numeric_const(name: str, value: float | None = None)
-add_boolean_const(name: str, value: bool | None = None)
-add_enum_const(name: str, facets: str | None = None, value: str | None = None)
-
-# Logic gates
-add_equal(); add_not_equal(); add_greater_than(); add_greater_than_equal()
-add_less_than(); add_less_than_equal(); add_and(); add_or(); add_xor(); add_not()
-
-# HVAC helpers
-add_lead_lag_cycles(); add_lead_lag_runtime(); add_loop_point(); add_tstat(); add_reset()
-
-# Utilities
-add_one_shot(); start_sub_folder(name); end_sub_folder()
-add_link(source_comp_name, source_slot, target_comp_name, target_slot, *, link_type="b:Link", converter_type=None)
-add_reduction_block(block_type: {"Average","Minimum","Maximum"}, final_output_name: str, input_names: list[str])
-
-# Save the BOG file
-save(file_path: str)
-```
-These methods wrap the internal `_add_component` API and ensure parameters are validated for Niagara 4 wire‑sheet compatibility.
-</details>
-
----
-
-<details><summary><strong>Running Example Scripts with WSL</strong></summary>
-
-Each example script can be executed directly in WSL to generate a `.bog` file and drop it into your Niagara Workbench `JENEsys` directory. All example Python files are also compiled into a text file and used for LLM context.
-
-**Run a specific example from project root directory** — pass the Workbench path via `-o`:
-```bash
-python examples/bool_latch_play_ground.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
-```
-This creates:
-```
-/mnt/c/Users/ben/Niagara4.11/JENEsys/bool_latch_play_ground.bog
-```
-
-**Open Workbench** — import/open the generated `.bog` file under your `JENEsys` station.
-
-**Tip:** To avoid typing `-o` each time, change the default in each script’s `argparse`:
 ```python
 parser.add_argument(
-  "-o",
-  "--output_dir",
-  default="/mnt/c/Users/ben/Niagara4.11/JENEsys",
-  help="Output directory for the .bog file."
+    "-o",
+    "--output_dir",
+    default="/mnt/c/Users/ben/Niagara4.11/JENEsys",
+    help="Output directory for the .bog file."
 )
 ```
-Now you can run:
+
+Then you can just run:
+
 ```bash
 python examples/bool_latch_play_ground.py
 ```
-</details>
+
+and it will always drop files directly into your Workbench directory for easy fast testing.
 
 ---
 
-<details><summary><strong>Bog Builder Python API Example</strong></summary>
+## Bog Builder Python API Example
 
-This is a code snip from `examples/subtract_simple.py` with optional `start_sub_folder` structures.
+This is a code snip from the `examples\subtract_simple.py` file with optional `start_sub_folder` folder structures.
 
 ```python
 builder = BogFolderBuilder("SubtractionLogic")
@@ -231,110 +99,319 @@ builder.add_numeric_writable(name="Difference")
 
 builder.start_sub_folder("CalculationLogic")
 builder.add_component(comp_type="kitControl:Subtract", name="Subtract")
+
 builder.end_sub_folder()
 
 builder.add_link("Input_A", "out", "Subtract", "inA")
 builder.add_link("Input_B", "out", "Subtract", "inB")
 builder.add_link("Subtract", "out", "Difference", "in16")
 
+bog_filename = f"{script_filename}.bog"
+output_path = os.path.join(args.output_dir, bog_filename)
+os.makedirs(args.output_dir, exist_ok=True)
 builder.save(output_path)
+print(f"\nSuccessfully created Niagara .bog file at: {output_path}")
+
 ```
-When run, it will create a `.bog` file that can be directly imported into Workbench. `pybog` automatically arranges a clean grid layout; subfolders are optional but help keep files organized.
-</details>
+
+
+When run, it will create a `.bog` file that can be directly imported into Workbench. Behind the scenes, `pybog` automatically arranges the grid layout to keep it neat and human-readable. Placing logic inside subfolders is optional, but it’s a great way to keep your bog files organized and clean. And yes—AI can handle all of this for you, too 😉.
+
+
+```bash
+python examples/subtract_simple.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
+```
+
+![subtract image](snips/simpleSubtract.png)
+
+
+## Write Your Own `.bog` File in XML from scratch
+
+The Python script operates by creating the entire XML structure of the Niagara .bog file as a single, multi-line text string. This string contains all the necessary tags to define each component, its properties, and the links between them. Finally, the script writes this complete XML string directly into a new file, which Niagara can then open and display as a standard wiresheet.
+
+```python
+xml_content = '''<bajaObjectGraph version="4.0" reversibleEncodingKeySource="none" FIPSEnabled="false" reversibleEncodingValidator="[null.1]=">
+  <p t="b:UnrestrictedFolder" m="b=baja">
+    <p n="MyAdderLogic" t="b:Folder">
+
+      <!-- Input1: Settable point with default value -->
+      <p n="Input1" t="control:NumericWritable" h="1" m="control=control">
+        <p n="out" f="s" t="b:StatusNumeric">
+          <p n="value" v="6.0"/>
+          <p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
+        </p>
+        <p n="fallback" t="b:StatusNumeric">
+          <p n="value" v="6.0"/>
+        </p>
+        <a n="emergencyOverride" f="h"/>
+        <a n="emergencyAuto" f="h"/>
+        <a n="override" f="ho"/>
+        <a n="auto" f="ho"/>
+        <p n="wsAnnotation" t="b:WsAnnotation" v="10,10,8"/>
+      </p>
+      
+      <!-- Input2: Settable point with default value -->
+      <p n="Input2" t="control:NumericWritable" h="2" m="control=control">
+        <p n="out" f="s" t="b:StatusNumeric">
+          <p n="value" v="4.0"/>
+          <p n="status" v="0;activeLevel=e:17@control:PriorityLevel"/>
+        </p>
+        <p n="fallback" t="b:StatusNumeric">
+          <p n="value" v="4.0"/>
+        </p>
+        <a n="emergencyOverride" f="h"/>
+        <a n="emergencyAuto" f="h"/>
+        <a n="override" f="ho"/>
+        <a n="auto" f="ho"/>
+        <p n="wsAnnotation" t="b:WsAnnotation" v="10,20,8"/>
+      </p>
+
+      <!-- Add: Logic block with verbose links -->
+      <p n="Add" t="kitControl:Add" h="3" m="kitControl=kitControl">
+        <p n="wsAnnotation" t="b:WsAnnotation" v="20,15,8"/>
+        <p n="Link" t="b:Link">
+          <p n="sourceOrd" v="h:1"/>
+          <p n="relationId" v="n:dataLink"/>
+          <p n="sourceSlotName" v="out"/>
+          <p n="targetSlotName" v="inA"/>
+        </p>
+        <p n="Link1" t="b:Link">
+          <p n="sourceOrd" v="h:2"/>
+          <p n="relationId" v="n:dataLink"/>
+          <p n="sourceSlotName" v="out"/>
+          <p n="targetSlotName" v="inB"/>
+        </p>
+      </p>
+      
+      <!-- Sum: Read-only point with Set action explicitly hidden -->
+      <p n="Sum" t="control:NumericWritable" h="4" m="control=control">
+        <p n="out" f="h"/>
+        <a n="emergencyOverride" f="h"/>
+        <a n="emergencyAuto" f="h"/>
+        <a n="override" f="ho"/>
+        <a n="auto" f="ho"/>
+        <a n="set" f="ho"/>
+        <p n="wsAnnotation" t="b:WsAnnotation" v="30,15,8"/>
+        <p n="Link" t="b:Link">
+          <p n="sourceOrd" v="h:3"/>
+          <p n="relationId" v="n:dataLink"/>
+          <p n="sourceSlotName" v="out"/>
+          <p n="targetSlotName" v="in16"/>
+        </p>
+      </p>
+
+    </p>
+  </p>
+</bajaObjectGraph>'''
+
+with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
+    f.write(xml_content)
+
+```
+
+### How it Works
+
+* Each `<p>` tag represents a Niagara component or a **slot within a component** (like `out` or `fallback`). Each `<a>` tag represents an **action** on that component, like `set` or `override`.
+* The `f` attribute (flags) is critical for controlling behavior. `f="s"` makes a slot **settable**, while `f="h"` or `f="ho"` **hides** a slot or action, which is how we create read-only points.
+* To set a **default value**, the `out` and `fallback` slots must be fully defined as complex properties containing nested `<p n="value".../>` and `<p n="status".../>` tags.
+* `h="1"`, `h="2"`, etc., are unique **handles** that links use to reference their source and target components.
+* `wsAnnotation` controls the block's position on the wiresheet. The coordinates are calculated using our **Hierarchical Data Flow** strategy to ensure a clean, grid-based layout.
+* The `Add` block's links use these handles to reference the `out` slots from `Input1` and `Input2` and connect them to its `inA` and `inB` inputs.
+
+
+![Adder Logic Created with Python](https://github.com/bbartling/pybog/blob/develop/snips/addrMadeWithPy.jpg)
+
 
 ---
 
-<details><summary><strong>Write Your Own <code>.bog</code> File in XML from Scratch</strong></summary>
 
-The script constructs the entire `.bog` XML as a single multi‑line string, defining components, properties, and links, then writes it to disk so Niagara can open it as a standard wiresheet.
+# 🔧 Using ChatGPT Agent Mode to Build `.bog` Files
 
-Key takeaways:
-- `<p>` tags represent components or slots (e.g., `out`, `fallback`); `<a>` tags represent actions (`set`, `override`).
-- The `f` attribute controls behaviour: `f="s"` makes a slot settable; `f="h"` / `f="ho"` hides a slot or action (for read‑only points).
-- Defaults require full `out` + `fallback` status definitions.
-- `h="1"`, `h="2"`, etc., are unique handles for link endpoints.
-- `wsAnnotation` positions blocks on the wiresheet according to a hierarchical grid strategy.
-</details>
+The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest. Be se sure to hit the plus sign to enable "Agent" mode in ChatGPT.
+
+
+![Agent mode snip](https://github.com/bbartling/pybog/blob/develop/snips/agent_mode_snip.png)
+
+## 🚀 How It Works
+
+1. **Upload the project zip**
+   In the chat interface, attach the `pybog-develop.zip` file (found in this repository). The agent will automatically extract the archive and inspect the code.
+
+2. **Describe your control logic**
+   Tell ChatGPT what sequence of operations you want to implement. For example:
+
+   > “Create a central plant with a boiler and chiller. Enable heating when the outside air temperature is 50 °F or below, and cooling when it is 65 °F or above. Use variable speed pumps with a differential pressure setpoint of 20 PSI and include a 2 °F deadband for both heating and cooling.”
+
+3. **ChatGPT builds and tests the script**
+
+   * The agent writes a Python script using the `BogFolderBuilder` API.
+   * It runs the script in a sandboxed environment and inspects the results.
+   * If it fails, the agent reads the traceback, fixes the code, and tries again.
+   * This iterate-and-repair loop continues until a valid `.bog` file is produced.
+
+4. **Download the result**
+   Once successful, ChatGPT presents a link to download the generated `.bog` file. You can import this file directly into Niagara Workbench for testing.
 
 ---
 
-<details><summary><strong>Using ChatGPT Agent Mode to Build <code>.bog</code> Files</strong></summary>
+## ✅ Advantages
 
-**Workflow:** upload your project zip → describe the sequence → the Agent generates & runs the builder code → you download the resulting `.bog` for Workbench.
-
-**Advantages**
-- No API key required
-- No local Python setup
-- Fast prototyping in chat
-
-**Tips**
-- Be specific with setpoints, deadbands, counts, and block names.
-- Validate in Workbench and iterate as needed.
-</details>
+* No API key required
+* No local Python setup
+* Faster prototyping directly within the conversation
 
 ---
 
-<details><summary><strong>Generate Context Text Files</strong></summary>
+## 📊 AI Agent
 
-The `context/` directory contains LLM‑formatted docs built from `examples/`.
+The following Mermaid diagram illustrates the high-level flow when using ChatGPT Agent Mode:
 
-- `llms.txt` — sitemap of example files.
-- `llms-full.txt` — concatenation of all example sources with clear delimiters (can exceed 20k tokens).
+```mermaid
+flowchart TD
+  start([Start chat session]) --> upload[User uploads pybog zip]
+  upload --> describe[User describes desired control logic]
+  describe --> init[Agent extracts context files and builder]
+  init --> iterate{{Is first attempt?}}
 
-Generate:
+  iterate -- Yes --> gen[Agent generates Python script]
+  iterate -- No  --> fix[Agent repairs script using previous code and traceback]
+
+  gen --> write[Write script to sandbox]
+  fix --> write
+
+  write --> run[Execute script and build .bog]
+  run --> success{Run ok and file created?}
+
+  success -- Yes --> done[Present download link\nExit]
+  success -- No  --> cap[Capture error/traceback]
+  cap --> retry{Attempts < max allowed?}
+  retry -- Yes --> incr[Update attempt count and context]
+  incr --> iterate
+  retry -- No --> fail[Report failure\nExit]
+```
+
+---
+
+## 💡 Tips
+
+* **Be specific** when describing your control logic (setpoints, deadbands, number of pumps, etc.). The more detail you provide, the more accurate the generated `.bog` file will be.
+* **Validate in Workbench**: After downloading, import the `.bog` file into Niagara Workbench to review the wiresheet and adjust as needed.
+
+With Agent Mode, you can rapidly prototype complex HVAC sequences without writing any code yourself. Just describe what you need, and let ChatGPT handle the heavy lifting.
+
+---
+
+
+
+### Generate Context Text Files
+
+The **context directory** contains documentation specifically formatted for use by the LLM agent.
+Running the generator will take all Python files in the `examples` directory and combine them into a set of **LLM-friendly documentation files** (see [GoFast MCP docs](https://gofastmcp.com/getting-started/welcome#llm-friendly-docs) for the format specification).
+
+* **`llms.txt`** — a lightweight *sitemap* listing each example file and its relative path.
+* **`llms-full.txt`** — a single, concatenated file with the complete source of every example, wrapped with clear delimiters (`=== FILE: ... ===`, `=== CODE START ===`, `=== CODE END ===`).
+  ⚠️ *Note:* this file can be quite large and may exceed the context window of some LLMs. For this project the `llms-full.txt` can push upwords of 20,000 tokens.
+
+Generate the docs with:
+
 ```bash
 python src/bog_builder/generate_llm_docs.py --examples examples --output context
 ```
-</details>
+
+This ensures the agent has direct access to all available example scripts, either as a quick index (`llms.txt`) or full training context (`llms-full.txt`).
 
 ---
 
-<details><summary><strong>Traversing Baja Object Graphs</strong></summary>
+## Traversing Baja Object Graphs
 
-Niagara stations are directed graphs. When parsing raw XML from `.bog`/`.dist`, follow these practices:
+Niagara represents the contents of a station as a directed graph of objects and properties.
+When working with the raw XML stored inside `.bog` and `.dist` archives you are effectively traversing this graph.
 
-- Parse once, traverse many (cache `ElementTree` root).
-- Use BFS/DFS with a visited set (components have unique `h` handles).
-- Follow containment and `b:Link` connections.
-- Build a handle→name map to resolve `h:` ords.
-- Group/search by palette (e.g., `kitControl:Add`).
+The graph is **not strictly hierarchical**: components can have links and references to other components across folders, and cycles may exist in more complex projects.
 
-**Analyzer Class**
-- Parse archive → flat JSON (components, properties, links).
-- Build handle map.
-- Helpers to count kitControl blocks and plot bar/pie charts.
+### Best Practices
 
-**Comparator Class**
-- Diff two archives (`analyzer compare A.bog B.bog`): report adds/removes/modified, including link/converter changes.
-
-**Future**
-- Simple Flask UI to upload two files and view a color‑coded diff.
-</details>
+* **Parse once, traverse many.** Extract the `file.xml` contents into an `xml.etree.ElementTree` and hold onto the root element. Re-parsing repeatedly is expensive.
+* **Use breadth-first or depth-first search with a visited set.** Each component element has a unique handle (`h` attribute). Track visited handles to avoid infinite loops.
+* **Follow both containment and link relationships.** Components are nested via `<p h=...>` elements, but logical connections are represented with `b:Link` child elements.
+* **Build a handle → name map.** Handles (e.g. `s="h:123"`) are common in link definitions. Build a dictionary so you can resolve these references.
+* **Be mindful of palettes.** The `type` attribute encodes the palette and block name (e.g. `kitControl:Add`). Grouping by palette helps narrow searches or generate statistics.
 
 ---
 
-<details><summary><strong>Example Output</strong></summary>
+### Analyzer Class
 
-Bar chart `kitcontrol_counts_bar.png` and pie chart `kitcontrol_counts_pie.png` help visualize palette usage and block counts.
-</details>
+The `Analyzer` in `bog_builder.analyzer` encapsulates these patterns. It:
+
+* Parses a `.bog` or `.dist` archive and extracts a **flat JSON structure** of components, properties, and links.
+* Builds a **handle map** so you can resolve references by handle.
+* Provides helpers to **count kitControl blocks** and generate bar/pie charts.
+
+### Example Usage
+
+Analyse a `.dist` file, export JSON, and produce charts:
+
+```bash
+python -m bog_builder.analyzer analyze "/path/to/file.dist" \
+  -o "/path/to/output.json" \
+  --plots "/path/to/outputdir"
+```
+
+This will:
+
+* Save the JSON analysis into `output.json`.
+* Generate two PNGs in the `outputdir` folder:
+
+  * `kitcontrol_counts_bar.png`
+  * `kitcontrol_counts_pie.png`
 
 ---
 
-<details><summary><strong>Component Library (kitControl)</strong></summary>
+### Comparator Class
+
+The `BogComparator` in `bog_builder.analyzer` provides a powerful diffing tool for your Niagara files. It:
+
+* Compares two `.bog` or `.dist` archives to find the differences between them.
+* Identifies components that have been added, removed, or modified.
+* Highlights specific changes to component properties and links, including changes to link types and converters.
+
+### Example Usage
+
+Compare two `.bog` files to generate a diff report directly in your terminal:
+
+```bash
+python -m bog_builder.analyzer compare /path/to/version_A.bog /path/to/version_B.bog
+```
+
+This will print a detailed report listing:
+
+* Components that were added (`+`) or removed (`-`).
+* Modified components, detailing the exact property and link changes.
+
+---
+
+## Example Output
+
+**Bar Chart (counts by block type)**
+![kitControl Bar](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_bar.png)
+
+**Pie Chart (distribution of block usage)**
+![kitControl Pie](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_pie.png)
+
+👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
+
+---
+
+
+[🎥 Keep Up with Talk Shop With Ben on YouTube](https://www.youtube.com/@TalkShopWithBen)
+
+---
+
+## Component Library (kitControl)
 
 Reference logic building blocks from Niagara’s kitControl palette are documented in `pdf/docKitControl.pdf`.
-</details>
 
----
-
-<details><summary><strong>License</strong></summary>
-
-MIT License — free for reuse with attribution. Any files generated here are provided strictly for research and educational purposes. All outputs are delivered “as‑is,” with no guarantees of accuracy, safety, or fitness for any application. Neither the pybog project nor its creator accepts any responsibility or liability under any circumstances. By generating or using a `.bog` file produced by this project, you agree that you assume all risks and full responsibility for any outcomes—including, but not limited to, personal injury, loss of life, financial loss, equipment damage, or mechanical system failures. If you choose to use these files in any way, you do so entirely at your own risk.
-</details>
-
----
-
-## API Reference (kitControl Widgets & BogFolderBuilder)
+### API Reference (kitControl Widgets & BogFolderBuilder)
 
 Below is a summary of available kitControl widgets exposed through the `BogFolderBuilder` along with usage signatures and input/output slots. Use the checkboxes to track which widgets are implemented vs. pending.
 
@@ -475,3 +552,266 @@ Below is a summary of available kitControl widgets exposed through the `BogFolde
 - [ ] StatusDemux
 - [ ] SineWave (already listed under Math)
 </details>
+
+
+### pybog API Reference: BogFolderBuilder Methods
+
+<details>
+
+These methods create standard input/output points that are typically exposed on the wiresheet interface.
+
+### `add_numeric_writable`
+
+Creates a standard settable numeric point (`control:NumericWritable`).
+
+```python
+def add_numeric_writable(
+    self,
+    name: str,
+    default_value: float = 0.0,
+    precision: int = 2,
+    units: str = "u:null"
+) -> None:
+```
+
+  * **`name`**: The unique name for the component.
+  * **`default_value`**: The initial fallback value for the point.
+  * **`precision`**: The number of decimal places for display.
+  * **`units`**: The Niagara units string (e.g., `"u:degreeFahrenheit"`, `"u:percent"`).
+
+### `add_boolean_writable`
+
+Creates a standard settable boolean point (`control:BooleanWritable`).
+
+```python
+def add_boolean_writable(
+    self,
+    name: str,
+    default_value: bool = False
+) -> None:
+```
+
+  * **`name`**: The unique name for the component.
+  * **`default_value`**: The initial fallback value for the point (`True` or `False`).
+
+### `add_enum_writable`
+
+Creates a standard settable enumeration point (`control:EnumWritable`).
+
+```python
+def add_enum_writable(
+    self,
+    name: str,
+    facets: str,
+    default_value: str = "0"
+) -> None:
+```
+
+  * **`name`**: The unique name for the component.
+  * **`facets`**: The Niagara enumeration string (e.g., `"range=E:{Off=0,On=1}"`).
+  * **`default_value`**: The string representation of the default ordinal index (e.g., `"0"`).
+
+## 2\. Enumeration Helpers
+
+These high-level methods simplify working with `EnumWritable` and `EnumConst` components by managing range definitions centrally.
+
+### `define_enum_range`
+
+Registers a reusable enumeration range mapping.
+
+```python
+def define_enum_range(
+    self,
+    name: str,
+    mapping: Dict[str, int]
+) -> None:
+```
+
+  * **`name`**: A unique alias for the range (e.g., `"Mode"`).
+  * **`mapping`**: A dictionary mapping string tags to integer ordinals (e.g., `{"Occupied": 0, "Unoccupied": 1}`).
+
+### `add_enum_writable_by_name`
+
+Adds an `EnumWritable` using a pre-defined range.
+
+```python
+def add_enum_writable_by_name(
+    self,
+    component_name: str,
+    enum_name: str,
+    default_tag: str
+) -> None:
+```
+
+  * **`component_name`**: The name for the new component.
+  * **`enum_name`**: The alias of the range registered with `define_enum_range()`.
+  * **`default_tag`**: The string tag from the mapping to set as the default value (e.g., `"Occupied"`).
+
+### `add_enum_const_by_name`
+
+Adds an `EnumConst` using a pre-defined range.
+
+```python
+def add_enum_const_by_name(
+    self,
+    component_name: str,
+    enum_name: str,
+    value_tag: str
+) -> None:
+```
+
+  * **`component_name`**: The name for the new component.
+  * **`enum_name`**: The alias of the range registered with `define_enum_range()`.
+  * **`value_tag`**: The string tag from the mapping to set as the constant's value.
+
+## 3\. Constant Components
+
+Creates read-only constant value blocks.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_numeric_const(name: str, value: float)` | `kitControl:NumericConst` | Creates a constant numeric value. |
+| `add_boolean_const(name: str, value: bool)` | `kitControl:BooleanConst` | Creates a constant boolean value. |
+| `add_enum_const(name: str, facets: str, value: str)` | `kitControl:EnumConst` | Creates a constant enum value. |
+
+## 4\. Math Components
+
+Wrapper methods for mathematical operations from `kitControl`.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_add(name: str)` | `kitControl:Add` | Adds multiple numeric inputs. |
+| `add_subtract(name: str)` | `kitControl:Subtract` | Subtracts input B from input A. |
+| `add_multiply(name: str)` | `kitControl:Multiply` | Multiplies multiple numeric inputs. |
+| `add_divide(name: str)` | `kitControl:Divide` | Divides input A by input B. |
+| `add_average(name: str)` | `kitControl:Average` | Calculates the average of active inputs. |
+| `add_minimum(name: str)` | `kitControl:Minimum` | Finds the minimum value among active inputs. |
+| `add_maximum(name: str)` | `kitControl:Maximum` | Finds the maximum value among active inputs. |
+| `add_reset(name: str)` | `kitControl:Reset` | Rescales a value from one range to another. |
+| `add_sine_wave(name: str)` | `kitControl:SineWave` | Generates a sine wave output for testing. |
+
+## 5\. Logic and Comparison Components
+
+Wrapper methods for boolean logic and numeric comparisons from `kitControl`.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_and(name: str)` | `kitControl:And` | Boolean AND operation on multiple inputs. |
+| `add_or(name: str)` | `kitControl:Or` | Boolean OR operation on multiple inputs. |
+| `add_xor(name: str)` | `kitControl:Xor` | Boolean XOR operation on multiple inputs. |
+| `add_not(name: str)` | `kitControl:Not` | Inverts a boolean signal. |
+| `add_equal(name: str)` | `kitControl:Equal` | Outputs true if input A equals input B. |
+| `add_not_equal(name: str)` | `kitControl:NotEqual` | Outputs true if input A does not equal input B. |
+| `add_greater_than(name: str)` | `kitControl:GreaterThan`| Outputs true if input A \> input B. |
+| `add_greater_than_equal(name: str)`| `kitControl:GreaterThanEqual` | Outputs true if input A \>= input B. |
+| `add_less_than(name: str)` | `kitControl:LessThan` | Outputs true if input A \< input B. |
+| `add_less_than_equal(name: str)` | `kitControl:LessThanEqual` | Outputs true if input A \<= input B. |
+
+## 6\. Timer and Delay Components
+
+Wrapper methods for time-based operations. Time arguments accept integers (milliseconds) or human-readable strings like `"30s"` or `"5m"`.
+
+### `add_boolean_delay`
+
+Delays a boolean signal on rise, fall, or both (`kitControl:BooleanDelay`).
+
+```python
+def add_boolean_delay(
+    self,
+    name: str,
+    on_delay: str | int | None = None,
+    off_delay: str | int | None = None,
+    properties: dict | None = None
+) -> None:
+```
+
+### `add_numeric_delay`
+
+Applies a ramp or delay to a numeric value (`kitControl:NumericDelay`).
+
+```python
+def add_numeric_delay(
+    self,
+    name: str,
+    update_time: str | int | None = None,
+    max_step_size: float | None = None,
+    properties: dict | None = None
+) -> None:
+```
+
+### Other Timer Components
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_multi_vibrator(name: str, period_ms: str \| int)` | `kitControl:MultiVibrator` | Creates a periodic boolean pulse (oscillator). |
+| `add_one_shot(name: str)` | `kitControl:OneShot` | Emits a single true pulse when triggered. |
+
+## 7\. HVAC and Sequencing Components
+
+Wrappers for complex HVAC control blocks.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_lead_lag_cycles(name: str)` | `kitControl:LeadLagCycles` | Manages equipment rotation based on start cycles. |
+| `add_lead_lag_runtime(name:str)` | `kitControl:LeadLagRuntime` | Manages equipment rotation based on accumulated runtime. |
+| `add_loop_point(name: str)` | `kitControl:LoopPoint` | PID loop controller component. |
+| `add_tstat(name: str)` | `kitControl:Tstat` | Thermostat logic block with setpoint and differential. |
+
+## 8\. Latch and Switch Components
+
+Components used for stateful logic and signal routing.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_boolean_latch(name: str)` | `kitControl:BooleanLatch` | Holds a boolean value based on a clock trigger. |
+| `add_numeric_latch(name: str)` | `kitControl:NumericLatch` | Holds a numeric value based on a clock trigger. |
+| `add_boolean_switch(name: str)`| `kitControl:BooleanSwitch`| Selects between `inTrue` and `inFalse` boolean inputs based on `inSwitch`.|
+| `add_numeric_switch(name: str)`| `kitControl:NumericSwitch`| Selects between `inTrue` and `inFalse` numeric inputs based on `inSwitch`.|
+
+## 9\. Utility Components
+
+Miscellaneous utility blocks.
+
+### `add_counter`
+
+Counts up or down based on boolean triggers (`kitControl:Counter`).
+
+```python
+def add_counter(
+    self,
+    name: str,
+    count_increment: float = 1.0,
+    precision: int | None = None,
+    properties: dict | None = None
+) -> None:
+```
+
+### `add_numeric_select`
+
+Selects one numeric input from a list based on an integer index (`kitControl:NumericSelect`).
+
+```python
+def add_numeric_select(
+    self,
+    name: str
+) -> None:
+```
+
+## 10\. Schedule Components
+
+Wrappers for creating schedule objects.
+
+| Method Signature | Niagara Type | Description |
+| --- | --- | --- |
+| `add_boolean_schedule(name: str, properties: dict)` | `sch:BooleanSchedule` | Creates a schedule for boolean events. |
+| `add_numeric_schedule(name: str, properties: dict)` | `sch:NumericSchedule` | Creates a schedule for numeric setpoints. |
+| `add_enum_schedule(name: str, properties: dict)` | `sch:EnumSchedule` | Creates a schedule for enumerated values. |
+
+</details>
+---
+
+## License
+
+MIT License — free for reuse with attribution. Any files generated here are provided strictly for research and educational purposes. All outputs are delivered “as-is,” with no guarantees of accuracy, safety, or fitness for any application. Neither the pybog project nor its creator accepts any responsibility or liability under any circumstances. By generating or using a .bog file produced by this project, you agree that you assume all risks and full responsibility for any outcomes—including, but not limited to, personal injury, loss of life, financial loss, equipment damage, or mechanical system failures. If you choose to use these files in any way, you do so entirely at your own risk.
+
+
