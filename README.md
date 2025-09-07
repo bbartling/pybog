@@ -2,8 +2,7 @@
 
 `bog_builder` is a Python package for constructing Niagara Baja Object Graphs `.bog` files programmatically. The goal is for AI to assist human controls engineers in rapidly prototyping complex HVAC sequencing within wire sheet logic. If the software engineering community can prototype quickly, why shouldn’t the controls engineering community be able to do the same?
 
-![Leave Temp Snip](https://github.com/bbartling/pybog/blob/develop/pybog_image.png)
-
+![Leave Temp Snip](https://raw.githubusercontent.com/bbartling/pybog/develop/pybog_image.png)
 
 ## Python Project Setup
 
@@ -131,7 +130,7 @@ When run, it will create a `.bog` file that can be directly imported into Workbe
 python examples/subtract_simple.py -o /mnt/c/Users/ben/Niagara4.11/JENEsys
 ```
 
-![subtract image](snips/simpleSubtract.png)
+![Simple Subtract Snip](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/simpleSubtract.png)
 
 
 ## Write Your Own `.bog` File in XML from scratch
@@ -227,9 +226,7 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 * `wsAnnotation` controls the block's position on the wiresheet. The coordinates are calculated using our **Hierarchical Data Flow** strategy to ensure a clean, grid-based layout.
 * The `Add` block's links use these handles to reference the `out` slots from `Input1` and `Input2` and connect them to its `inA` and `inB` inputs.
 
-
-![Adder Logic Created with Python](https://github.com/bbartling/pybog/blob/develop/snips/addrMadeWithPy.jpg)
-
+![Adder Logic Created with Python](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/addrMadeWithPy.jpg)
 
 </details>
 
@@ -241,7 +238,8 @@ The workflow is entirely conversational: upload your project zip, describe the c
 
 <details><summary><strong>How It Works</strong></summary>
 
-![Agent mode snip](https://github.com/bbartling/pybog/blob/develop/snips/agent_mode_snip.png)
+![Agent mode snip](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/agent_mode_snip.png)
+
 
 1. **Upload the project zip**
    In the chat interface, attach the `pybog-develop.zip` file (found in this repository). The agent will automatically extract the archive and inspect the code.
@@ -412,10 +410,11 @@ This will print a detailed report listing:
 ## Example Output
 
 **Bar Chart (counts by block type)**
-![kitControl Bar](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_bar.png)
+![kitControl Bar](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/kitcontrol_counts_bar.png)
 
 **Pie Chart (distribution of block usage)**
-![kitControl Pie](https://github.com/bbartling/pybog/blob/develop/snips/kitcontrol_counts_pie.png)
+![kitControl Pie](https://raw.githubusercontent.com/bbartling/pybog/develop/snips/kitcontrol_counts_pie.png)
+
 
 👉 With this, you now have both **machine-readable JSON for reverse engineering** and **visual plots for quick insights** into station complexity and palette usage.
 
