@@ -239,11 +239,9 @@ with open("PyMadeAddr.bog", "w", encoding="utf-8") as f:
 
 The workflow is entirely conversational: upload your project zip, describe the control sequence you need, and ChatGPT will do the rest. Be se sure to hit the plus sign to enable "Agent" mode in ChatGPT.
 
+<details><summary><strong>How It Works</strong></summary>
 
 ![Agent mode snip](https://github.com/bbartling/pybog/blob/develop/snips/agent_mode_snip.png)
-
-
-<details><summary><strong>How It Works</strong></summary>
 
 1. **Upload the project zip**
    In the chat interface, attach the `pybog-develop.zip` file (found in this repository). The agent will automatically extract the archive and inspect the code.
@@ -316,6 +314,8 @@ With Agent Mode, you can rapidly prototype complex HVAC sequences without writin
 
 ## Generate LLM Context Text Files
 
+<details><summary><strong>Details</strong></summary>
+
 The **context directory** contains documentation specifically formatted for use by the LLM agent.
 Running the generator will take all Python files in the `examples` directory and combine them into a set of **LLM-friendly documentation files** (see [GoFast MCP docs](https://gofastmcp.com/getting-started/welcome#llm-friendly-docs) for the format specification).
 
@@ -331,9 +331,15 @@ python src/bog_builder/generate_llm_docs.py --examples examples --output context
 
 This ensures the agent has direct access to all available example scripts, either as a quick index (`llms.txt`) or full training context (`llms-full.txt`).
 
+</details>
+
 ---
 
 ## Traversing Baja Object Graphs
+
+* TODO - Unfinished and need more research here
+
+<details><summary><strong>Details</strong></summary>
 
 Niagara represents the contents of a station as a directed graph of objects and properties.
 When working with the raw XML stored inside `.bog` and `.dist` archives you are effectively traversing this graph.
@@ -347,6 +353,8 @@ The graph is **not strictly hierarchical**: components can have links and refere
 * **Follow both containment and link relationships.** Components are nested via `<p h=...>` elements, but logical connections are represented with `b:Link` child elements.
 * **Build a handle → name map.** Handles (e.g. `s="h:123"`) are common in link definitions. Build a dictionary so you can resolve these references.
 * **Be mindful of palettes.** The `type` attribute encodes the palette and block name (e.g. `kitControl:Add`). Grouping by palette helps narrow searches or generate statistics.
+
+</details>
 
 ---
 
