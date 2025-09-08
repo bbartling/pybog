@@ -302,33 +302,36 @@ class BogFolderBuilder:
         precision: int = 2,
         units: str = "u:null",
     ) -> None:
-        """Add a NumericWritable with sensible default facets."""
-        # --- FIX: Add validation for the facets string ---
-        try:
-            if units == "u:null":
-                facets_value = (
-                    f"units={units};;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
-                )
-            else:
-                # For any other unit, do not include the extra semicolons.
-                facets_value = (
-                    f"units={units}|precision=i:{precision}|min=d:-inf|max=d:+inf"
-                )
+        """
+        Adds a NumericWritable with sensible default facets.
 
-            # Simple validation: Check for balanced pipes and valid key=value pairs.
-            # This is not a full parser but catches the common error.
-            if "|" in facets_value:
-                parts = facets_value.split("|")
-                for part in parts:
-                    if "=" not in part:
-                        raise ValueError(f"Malformed facets part: '{part}'")
-        except Exception as e:
+        Note: Programmatically setting units is disabled to ensure stability across
+        different Niagara versions. Please set units manually in Workbench.
+
+        Parameters
+        ----------
+        name : str
+            The unique name for the component.
+        default_value : float, optional
+            The initial fallback value for the point.
+        precision : int, optional
+            The number of decimal places for display.
+        units : str, optional
+            This parameter is disabled and must not be used.
+
+        Raises
+        ------
+        ValueError
+            If the 'units' argument is provided with a value other than the default.
+        """
+        if units != "u:null":
             raise ValueError(
-                f"Failed to create valid facets string for units='{units}'. "
-                f"The unit '{units}' might be invalid or the format is incorrect. "
-                f"For non-null units, the builder creates a string like 'units=u:second|precision=i:0...'. "
-                f"Original error: {e}"
+                "Illegal argument: Programmatically setting 'units' is disabled due to platform instability. "
+                "Please add units manually in Workbench after importing the .bog file."
             )
+
+        # Construct a stable facets string. 'u:null' requires extra semicolons.
+        facets_value = f"units=u:null;;;;|precision=i:{precision}|min=d:-inf|max=d:+inf"
 
         self._add_component(
             "control:NumericWritable",

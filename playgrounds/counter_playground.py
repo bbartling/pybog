@@ -48,11 +48,7 @@ def main():
     builder.add_boolean_writable("Manual_Pulse", default_value=False)
     builder.add_boolean_writable("Manual_Clear", default_value=False)
     builder.add_numeric_writable("Increment_Value", default_value=1.0)
-
-    # --- Output for displaying the counter's value ---
-    # FINAL CORRECTION: The Niagara framework requires a unit prefix (like 'u:')
-    # and the plural form of the unit name, making 'u:seconds' the correct format.
-    builder.add_numeric_writable("Counter_Output", units="u:seconds", precision=0)
+    builder.add_numeric_writable("Counter_Output", precision=0)
 
     # --- Logic Component ---
     builder.add_counter("Test_Counter")
