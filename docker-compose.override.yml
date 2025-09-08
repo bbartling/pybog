@@ -1,8 +1,9 @@
 version: '3.8'
 
 services:
-  # Override frontend for development with hot reload
-  frontend:
+  # Override frontend for development with hot reload (separate container)
+  frontend-dev:
+    container_name: pybog-frontend-dev
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
@@ -10,11 +11,8 @@ services:
       - "3001:3000"
     volumes:
       # Mount source code for hot reload
-      - ./frontend/src:/app/src:cached
-      - ./frontend/public:/app/public:cached
-      - ./frontend/package.json:/app/package.json
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      # Use node_modules from container
+      - ./frontend:/app
+      # Keep node_modules inside container
       - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true

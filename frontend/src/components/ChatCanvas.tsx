@@ -132,6 +132,8 @@ const ChatCanvas: React.FC<ChatCanvasProps> = ({
   focusMessageId,
   highlightTarget,
 }) => {
+  // Base card width used across node sizing and positioning
+  const nodeWidth = 340;
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { setCenter, fitView, screenToFlowPosition } = useReactFlow();
