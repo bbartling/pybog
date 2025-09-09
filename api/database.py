@@ -14,10 +14,15 @@ from api.models import Base
 
 
 # Database configuration
-DATABASE_URL = os.getenv(
+_raw_db_url = os.getenv(
     "DATABASE_URL", 
     "postgresql+asyncpg://pybog:pybog123@postgres:5432/pybog"
 )
+# Ensure async driver
+if _raw_db_url.startswith("postgresql://") and "+asyncpg" not in _raw_db_url:
+    DATABASE_URL = _raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = _raw_db_url
 
 # Create async engine
 engine = create_async_engine(

@@ -1,0 +1,7 @@
+Single Zone Unit (typical of 1)
+Run Conditions - Scheduled:
+The unit shall run according to a user definable time schedule.
+Occupied mode: Maintain 75F cooling setpoint, 70F heating setpoint.
+Unoccupied mode: Maintain 85F cooling setpoint, 55F heating setpoint.
+Fan runs when system enabled. Cooling valve modulates to maintain setpoint.
+Damper maintains minimum position during occupied hours.

@@ -21,6 +21,8 @@ import UserNodeWithResend from './Nodes/UserNodeWithResend';
 import SystemNodeNiagara from './Nodes/SystemNodeNiagara';
 import AnalysisGridNode from './Nodes/AnalysisGridNode';
 import ProcessNodeNiagara from './Nodes/ProcessNodeNiagara';
+import TextReviewNode from './Nodes/TextReviewNode';
+import n8nWebhookService from '../services/n8nWebhookService';
 
 // Import neubrutalism theme
 import { TOKENS } from '../theme/neubrutalism';
@@ -30,6 +32,7 @@ const nodeTypes = {
   systemMessage: SystemNodeNiagara,
   analysisMessage: AnalysisGridNode,
   processMessage: ProcessNodeNiagara,
+  textReview: TextReviewNode,
 };
 
 export interface ChatMessage {
@@ -116,7 +119,11 @@ function ChatCanvasGridContent({
   const { fitView, setCenter } = useReactFlow();
 
   useEffect(() => {
-    if (!messages || messages.length === 0) return;
+    console.log('[ChatCanvasGrid] Rendering with messages:', messages?.length || 0, messages);
+    if (!messages || messages.length === 0) {
+      console.log('[ChatCanvasGrid] No messages to display');
+      return;
+    }
 
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
@@ -146,39 +153,83 @@ function ChatCanvasGridContent({
       const isProcess = message.metadata?.processStep !== undefined;
       const isAnalysis = message.metadata?.analysisData;
       
+      const hasExtracted = Boolean(message.metadata?.extractedText || (message as any)?.metadata?.data?.extractedText || (message as any)?.metadata?.data?.fullText);
+      const hasResume = Boolean(message.metadata?.resumeUrl || message.metadata?.workflowState?.resumeUrl);
+      const isTextReview = hasExtracted && hasResume;
+
       let nodeType = 'systemMessage';
       if (isUser) nodeType = 'userMessage';
       else if (isProcess) nodeType = 'processMessage';
+      else if (isTextReview) nodeType = 'textReview';
       else if (isAnalysis) nodeType = 'analysisMessage';
 
       const node: Node = {
         id: message.id,
         type: nodeType,
         position,
-        data: {
-          content: message.content,
-          timestamp: message.timestamp,
-          files: message.files,
-          sessionId: sessionId,
-          status: message.status,
-          analysis: message.metadata?.analysisData,
-          onApprove: isAnalysis ? onApproveAnalysis : undefined,
-          onRequestChanges: isAnalysis ? onRequestChanges : undefined,
-          // Resend is offered if message is failed OR it's the latest user message (quick retry)
-          onResend: isUser && onResendMessage && (message.status === 'failed' || index === lastUserIndex)
-            ? () => onResendMessage(message) : undefined,
-          stepKey: message.metadata?.processStep?.stepKey,
-          title: isProcess ? message.content : undefined,
-          detail: message.metadata?.processStep?.detail,
-          processStatus: message.metadata?.processStep?.status,
-          metrics: message.metadata?.processStep?.metrics,
-          // Option B: pass action set and resume URL for system nodes
-          actions: message.metadata?.actions,
-          resumeUrl: message.metadata?.workflowState?.resumeUrl || message.metadata?.resumeUrl,
-          workflowStatus: message.metadata?.status || message.metadata?.workflowState?.state,
-        },
+        data: (
+          nodeType === 'textReview'
+            ? {
+                sessionId,
+                extractedText:
+                  (message as any)?.metadata?.data?.fullText ||
+                  (message as any)?.metadata?.data?.extractedText ||
+                  message.metadata?.extractedText || '',
+                fileCount: (message as any)?.metadata?.fileCount || 1,
+                totalCharacters:
+                  (message as any)?.metadata?.totalCharacters ||
+                  ((message as any)?.metadata?.data?.fullText?.length || (message as any)?.metadata?.data?.extractedText?.length || message.metadata?.extractedText?.length || 0),
+                textQuality: (message as any)?.metadata?.textQuality || 'good',
+                qualityScore: (message as any)?.metadata?.qualityScore || 100,
+                qualityIssues: (message as any)?.metadata?.qualityIssues || [],
+                recommendations: (message as any)?.metadata?.recommendations || [],
+                hvacTermsFound: (message as any)?.metadata?.hvacTermsFound || 0,
+                currentStep: (message as any)?.metadata?.currentStep,
+                totalSteps: (message as any)?.metadata?.totalSteps,
+                progress: (message as any)?.metadata?.progress,
+                actions: (message as any)?.metadata?.actions,
+                onApprove: async (approvedText: string) => {
+                  const url = (message as any)?.metadata?.resumeUrl || (message as any)?.metadata?.workflowState?.resumeUrl;
+                  if (!url) return;
+                  await n8nWebhookService.approveTextExtraction(sessionId, approvedText, url);
+                },
+                onEdit: async (editedText: string) => {
+                  const url = (message as any)?.metadata?.resumeUrl || (message as any)?.metadata?.workflowState?.resumeUrl;
+                  if (!url) return;
+                  await n8nWebhookService.editExtractedText(sessionId, editedText, url);
+                },
+                onRetry: async () => {
+                  const url = (message as any)?.metadata?.resumeUrl || (message as any)?.metadata?.workflowState?.resumeUrl;
+                  if (!url) return;
+                  await n8nWebhookService.retryExtraction(sessionId, url);
+                },
+              }
+            : {
+                content: message.content,
+                timestamp: message.timestamp,
+                files: message.files,
+                sessionId: sessionId,
+                status: message.status,
+                analysis: message.metadata?.analysisData,
+                onApprove: isAnalysis ? onApproveAnalysis : undefined,
+                onRequestChanges: isAnalysis ? onRequestChanges : undefined,
+                // Resend is offered if message is failed OR it's the latest user message (quick retry)
+                onResend: isUser && onResendMessage && (message.status === 'failed' || index === lastUserIndex)
+                  ? () => onResendMessage(message) : undefined,
+                stepKey: message.metadata?.processStep?.stepKey,
+                title: isProcess ? message.content : undefined,
+                detail: message.metadata?.processStep?.detail,
+                processStatus: message.metadata?.processStep?.status,
+                metrics: message.metadata?.processStep?.metrics,
+                // Option B: pass action set and resume URL for system nodes
+                actions: message.metadata?.actions,
+                resumeUrl: message.metadata?.workflowState?.resumeUrl || message.metadata?.resumeUrl,
+                workflowStatus: message.metadata?.status || message.metadata?.workflowState?.state,
+              }
+        ),
         style: {
           width: GRID_CONFIG.NODE_WIDTH,
+          border: nodeType === 'textReview' ? `2px solid ${TOKENS.warning}` : undefined,
         },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,

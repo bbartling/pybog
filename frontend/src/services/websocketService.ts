@@ -37,7 +37,15 @@ class WebSocketService {
 
   constructor() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = process.env.REACT_APP_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000';
+    // Derive host from REACT_APP_API_URL safely (strip any path like /api)
+    const raw = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    let host = 'localhost:8000';
+    try {
+      const u = new URL(raw);
+      host = u.host; // host:port
+    } catch {
+      host = raw.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0] || 'localhost:8000';
+    }
     this.url = `${protocol}//${host}/ws`;
   }
 

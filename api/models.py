@@ -14,14 +14,15 @@ Base = declarative_base()
 class Session(Base):
     __tablename__ = 'sessions'
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(String(255), unique=True, nullable=False, index=True)
-    name = Column(String(255), nullable=False)
+    # Use external session_id as the primary key (matches existing DB and workflows)
+    session_id = Column(String(255), primary_key=True, index=True)
+    name = Column(String(255), nullable=False, default='New Session')
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
     last_activity = Column(DateTime(timezone=True), default=func.now())
     state = Column(String(50), default='idle')
-    metadata = Column(JSON, default={})
+    # Attribute name 'metadata' is reserved in SQLAlchemy declarative; map to DB column 'metadata'
+    meta = Column('metadata', JSON, default={})
     
     # Relationships
     messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
@@ -40,7 +41,7 @@ class Message(Base):
     message_type = Column(String(50))  # status, analysis, artifact, processing, error
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime(timezone=True), default=func.now())
-    metadata = Column(JSON, default={})
+    meta = Column('metadata', JSON, default={})
     
     # Relationships
     session = relationship("Session", back_populates="messages")
@@ -59,7 +60,7 @@ class File(Base):
     file_size = Column(BigInteger)
     storage_path = Column(Text)
     upload_time = Column(DateTime(timezone=True), default=func.now())
-    metadata = Column(JSON, default={})
+    meta = Column('metadata', JSON, default={})
     
     # Relationships
     session = relationship("Session", back_populates="files")
@@ -94,7 +95,7 @@ class BOGFile(Base):
     download_url = Column(Text)
     content = Column(JSON)
     created_at = Column(DateTime(timezone=True), default=func.now())
-    metadata = Column(JSON, default={})
+    meta = Column('metadata', JSON, default={})
     
     # Relationships
     session = relationship("Session", back_populates="bog_files")

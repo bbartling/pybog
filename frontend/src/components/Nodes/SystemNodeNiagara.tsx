@@ -3,6 +3,7 @@ import type { NodeProps } from 'reactflow';
 import { Handle, Position } from 'reactflow';
 import { Database, CheckCircle, XCircle, Wand2 } from 'lucide-react';
 import n8nWebhookService from '../../services/n8nWebhookService';
+import { workflowAPI } from '../../services/workflowAPI';
 import { TOKENS, STYLES, COMPONENTS } from '../../theme/neubrutalism';
 
 interface ActionDef { label: string; action: string; primary?: boolean; color?: string; recommended?: boolean; }
@@ -30,7 +31,9 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
     const confirm = a.confirm || a.approve || a['generation_confirm'];
     const regenerate = a.regenerate || a.retry || a['generation_regenerate'];
     const cancel = a.cancel || a.abort || a['generation_cancel'];
-    return { confirm, regenerate, cancel } as const;
+    const approveAnalysis = a.approve_analysis;
+    const refineAnalysis = a.refine_analysis || a.request_changes;
+    return { confirm, regenerate, cancel, approveAnalysis, refineAnalysis } as const;
   }, [data?.actions]);
 
   const statusPill = useMemo(() => {
@@ -44,15 +47,21 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
     return { bg: '#D6F3D7', label: 'OK' };
   }, [data?.workflowStatus]);
 
-  const handleAction = async (kind: 'confirm' | 'regenerate' | 'cancel') => {
+  const handleAction = async (kind: 'confirm' | 'regenerate' | 'cancel' | 'approve_analysis' | 'refine_analysis') => {
     if (!data?.sessionId) return;
     setSubmitting(kind);
     try {
-      await n8nWebhookService.confirmGeneration(
-        data.sessionId,
-        kind,
-        data.resumeUrl
-      );
+      if (kind === 'approve_analysis') {
+        await workflowAPI.handleApproval({ sessionId: data.sessionId!, action: 'approve_analysis' });
+      } else if (kind === 'refine_analysis') {
+        await workflowAPI.handleApproval({ sessionId: data.sessionId!, action: 'refine_analysis' });
+      } else {
+        await n8nWebhookService.confirmGeneration(
+          data.sessionId!,
+          kind as any,
+          data.resumeUrl
+        );
+      }
       setNote({ kind: 'success', text: 'Action sent' });
       setTimeout(() => setNote(null), 2000);
     } catch (e) {
@@ -153,8 +162,38 @@ const SystemNodeNiagara: React.FC<NodeProps<SystemData>> = ({ data }) => {
         </div>
         
         {/* Option B: Render action buttons when present */}
-        {(actionSet.confirm || actionSet.regenerate || actionSet.cancel) && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        {(actionSet.confirm || actionSet.regenerate || actionSet.cancel || actionSet.approveAnalysis || actionSet.refineAnalysis) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {actionSet.approveAnalysis && (
+              <button
+                onClick={() => handleAction('approve_analysis')}
+                disabled={!!submitting}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.success,
+                  flex: 2,
+                  fontWeight: 700,
+                }}
+              >
+                <CheckCircle size={14} style={{ marginRight: 6 }} />
+                {submitting === 'approve_analysis' ? 'Submitting…' : (actionSet.approveAnalysis.label || 'Approve Analysis')}
+              </button>
+            )}
+            {actionSet.refineAnalysis && (
+              <button
+                onClick={() => handleAction('refine_analysis')}
+                disabled={!!submitting}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.warning,
+                  flex: 1,
+                  fontWeight: 600,
+                }}
+              >
+                <Wand2 size={14} style={{ marginRight: 6 }} />
+                {submitting === 'refine_analysis' ? 'Sending…' : (actionSet.refineAnalysis.label || 'Request Changes')}
+              </button>
+            )}
             {actionSet.confirm && (
               <button
                 onClick={() => handleAction('confirm')}

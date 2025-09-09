@@ -14,18 +14,25 @@ import uuid
 import logging
 from pathlib import Path
 from datetime import datetime
+import mimetypes
 import asyncpg
 import httpx
 import asyncio
 import time
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# Setup logging first - before any logger usage
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Docker monitoring
 try:
     from .docker_monitor import DockerMonitor
+    docker_monitor = DockerMonitor() if 'DockerMonitor' in locals() else None
     DOCKER_AVAILABLE = True
 except ImportError:
     DOCKER_AVAILABLE = False
+    docker_monitor = None
     logger.warning("Docker monitoring not available - install docker package")
 
 # Redis Service
@@ -43,19 +50,26 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from bog_builder import BogFolderBuilder
 from .routes.conversation import router as conversation_router
 from .routes.session_management import router as session_router
+
+# Import optional routers independently so one failure doesn't block others
 try:
     from .routes.session_enhanced import router as enhanced_router
-    from .routes.unified_sessions import router as unified_router
-    from .routes.workflow import router as workflow_router
-except ImportError:
+except Exception as e:
     enhanced_router = None
-    unified_router = None
-    workflow_router = None
-from .n8n_resume import store_resume_url, append_message
+    logger.warning(f"Enhanced session routes unavailable: {e}")
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    from .routes.unified_sessions import router as unified_router
+except Exception as e:
+    unified_router = None
+    logger.warning(f"Unified session routes unavailable: {e}")
+
+try:
+    from .routes.workflow import router as workflow_router
+except Exception as e:
+    workflow_router = None
+    logger.warning(f"Workflow routes unavailable: {e}")
+from .n8n_resume import store_resume_url, append_message
 
 # Create FastAPI app
 app = FastAPI(
@@ -136,14 +150,17 @@ async def startup_event():
                 logger.warning("⚠️ Redis connection failed, using fallback")
         
         # Initialize Docker monitoring
-        if DOCKER_AVAILABLE:
-            await docker_monitor.initialize()
-            # Start background monitoring tasks
-            asyncio.create_task(health_monitoring_task())
-            asyncio.create_task(log_streaming_task())
-            logger.info("Docker monitoring initialized")
+        if DOCKER_AVAILABLE and docker_monitor:
+            try:
+                await docker_monitor.initialize()
+                # Start background monitoring tasks
+                asyncio.create_task(health_monitoring_task())
+                asyncio.create_task(log_streaming_task())
+                logger.info("Docker monitoring initialized")
+            except Exception as e:
+                logger.warning(f"Docker monitoring initialization failed: {e}")
         else:
-            logger.warning("Docker monitoring disabled - install docker package")
+            logger.warning("Docker monitoring disabled - docker package not available")
             
     except Exception as e:
         logger.warning(f"Could not initialize monitoring: {e}")
@@ -249,10 +266,100 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Initialize Docker monitor (if available)
-docker_monitor = None
-if DOCKER_AVAILABLE:
-    docker_monitor = DockerMonitor()
+# --- WebSocket endpoints for real-time updates ---
+from .services.workflow_service import workflow_service  # for Redis access
+
+@app.websocket("/ws/{session_id}")
+async def ws_session_updates(websocket: WebSocket, session_id: str):
+    """WebSocket channel that forwards Redis workflow events for a session to the client.
+    The server also responds to simple 'ping' messages with a 'pong'.
+    """
+    await manager.connect(websocket, session_id)
+
+    # Subscribe to the Redis pubsub channel for this session
+    redis = await workflow_service.get_redis()
+    pubsub = redis.pubsub()
+    channel = f"pybog:session:{session_id}:events"
+    await pubsub.subscribe(channel)
+
+    import asyncio
+    import json as _json
+
+    async def pump_redis_to_ws():
+        try:
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30.0)
+                if message and message.get("type") == "message":
+                    data = message.get("data")
+                    # data is already JSON string from publisher; forward as-is
+                    try:
+                        await websocket.send_text(data)
+                    except Exception:
+                        break
+                else:
+                    await asyncio.sleep(0.1)
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+            except Exception:
+                pass
+
+    async def read_ws():
+        try:
+            while True:
+                try:
+                    raw = await websocket.receive_text()
+                except Exception:
+                    break
+                # Respond to heartbeat pings from client
+                try:
+                    obj = _json.loads(raw)
+                    if obj.get("type") == "ping":
+                        await websocket.send_text(_json.dumps({"type": "pong"}))
+                except Exception:
+                    # ignore non-JSON messages
+                    pass
+        except WebSocketDisconnect:
+            pass
+
+    task_redis = asyncio.create_task(pump_redis_to_ws())
+    task_read = asyncio.create_task(read_ws())
+
+    done, pending = await asyncio.wait({task_redis, task_read}, return_when=asyncio.FIRST_COMPLETED)
+    for t in pending:
+        t.cancel()
+
+    manager.disconnect(session_id)
+
+@app.websocket("/ws/health")
+async def ws_health(websocket: WebSocket):
+    import uuid as _uuid
+    import asyncio
+    client_id = str(_uuid.uuid4())
+    await manager.connect_health(websocket, client_id)
+    try:
+        while True:
+            # Keep the socket open; background tasks broadcast to connected clients
+            await asyncio.sleep(60)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect_health(client_id)
+
+@app.websocket("/ws/logs")
+async def ws_logs(websocket: WebSocket):
+    import uuid as _uuid
+    import asyncio
+    client_id = str(_uuid.uuid4())
+    await manager.connect_logs(websocket, client_id)
+    try:
+        while True:
+            await asyncio.sleep(60)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect_logs(client_id)
 
 # Request audit middleware
 class RequestAuditMiddleware(BaseHTTPMiddleware):
@@ -440,9 +547,10 @@ async def health_check():
 
         n8n_ok = False
         try:
-            n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
+            n8n_url = os.getenv('N8N_URL', 'http://localhost:5678')
+            analyze_path = os.getenv('N8N_ANALYZE_WEBHOOK_PATH', '/webhook/pybog-analyze').lstrip('/')
             async with httpx.AsyncClient(timeout=2.0) as client:
-                resp = await client.get(f"{n8n_url}/webhook/pybog-analyze")
+                resp = await client.get(f"{n8n_url.rstrip('/')}/{analyze_path}")
                 n8n_ok = resp.status_code in (200, 401, 403, 404)
         except Exception:
             n8n_ok = False
@@ -639,6 +747,8 @@ async def download_bog(session_id: str, filename: str):
         media_type="application/octet-stream"
     )
 
+# Removed duplicate file serving endpoint - using the more comprehensive one below
+
 @app.post("/api/pybog/generate")
 async def pybog_generate(request: BogGenerationRequest):
     """n8n-compatible endpoint for BOG generation"""
@@ -684,8 +794,15 @@ async def create_session(request: CreateSessionRequest):
 from fastapi import Form
 
 @app.post("/api/sessions/{session_id}/upload")
-async def upload_session_file(session_id: str, file: UploadFile = File(...), session_id_form: Optional[str] = Form(None)):
-    """Store uploaded file under data/uploads/<session_id> and register in Postgres."""
+async def upload_session_file(
+    session_id: str,
+    file: UploadFile = File(...),
+    session_id_form: Optional[str] = Form(None),
+    message_id: Optional[str] = Form(None)
+):
+    """Store uploaded file under data/uploads/<session_id> and register in Postgres.
+    Returns a stable file_id and preview/download URLs so the frontend can persist and view files after refresh.
+    """
     try:
         await ensure_tables()
         # Align session id from form if provided
@@ -709,9 +826,22 @@ async def upload_session_file(session_id: str, file: UploadFile = File(...), ses
         with open(dest_path, 'wb') as f:
             f.write(content)
 
-        # Insert file record
+        # Insert file record (legacy session_files for compatibility)
         conn = await asyncpg.connect(db_url)
         try:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS session_files (
+                    id SERIAL PRIMARY KEY,
+                    session_id TEXT REFERENCES sessions(session_id) ON DELETE CASCADE,
+                    filename TEXT NOT NULL,
+                    mime_type TEXT,
+                    size BIGINT,
+                    path TEXT,
+                    uploaded_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                """
+            )
             await conn.execute(
                 """
                 INSERT INTO session_files(session_id, filename, mime_type, size, path)
@@ -726,9 +856,97 @@ async def upload_session_file(session_id: str, file: UploadFile = File(...), ses
         finally:
             await conn.close()
 
-        return {"session_id": sid, "filename": file.filename, "status": "stored"}
+        # Build stable identifiers and URLs for frontend persistence and preview
+        # We use a composite string id to avoid schema coupling here; unified 'files' table may also be present separately.
+        file_id = f"{sid}:{file.filename}"
+        preview_url = f"/api/files/{sid}/{file.filename}?inline=1"
+        download_url = f"/api/files/{sid}/{file.filename}?download=1"
+
+        return {
+            "session_id": sid,
+            "filename": file.filename,
+            "mime_type": file.content_type,
+            "size": len(content),
+            "status": "stored",
+            "file_id": file_id,
+            "preview_url": preview_url,
+            "download_url": download_url,
+            "message_id": message_id,
+        }
     except Exception as e:
         logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/files/{session_id}/{filename}")
+async def serve_session_file(
+    session_id: str,
+    filename: str,
+    inline: int = 1,
+    download: int = 0,
+):
+    """
+    Serve uploaded session files for inline preview or download.
+    - Looks in data/uploads/{session_id}/{filename}
+    - Falls back to path stored in session_files for compatibility
+    """
+    try:
+        # Primary path (direct file system)
+        file_path = UPLOADS_DIR / session_id / filename
+        if not file_path.exists():
+            # Fallback to database tables (both legacy and modern)
+            db_url = os.getenv('DATABASE_URL', 'postgresql://pybog:pybog123@postgres:5432/pybog')
+            conn = await asyncpg.connect(db_url)
+            try:
+                # Check modern files table first
+                row = await conn.fetchrow(
+                    """
+                    SELECT storage_path FROM files
+                    WHERE session_id = $1 AND filename = $2
+                    ORDER BY upload_time DESC LIMIT 1
+                    """,
+                    session_id, filename
+                )
+                if row and row['storage_path']:
+                    # Handle both absolute and relative paths
+                    storage_path = Path(row['storage_path'])
+                    logger.info(f"Found storage_path in files table: {storage_path}")
+                    if not storage_path.is_absolute():
+                        # Resolve relative to current working directory
+                        file_path = Path.cwd() / storage_path
+                        logger.info(f"Resolved relative path to: {file_path}")
+                    else:
+                        file_path = storage_path
+                        logger.info(f"Using absolute path: {file_path}")
+                else:
+                    # Fallback to legacy session_files table
+                    row = await conn.fetchrow(
+                        """
+                        SELECT path FROM session_files
+                        WHERE session_id = $1 AND filename = $2
+                        ORDER BY uploaded_at DESC LIMIT 1
+                        """,
+                        session_id, filename
+                    )
+                    if row and row['path']:
+                        file_path = Path(row['path'])
+            finally:
+                await conn.close()
+        logger.info(f"Final file_path check: {file_path}, exists: {file_path.exists()}")
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        media_type = mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
+        disposition = 'inline' if inline and not download else 'attachment'
+        return FileResponse(
+            path=str(file_path),
+            media_type=media_type,
+            filename=filename,
+            content_disposition_type=disposition,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Serve file failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Recent sessions endpoint - using /api/recent-sessions to avoid routing conflicts
@@ -820,12 +1038,18 @@ async def persist_message(session_id: str, req: PersistMessageRequest):
             "INSERT INTO sessions(session_id) VALUES($1) ON CONFLICT(session_id) DO NOTHING",
             session_id,
         )
-        # Insert message
+        # Insert message (use UPSERT to handle duplicates gracefully)
         await conn.execute(
             """
             INSERT INTO session_messages(session_id, message_id, type, content, metadata)
             VALUES($1, $2, $3, $4, $5)
-            ON CONFLICT(message_id) DO NOTHING
+            ON CONFLICT(message_id) DO UPDATE SET
+                content = EXCLUDED.content,
+                metadata = EXCLUDED.metadata,
+                created_at = CASE 
+                    WHEN session_messages.created_at IS NULL THEN NOW()
+                    ELSE session_messages.created_at
+                END
             """,
             session_id,
             req.message_id,
@@ -910,9 +1134,12 @@ async def get_full_session(session_id: str):
         files = [
             {
                 "id": r["id"],
+                "file_id": f"{session_id}:{r['filename']}",
                 "filename": r["filename"],
                 "mime_type": r["mime_type"],
                 "size": r["size"],
+                "preview_url": f"/api/files/{session_id}/{r['filename']}?inline=1",
+                "download_url": f"/api/files/{session_id}/{r['filename']}?download=1",
                 "path": r["path"],
                 "uploaded_at": (r.get("uploaded_at") or datetime.utcnow()).isoformat(),
             }
@@ -1101,8 +1328,8 @@ async def approve_analysis(session_id: str, request: WorkflowApprovalRequest):
             return {"message": "Analysis rejected, feedback recorded", "feedback": request.feedback}
         
         # Call n8n resume webhook to continue workflow
-        n8n_url = os.getenv('N8N_URL', 'http://n8n:5678')
-        resume_url = f"{n8n_url}/webhook/resume-chat"
+        n8n_url = os.getenv('N8N_URL', 'http://localhost:5678')
+        resume_url = f"{n8n_url.rstrip('/')}/webhook/resume-chat"
         
         async with httpx.AsyncClient() as client:
             response = await client.post(resume_url, json={

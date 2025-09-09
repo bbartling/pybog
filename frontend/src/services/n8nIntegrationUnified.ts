@@ -1,6 +1,8 @@
 // n8nIntegrationUnified.ts - Unified n8n workflow integration for PyBOG
 import { useState, useCallback, useEffect } from 'react';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // Unified response interface for all workflow operations
 interface WorkflowResponse {
   status:
@@ -58,15 +60,15 @@ interface SessionData {
 export class UnifiedN8NService {
   private baseUrl: string;
   private n8nUrl: string;
-  private analysisWebhookPath: string = '/webhook/pybog-analyze';    // NEW: Analysis workflow
-  private approvalWebhookPath: string = '/webhook/pybog-approve';    // NEW: Generation/approval workflow
+  private analysisWebhookPath: string = '/api/workflow/webhook/pybog-analyze';    // Proxied Analysis workflow
+  private approvalWebhookPath: string = '/api/workflow/webhook/pybog-approve';    // Proxied Generation/approval workflow
   private sessionId: string | null = null;
   private chatHistory: ChatMessage[] = [];
   private currentAnalysis: WorkflowResponse['analysis'] | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8000', n8nUrl: string = 'http://localhost:5678') {
+  constructor(baseUrl: string = API_BASE, n8nUrl: string = 'http://localhost:5678') {
     this.baseUrl = baseUrl;
-    this.n8nUrl = n8nUrl;
+    this.n8nUrl = n8nUrl; // Kept for compatibility, not used for requests (we proxy via API)
     this.restoreSession();
   }
 
@@ -86,8 +88,8 @@ export class UnifiedN8NService {
       formData.append('message', `Analyze HVAC sequence from: ${file.name}`);
       formData.append('action', 'analyze');
 
-      // Call Analysis Workflow (NEW ENDPOINT)
-      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
+      // Call Analysis Workflow via API proxy
+      const response = await fetch(`${this.baseUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
         body: formData
       });
@@ -130,8 +132,8 @@ export class UnifiedN8NService {
     };
 
     try {
-      // Call Analysis Workflow (NEW ENDPOINT)
-      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
+      // Call Analysis Workflow via API proxy
+      const response = await fetch(`${this.baseUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -174,8 +176,8 @@ export class UnifiedN8NService {
     };
 
     try {
-      // Call Generation Workflow (NEW ENDPOINT)
-      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
+      // Call Generation Workflow via API proxy
+      const response = await fetch(`${this.baseUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -210,8 +212,8 @@ export class UnifiedN8NService {
     };
 
     try {
-      // Call Generation Workflow (NEW ENDPOINT)
-      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
+      // Call Generation Workflow via API proxy
+      const response = await fetch(`${this.baseUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -243,7 +245,7 @@ export class UnifiedN8NService {
     };
 
     try {
-      const response = await fetch(`${this.n8nUrl}${this.analysisWebhookPath}`, {
+      const response = await fetch(`${this.baseUrl}${this.analysisWebhookPath}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -287,7 +289,7 @@ export class UnifiedN8NService {
     };
 
     try {
-      const response = await fetch(`${this.n8nUrl}${this.approvalWebhookPath}`, {
+      const response = await fetch(`${this.baseUrl}${this.approvalWebhookPath}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

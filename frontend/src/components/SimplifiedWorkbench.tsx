@@ -35,6 +35,7 @@ interface SimplifiedWorkbenchProps {
   analysisMessageId?: string;
   focusMessageId?: string;
   highlightTarget?: { kind: 'analysis' | 'block' | 'input' | 'output'; label?: string };
+  sessionFiles?: { file_id: string; filename: string; file_type: string; file_size: number; preview_url: string; }[];
   
   // actions
   onSendMessage: (text: string, files: File[]) => void;
@@ -67,6 +68,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   analysisMessageId,
   focusMessageId,
   highlightTarget,
+  sessionFiles = [],
   
   // actions
   onSendMessage,
@@ -401,6 +403,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
             sessions={sessions}
             currentAnalysis={currentAnalysis}
             messages={messages}
+            sessionFiles={sessionFiles}
             onCreateSession={onCreateSession}
             onSwitchSession={onSwitchSession}
             onDeleteSession={(id) => {

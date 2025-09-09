@@ -23,6 +23,28 @@ class WorkflowAPI {
     this.baseUrl = baseUrl;
   }
 
+  // --- Internal: robust JSON parsing to avoid "Unexpected end of JSON input" ---
+  private async parseJsonSafe(response: Response): Promise<any> {
+    try {
+      const ct = response.headers.get('content-type') || '';
+      const cl = response.headers.get('content-length');
+      const isEmpty = response.status === 204 || cl === '0';
+      if (isEmpty) return {};
+      if (ct.includes('application/json')) {
+        return await response.json();
+      }
+      const text = await response.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { text };
+      }
+    } catch {
+      return {};
+    }
+  }
+
   // ==================== Document Ingestion ====================
 
   async uploadDocuments(sessionId: string, files: File[], message?: string): Promise<any> {
@@ -53,25 +75,29 @@ class WorkflowAPI {
   // ==================== Chat Interaction ====================
 
   async sendChatMessage(request: ChatMessageRequest): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/workflow/chat/message`, {
+    // Route ALL text-only messages through the unified analyze webhook proxy.
+    // n8n Analysis workflow (pybog-analyze) routes chat/welcome paths internally.
+    const response = await fetch(`${this.baseUrl}/api/workflow/webhook/pybog-analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify({ sessionId: request.sessionId, message: request.message }),
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to send message');
+      // Try to parse JSON; fallback to text
+      let detail = 'Failed to send message';
+      try { const err = await this.parseJsonSafe(response); detail = err?.detail || err?.message || detail; } catch {}
+      throw new Error(detail);
     }
 
-    return response.json();
+    return this.parseJsonSafe(response);
   }
 
   // ==================== Approval Handling ====================
 
-  async handleApproval(request: ApprovalRequest): Promise<any> {
+  async handleApproval(request: ApprovalRequest | (ApprovalRequest & { action: string })): Promise<any> {
     const response = await fetch(`${this.baseUrl}/api/workflow/approve`, {
       method: 'POST',
       headers: {
@@ -344,11 +370,11 @@ class WorkflowAPI {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Webhook call failed');
+      const error = await this.parseJsonSafe(response);
+      throw new Error(error.detail || error.message || 'Webhook call failed');
     }
 
-    return response.json();
+    return this.parseJsonSafe(response);
   }
 }
 

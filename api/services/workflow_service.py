@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 import httpx
 from redis import asyncio as aioredis
+import os
 
 from ..models import Session, Message, File, AnalysisResult, BOGFile
 from ..n8n_resume import (
@@ -31,8 +32,9 @@ class WorkflowService:
     Unified service for managing n8n workflow interactions
     """
     
-    def __init__(self, n8n_url: str = "http://n8n:5678", redis_url: str = "redis://redis:6379/0"):
-        self.n8n_url = n8n_url
+    def __init__(self, n8n_url: str = None, redis_url: str = "redis://redis:6379/0"):
+        # Allow N8N_URL env override; default to localhost for dev
+        self.n8n_url = (n8n_url or os.getenv("N8N_URL", "http://localhost:5678")).rstrip("/")
         self.redis_url = redis_url
         self._redis: Optional[aioredis.Redis] = None
         
@@ -57,11 +59,12 @@ class WorkflowService:
         try:
             # Prepare multipart form data
             form_files = []
-            for idx, file in enumerate(files):
+            for _, file in enumerate(files):
                 file_content = await file.read()
                 await file.seek(0)  # Reset for potential reuse
+                # Use repeated 'files' field so n8n Webhook binaryPropertyName="files" receives them
                 form_files.append(
-                    (f'files{idx}', (file.filename, file_content, file.content_type or 'application/octet-stream'))
+                    ('files', (file.filename, file_content, file.content_type or 'application/octet-stream'))
                 )
             
             # Prepare session context
@@ -78,8 +81,11 @@ class WorkflowService:
                 })
             }
             
-            # Call n8n webhook
-            webhook_url = f"{self.n8n_url}/webhook/pybog-document-ingestion"
+            # Call n8n webhook (align with active Analysis workflow)
+            analyze_path = os.getenv('N8N_ANALYZE_WEBHOOK_PATH', '/webhook/pybog-analyze').lstrip('/')
+            analyze_full = os.getenv('N8N_ANALYZE_WEBHOOK')
+            webhook_url = analyze_full or f"{self.n8n_url}/{analyze_path}"
+            logger.info(f"Triggering analyze webhook: {webhook_url}")
             
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
@@ -89,18 +95,81 @@ class WorkflowService:
                 )
                 
                 if response.status_code >= 200 and response.status_code < 300:
-                    result = response.json()
+                    try:
+                        raw_result = response.json()
+                    except Exception:
+                        # Fallback: wrap plain text into JSON structure
+                        text_body = response.text or ''
+                        raw_result = { 'data': { 'message': text_body, 'status': 'chat_ready' if text_body else 'ok' } }
+
+                    # Respond to Webhook may return "allIncomingItems" (array of items)
+                    # Normalize to a single JSON object for the frontend
+                    first_json = None
+                    if isinstance(raw_result, list) and raw_result:
+                        try:
+                            first_json = raw_result[0].get('json') if isinstance(raw_result[0], dict) else None
+                        except Exception:
+                            first_json = None
+                    if not first_json and isinstance(raw_result, dict):
+                        first_json = raw_result.get('data') or raw_result
+
+                    normalized = {
+                        'sessionId': session_id,
+                        'status': first_json.get('status') if isinstance(first_json, dict) else None,
+                        'step': first_json.get('step') if isinstance(first_json, dict) else None,
+                        'message': (first_json.get('message') if isinstance(first_json, dict) else None) or 'Document received',
+                        'resumeUrl': first_json.get('resumeUrl') if isinstance(first_json, dict) else None,
+                        'extractedText': first_json.get('extractedText') if isinstance(first_json, dict) else None,
+                        'fullText': first_json.get('fullText') if isinstance(first_json, dict) else None,
+                        'textQuality': first_json.get('quality') if isinstance(first_json, dict) else None,
+                        'qualityScore': first_json.get('confidence') if isinstance(first_json, dict) else None,
+                        'qualityIssues': first_json.get('issues') if isinstance(first_json, dict) else None,
+                        'recommendations': first_json.get('recommendations') if isinstance(first_json, dict) else None,
+                        'hvacTermsFound': first_json.get('hvacTermsFound') if isinstance(first_json, dict) else None,
+                        'analysis': first_json.get('analysis') if isinstance(first_json, dict) else None,
+                        'summary': first_json.get('summary') if isinstance(first_json, dict) else None,
+                    }
                     
-                    # Store workflow execution info
-                    await self._store_workflow_execution(session_id, result)
+                    # Store workflow execution info (best-effort; raw_result might not include ids)
+                    try:
+                        await self._store_workflow_execution(session_id, raw_result if isinstance(raw_result, dict) else {})
+                    except Exception:
+                        pass
                     
-                    # Stream initial response
+                    # Stream initial event
                     await self._stream_workflow_event(session_id, {
                         'type': 'workflow_started',
-                        'workflow': 'document_ingestion',
-                        'executionId': result.get('executionId'),
+                        'workflow': 'analysis_document',
                         'files': [f.filename for f in files]
                     })
+                    
+                    # If we have a resume URL, persist it and stream an approval message
+                    resume_url = normalized.get('resumeUrl')
+                    if resume_url:
+                        try:
+                            await store_resume_url(session_id, resume_url)
+                        except Exception:
+                            pass
+                        # Reuse wait node handler to create a proper approval message for the UI
+                        try:
+                            await self.handle_wait_node_response(
+                                session_id,
+                                normalized.get('executionId') or '',
+                                {
+                                    'resumeUrl': resume_url,
+                                    'nodeName': 'Text Review',
+                                    'waitType': 'approval',
+                                    'data': {
+                                        'extractedText': normalized.get('extractedText'),
+                                        'textQuality': normalized.get('textQuality'),
+                                        'qualityScore': normalized.get('qualityScore'),
+                                        'qualityIssues': normalized.get('qualityIssues'),
+                                        'recommendations': normalized.get('recommendations'),
+                                    }
+                                }
+                            )
+                        except Exception:
+                            pass
                     
                     # Save files to database if provided
                     if db:
@@ -108,9 +177,8 @@ class WorkflowService:
                     
                     return {
                         'success': True,
-                        'executionId': result.get('executionId'),
-                        'resumeUrl': result.get('resumeUrl'),
-                        'data': result
+                        'data': normalized,
+                        'resumeUrl': normalized.get('resumeUrl')
                     }
                 else:
                     error_msg = f"Workflow error: {response.status_code} - {response.text}"
@@ -153,7 +221,10 @@ class WorkflowService:
                 }
             }
             
-            webhook_url = f"{self.n8n_url}/webhook/pybog-chat"
+            chat_path = os.getenv('N8N_CHAT_WEBHOOK_PATH', '/webhook/pybog-chat').lstrip('/')
+            chat_full = os.getenv('N8N_CHAT_WEBHOOK')
+            webhook_url = chat_full or f"{self.n8n_url}/{chat_path}"
+            logger.info(f"Triggering chat webhook: {webhook_url}")
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(webhook_url, json=payload)
@@ -257,6 +328,9 @@ class WorkflowService:
         action: str,
         feedback: Optional[str] = None,
         modifications: Optional[Dict[str, Any]] = None,
+        approved_text: Optional[str] = None,
+        analysis: Optional[Dict[str, Any]] = None,
+        user_action: Optional[str] = None,
         db: AsyncSession = None
     ) -> Dict[str, Any]:
         """
@@ -264,22 +338,32 @@ class WorkflowService:
         """
         try:
             # Build payload based on action
-            payload = {
+            # Build 'body' object as expected by n8n Wait nodes
+            body = {
                 'action': action,
                 'sessionId': session_id,
                 'timestamp': datetime.utcnow().isoformat()
             }
-            
+            if feedback:
+                body['feedback'] = feedback
+            if modifications:
+                body['modifications'] = modifications
+            if approved_text:
+                # For text approval
+                body['approvedText'] = approved_text
+                body['extractedText'] = approved_text
+            if analysis:
+                body['analysis'] = analysis
+            if user_action:
+                body['userAction'] = user_action
+
+            # Convenience flags for legacy actions
             if action == 'approve':
-                payload['approved'] = True
-                payload['feedback'] = feedback or 'Approved'
-            elif action == 'reject':
-                payload['approved'] = False
-                payload['feedback'] = feedback or 'Rejected'
-            elif action == 'modify':
-                payload['approved'] = False
-                payload['modifications'] = modifications or {}
-                payload['feedback'] = feedback or 'Modifications requested'
+                body['approved'] = True
+            elif action in ('reject', 'modify'):
+                body['approved'] = False
+
+            payload = { 'body': body }
             
             # Resume the workflow
             result = await resume_n8n_workflow(session_id, payload)
@@ -293,7 +377,7 @@ class WorkflowService:
                 })
                 
                 # Update session state
-                new_state = 'processing' if action == 'approve' else 'idle'
+                new_state = 'processing' if action in ('approve', 'approve_text', 'approve_analysis', 'confirm') else 'idle'
                 await self._update_session_state(session_id, new_state)
                 
                 # Save approval message
@@ -435,7 +519,7 @@ class WorkflowService:
                     filename=file.filename,
                     file_type=file.content_type,
                     file_size=file.size if hasattr(file, 'size') else 0,
-                    metadata={'uploaded_via': 'workflow'}
+                    meta={'uploaded_via': 'workflow'}
                 )
                 db.add(file_record)
             
@@ -460,7 +544,7 @@ class WorkflowService:
                 type=msg_type,
                 message_type=message_type,
                 content=content,
-                metadata={'source': 'workflow'}
+                meta={'source': 'workflow'}
             )
             db.add(message)
             await db.commit()
@@ -477,7 +561,7 @@ class WorkflowService:
         
         # Stream state change event
         await self._stream_workflow_event(session_id, {
-            'type': 'state_changed',
+            'type': 'state_change',
             'oldState': await redis.hget(f"pybog:session:{session_id}:state", "previous") or 'unknown',
             'newState': new_state
         })

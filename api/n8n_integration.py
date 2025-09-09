@@ -13,8 +13,9 @@ import io
 logger = logging.getLogger(__name__)
 
 class N8NIntegration:
-    def __init__(self, n8n_url: str = "http://n8n:5678"):
-        self.n8n_url = n8n_url
+    def __init__(self, n8n_url: str = None):
+        import os
+        self.n8n_url = (n8n_url or os.getenv("N8N_URL", "http://localhost:5678")).rstrip("/")
         
     async def send_document_to_ingestion_workflow(
         self, 
@@ -40,7 +41,8 @@ class N8NIntegration:
             }
             
             # If you later add a dedicated ingestion webhook, update the path here
-            webhook_url = f"{self.n8n_url}/webhook/pybog-analyze"
+            analyze_path = os.getenv('N8N_ANALYZE_WEBHOOK_PATH', '/webhook/pybog-analyze').lstrip('/')
+            webhook_url = f"{self.n8n_url}/{analyze_path}"
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -96,7 +98,8 @@ class N8NIntegration:
                 "conversationHistory": conversation_history or []
             }
             
-            webhook_url = f"{self.n8n_url}/webhook/pybog-analyze"
+            analyze_path = os.getenv('N8N_ANALYZE_WEBHOOK_PATH', '/webhook/pybog-analyze').lstrip('/')
+            webhook_url = f"{self.n8n_url}/{analyze_path}"
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(

@@ -178,11 +178,34 @@ class N8nWebhookService {
         throw new Error(`Webhook approval failed: ${response.status} ${response.statusText}`);
       }
 
-      const result = await response.json();
+      // Parse response robustly. Some n8n Respond to Webhook nodes may return
+      // no body (204) or non-JSON content. Avoid throwing "Unexpected end of JSON input".
+      let result: any = {};
+      try {
+        const contentType = response.headers.get('content-type') || '';
+        const contentLength = response.headers.get('content-length');
+        const isEmpty = response.status === 204 || contentLength === '0';
+        if (!isEmpty) {
+          if (contentType.includes('application/json')) {
+            result = await response.json();
+          } else {
+            const text = await response.text();
+            try {
+              result = text ? JSON.parse(text) : {};
+            } catch {
+              result = { text };
+            }
+          }
+        }
+      } catch (e) {
+        // Fall back to empty object – upstream may have already resumed without body
+        result = {};
+      }
+
       console.log('[N8n Webhook] Approval response:', result);
       
       // Store new resume URL if provided in response
-      if (result.resumeUrl && data.sessionId) {
+      if (result && result.resumeUrl && data.sessionId) {
         this.storeResumeUrl(data.sessionId, result.resumeUrl);
       }
       
@@ -335,6 +358,18 @@ class N8nWebhookService {
    */
   parseWorkflowResponse(response: any): WorkflowWaitingResponse | null {
     try {
+      // Handle null/undefined gracefully
+      if (!response) return null;
+      
+      // If response is a string, try to parse it
+      if (typeof response === 'string') {
+        try {
+          response = JSON.parse(response);
+        } catch {
+          return null;
+        }
+      }
+      
       const data = response?.data || response || {};
 
       // Store resume URL if present
@@ -342,24 +377,58 @@ class N8nWebhookService {
         this.storeResumeUrl(data.sessionId, data.resumeUrl);
       }
 
+      // Normalize step/status so the UI can react reliably even when n8n returns raw items
+      // Heuristics:
+      // - If a resumeUrl exists and we have extractedText/fullText, treat as initial text review
+      // - If analysis/summary present, treat as analysis review
+      // - If download/bog info present, treat as generation confirmation/completion
+      let computedStep: string | undefined = data.step;
+      let computedStatus: string | undefined = data.status;
+
+      const hasResume = Boolean(data.resumeUrl);
+      const hasExtracted = Boolean(data.extractedText || data.fullText);
+      const hasAnalysis = Boolean(data.analysis || data.analysisData || data.summary);
+      const hasArtifact = Boolean(data.downloadUrl || data.bogFilePath);
+
+      if (!computedStep || !computedStatus) {
+        if (hasResume && hasExtracted) {
+          computedStep = computedStep || 'text_review';
+          computedStatus = computedStatus || 'text_extracted';
+        } else if (hasResume && hasAnalysis) {
+          computedStep = computedStep || 'analysis_review';
+          computedStatus = computedStatus || 'analysis_complete';
+        } else if (hasResume && hasArtifact) {
+          computedStep = computedStep || 'generation_confirmation';
+          computedStatus = computedStatus || 'generation_complete';
+        } else if (hasResume) {
+          // If the upstream returned a chat_ready + resumeUrl (welcome path), DO NOT treat as approval.
+          const looksLikeChat = (data.status === 'chat_ready' || data.step === 'welcome' || data.interactionType === 'welcome_chat');
+          if (!looksLikeChat) {
+            computedStep = computedStep || 'text_review';
+            computedStatus = computedStatus || 'awaiting_approval';
+          }
+        }
+      }
+
       // Detect approval stage
       let approvalType: WorkflowWaitingResponse['approvalType'] | undefined;
-      if (data.step === 'text_review' || data.status === 'text_review_required' || data.status === 'text_extracted') {
+      if (computedStep === 'text_review' || computedStatus === 'text_review_required' || computedStatus === 'text_extracted' || data.requiresApproval || (hasResume && !hasAnalysis && !hasArtifact)) {
         approvalType = 'text_review';
-      } else if (data.step === 'analysis_review' || data.status === 'analysis_complete' || data.status === 'ready_for_review') {
+      } else if (computedStep === 'analysis_review' || computedStatus === 'analysis_complete' || computedStatus === 'ready_for_review') {
         approvalType = 'analysis_review';
-      } else if (data.step === 'generation_confirmation' || data.status === 'generation_complete' || data.status === 'awaiting_confirmation') {
+      } else if (computedStep === 'generation_confirmation' || computedStatus === 'generation_complete' || computedStatus === 'awaiting_confirmation') {
         approvalType = 'generation_confirmation';
       }
 
       return {
         resumeUrl: data.resumeUrl || '',
-        status: data.status || 'unknown',
-        step: data.step || '',
+        status: computedStatus || data.status || 'unknown',
+        step: computedStep || data.step || '',
         currentStep: data.currentStep,
         totalSteps: data.totalSteps,
         message: data.message || '',
         extractedText: data.extractedText,
+        fullText: data.fullText,
         totalCharacters: data.totalCharacters,
         fileCount: data.fileCount,
         textQuality: data.textQuality,
@@ -409,9 +478,10 @@ class N8nWebhookService {
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('pybog_resume_')) {
+        // Ensure key is a string before calling .replace()
+        if (key && typeof key === 'string' && key.startsWith('pybog_resume_')) {
           const sessionId = key.replace('pybog_resume_', '');
-          if (!sessions.includes(sessionId)) {
+          if (sessionId && !sessions.includes(sessionId)) {
             sessions.push(sessionId);
           }
         }
@@ -430,7 +500,8 @@ class N8nWebhookService {
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('pybog_resume_')) {
+        // Ensure key is a string before calling .startsWith()
+        if (key && typeof key === 'string' && key.startsWith('pybog_resume_')) {
           keysToRemove.push(key);
         }
       }

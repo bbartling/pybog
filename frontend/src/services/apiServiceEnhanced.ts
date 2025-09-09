@@ -48,6 +48,16 @@ export interface FullSession {
 }
 
 class EnhancedApiService {
+  private apiBase = API_BASE;
+
+  private toAbsolute(pathOrUrl?: string | null): string | undefined {
+    if (!pathOrUrl) return undefined;
+    if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+    const base = this.apiBase.replace(/\/$/, '');
+    const rel = String(pathOrUrl).startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+    return `${base}${rel}`;
+  }
+
   // Session Management
   async createSession(name: string = 'New Session'): Promise<{ session_id: string; name: string }> {
     console.log('📦 Creating session in database:', name);
@@ -140,6 +150,7 @@ class EnhancedApiService {
     filename: string;
     size: number;
     preview_url?: string;
+    download_url?: string;
   }> {
     console.log('📤 Uploading file:', file.name, 'Size:', file.size);
     
@@ -161,6 +172,11 @@ class EnhancedApiService {
     }
 
     const result = await response.json();
+    // Normalize URLs to absolute for viewer/iframe usage
+    if (result) {
+      result.preview_url = this.toAbsolute(result.preview_url) as any;
+      result.download_url = this.toAbsolute(result.download_url) as any;
+    }
     console.log('✅ File uploaded:', result);
     return result;
   }
@@ -288,14 +304,15 @@ class EnhancedApiService {
   async resendMessage(sessionId: string, message: ChatMessage): Promise<void> {
     console.log('🔄 Resending message:', message.id);
     
-    // Mark message as sending
+    // Generate a new message ID for the resent message to avoid duplicates
     const resendMessage = {
-      message_id: message.id,
+      message_id: `resend-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type: message.type,
       content: message.content,
       metadata: {
         ...message.metadata,
         resent: true,
+        original_id: message.id,
         original_timestamp: message.timestamp
       }
     };
@@ -305,19 +322,27 @@ class EnhancedApiService {
   }
 
   // Replay stored files for a session via server (streams binaries back into n8n)
-  async replayFiles(sessionId: string, sourceMessageId?: string): Promise<any> {
+  async replayFiles(sessionId: string, sourceMessageId?: string, message?: string): Promise<any> {
     try {
       const resp = await fetch(`${API_BASE}/api/workflow/replay-files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, source_message_id: sourceMessageId })
+        body: JSON.stringify({ session_id: sessionId, source_message_id: sourceMessageId, message })
       });
       if (!resp.ok) {
-        const error = await resp.text();
-        throw new Error(`Failed to replay files: ${error}`);
+        let errorMsg = 'Failed to replay files';
+        try {
+          const errorData = await resp.json();
+          errorMsg = errorData.detail || errorData.message || errorMsg;
+        } catch {
+          try {
+            errorMsg = await resp.text() || errorMsg;
+          } catch {}
+        }
+        throw new Error(errorMsg);
       }
       return await resp.json();
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Replay files failed:', e);
       throw e;
     }

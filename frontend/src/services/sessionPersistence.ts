@@ -23,6 +23,16 @@ class SessionPersistenceService {
   private readonly SESSION_KEY_PREFIX = 'pybog_session_';
   private readonly ACTIVE_SESSION_KEY = 'pybog_active_session';
   private readonly WORKFLOW_STATE_KEY_PREFIX = 'pybog_workflow_state_';
+  private readonly API_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
+  private isValidSessionId(id: string | null | undefined): boolean {
+    if (!id) return false;
+    const s = String(id).trim();
+    // Allow formats like session_1699999999999 or UUIDs
+    const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+    const legacy = /^session_\d{6,}$/;
+    return uuid.test(s) || legacy.test(s);
+  }
 
   /**
    * Remove invalid localStorage keys that can cause ghost sessions
@@ -46,15 +56,15 @@ class SessionPersistenceService {
 
         if (key.startsWith(this.SESSION_KEY_PREFIX)) {
           const id = key.replace(this.SESSION_KEY_PREFIX, '');
-          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+          if (!this.isValidSessionId(id)) toRemove.push(key);
         }
         if (key.startsWith(this.WORKFLOW_STATE_KEY_PREFIX)) {
           const id = key.replace(this.WORKFLOW_STATE_KEY_PREFIX, '');
-          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+          if (!this.isValidSessionId(id)) toRemove.push(key);
         }
         if (key.startsWith('pybog_resume_')) {
           const id = key.replace('pybog_resume_', '');
-          if (!id || id === 'undefined' || id === 'null') toRemove.push(key);
+          if (!this.isValidSessionId(id)) toRemove.push(key);
         }
       }
 
@@ -119,8 +129,16 @@ class SessionPersistenceService {
               session_state: session.workflowState?.state || 'idle',
             });
             message.persisted = true;
-          } catch (e) {
-            console.warn('Failed to persist message:', e);
+          } catch (e: any) {
+            // Gracefully handle duplicate message_id or server-side upsert
+            const msg = String(e?.message || e || '');
+            if (msg.includes('UniqueViolationError') || msg.includes('duplicate key value')) {
+              // Treat as persisted to avoid retry storms
+              message.persisted = true;
+              console.warn('Duplicate message detected; marking as persisted:', message.id);
+            } else {
+              console.warn('Failed to persist message:', e);
+            }
           }
         }
       }
@@ -196,6 +214,7 @@ class SessionPersistenceService {
               const fid = (f as any).file_id;
               if (!fid || referencedFileIds.has(fid)) continue;
               const sizeKb = f.file_size ? `${(f.file_size / 1024).toFixed(1)} KB` : undefined;
+              const absolutize = (u?: string) => !u ? undefined : (/^https?:\/\//i.test(u) ? u : `${this.API_BASE}${u.startsWith('/') ? u : '/' + u}`);
               const fileMsg: ChatMessage = {
                 id: `file-stored-${fid}`,
                 type: 'system',
@@ -206,7 +225,7 @@ class SessionPersistenceService {
                   status: 'complete' as const,
                   fileName: f.filename,
                   file_id: fid,
-                  previewUrl: (f as any).preview_url,
+                  previewUrl: absolutize((f as any).preview_url),
                 }
               } as any;
               messages.push(fileMsg);
@@ -261,7 +280,7 @@ class SessionPersistenceService {
         const key = localStorage.key(i);
         if (key && key.startsWith(this.SESSION_KEY_PREFIX)) {
           const id = key.replace(this.SESSION_KEY_PREFIX, '');
-          sessionIds.push(id);
+          if (this.isValidSessionId(id)) sessionIds.push(id);
         }
       }
     } catch (e) {
@@ -288,7 +307,7 @@ class SessionPersistenceService {
     try {
       const raw = localStorage.getItem(this.ACTIVE_SESSION_KEY);
       const id = (raw || '').trim();
-      if (!id || id === 'undefined' || id === 'null') return null;
+      if (!this.isValidSessionId(id)) return null;
       return id;
     } catch (e) {
       return null;
@@ -331,11 +350,13 @@ class SessionPersistenceService {
    * Restore all sessions from localStorage and database
    */
   async restoreAllSessions(): Promise<Map<string, PersistedSession>> {
+    console.log('[SessionPersistence] restoreAllSessions() called');
     const sessions = new Map<string, PersistedSession>();
     const processedIds = new Set<string>();
 
     // First load from localStorage
     const localIds = this.getLocalSessionIds();
+    console.log('[SessionPersistence] Found local session IDs:', localIds);
     for (const id of localIds) {
       if (processedIds.has(id)) continue;
       processedIds.add(id);
@@ -375,7 +396,9 @@ class SessionPersistenceService {
 
     // Then check database for recent sessions not in localStorage
     try {
+      console.log('[SessionPersistence] Fetching recent sessions from database...');
       const recent = await enhancedApiService.getRecentSessions(10);
+      console.log('[SessionPersistence] Database returned:', recent.sessions?.length || 0, 'recent session(s)');
       if (recent.sessions) {
         for (const dbSession of recent.sessions) {
           const sid = (dbSession as any)?.session_id;
@@ -383,9 +406,11 @@ class SessionPersistenceService {
             console.warn('[SessionPersistence] Skipping invalid recent session id:', sid);
             continue;
           }
+          console.log('[SessionPersistence] Processing database session:', sid);
           if (!processedIds.has(sid) && !sessions.has(sid)) {
             processedIds.add(sid);
             try {
+              console.log('[SessionPersistence] Loading full session data for:', sid);
               const fullSession = await this.loadSession(sid);
               if (fullSession) {
                 sessions.set(sid, fullSession);

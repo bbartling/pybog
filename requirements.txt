@@ -20,6 +20,7 @@ sqlalchemy[asyncio]
 # File processing (minimal)
 PyPDF2
 python-docx
+aiofiles
 
 # Development
 pytest

@@ -263,6 +263,10 @@ class ApiService {
       });
       
       if (!response.ok) {
+        // Treat 404 as already-deleted; return success shape for UI consistency
+        if (response.status === 404) {
+          return { session_id: sessionId, deleted: true, timestamp: new Date().toISOString(), alreadyDeleted: true };
+        }
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
       

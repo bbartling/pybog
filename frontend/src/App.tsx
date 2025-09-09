@@ -3,7 +3,7 @@ import SimplifiedWorkbench from './components/SimplifiedWorkbench';
 import ConsolePanel, { ConsoleMessage } from './components/ConsolePanel';
 import SystemMonitor from './components/SystemMonitor';
 import { Terminal } from 'lucide-react';
-import { UnifiedN8NService } from './services/n8nIntegrationUnified';
+import { workflowAPI } from './services/workflowAPI';
 import apiService from './services/apiService';
 import enhancedApiService from './services/apiServiceEnhanced';
 import n8nWebhookService from './services/n8nWebhookService';
@@ -12,6 +12,7 @@ import websocketService from './services/websocketService';
 import { ChatMessage } from './components/ChatCanvasGrid';
 import sessionPersistence from './services/sessionPersistence';
 import { generateSessionId, generateDefaultSessionName, generateSessionDisplayName, shouldUpdateSessionName, ensureUniqueSessionName } from './utils/sessionNaming';
+import LoadingOverlay from './components/LoadingOverlay';
 
 // Session model
 interface Session {
@@ -40,13 +41,17 @@ const App: React.FC = () => {
     return process.env.NODE_ENV !== 'production';
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [isInitializing, setIsInitializing] = useState(true);  // For initial app load
   const [workflowState, setWorkflowState] = useState<'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete'>('idle');
   const [focusMessageId, setFocusMessageId] = useState<string | undefined>(undefined);
+  const [sessionFiles, setSessionFiles] = useState<{ file_id: string; filename: string; file_type: string; file_size: number; preview_url: string; }[]>([]);
   // const [highlightTarget, setHighlightTarget] = useState<{kind:'analysis'|'block'|'input'|'output', label?: string}|undefined>(undefined);
 
   const analysisWatchdogRef = useRef<number | null>(null);
+  const replayInFlightRef = useRef<Record<string, boolean>>({});
 
-  const n8nService = useRef(new UnifiedN8NService());
+  // Using API-based workflow integration exclusively (no direct n8n client)
   const { addToast } = useToast();
   
   const activeSession = activeSessionId ? sessions[activeSessionId] : undefined;
@@ -54,6 +59,44 @@ const App: React.FC = () => {
   const sessionId = activeSessionId;
   const currentAnalysis = activeSession?.currentAnalysis || null;
   const analysisMessageId = activeSession?.analysisMessageId;
+  
+  // Load session files when active session changes
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeSessionId) {
+      setSessionFiles([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        console.log('[App] Loading files for session:', activeSessionId);
+        const fullSession = await enhancedApiService.getFullSession(activeSessionId);
+        if (cancelled) return;
+        
+        setSessionFiles(fullSession.files || []);
+        console.log('[App] Loaded', fullSession.files?.length || 0, 'files for session:', activeSessionId);
+      } catch (error) {
+        console.warn('[App] Failed to load session files:', error);
+        if (!cancelled) setSessionFiles([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [activeSessionId]);
+
+  // Debug: Log messages being passed to UI
+  useEffect(() => {
+    console.log('[App] Messages for UI:', {
+      activeSessionId,
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        id: m.id,
+        type: m.type,
+        content: m.content?.substring(0, 50) + '...'
+      }))
+    });
+  }, [activeSessionId, messages]);
 
   // Centralized workflow failure handler: stops loading, surfaces error, enables resend
   const clearAnalysisWatchdog = useCallback(() => {
@@ -63,10 +106,16 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleWorkflowFailure = useCallback((errorMessage: string) => {
+  const handleWorkflowFailure = useCallback((errorMessage: string | any) => {
+    // Ensure errorMessage is a string
+    const message = typeof errorMessage === 'string' ? errorMessage : 
+                    (errorMessage?.message || errorMessage?.toString() || 'Workflow failed');
+    
     clearAnalysisWatchdog();
     setWorkflowState('idle');
-    addToast('error', 'Workflow error', errorMessage);
+    setIsLoading(false);
+    setLoadingMessage('');
+    addToast('error', 'Workflow error', message);
     // inline console message to avoid dependency ordering
     setConsoleMessages(prev => ([
       ...prev,
@@ -75,7 +124,7 @@ const App: React.FC = () => {
         timestamp: new Date(),
         level: 'error',
         source: 'Workflow',
-        message: errorMessage,
+        message: message,
         details: undefined,
       }
     ]));
@@ -97,7 +146,7 @@ const App: React.FC = () => {
         id: `error-${Date.now()}`,
         type: 'system',
         messageType: 'status',
-        content: errorMessage || 'Workflow failed. Please try again or check the console for details.',
+        content: message || 'Workflow failed. Please try again or check the console for details.',
         timestamp: new Date(),
         metadata: { status: 'error' as const }
       } as any;
@@ -130,17 +179,23 @@ const App: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
+        console.log('[App] Starting session restoration...');
+        setIsInitializing(true);
+        setLoadingMessage('Loading your sessions...');
+        
         // Clean invalid local keys before restoring sessions
         try { sessionPersistence.cleanupInvalidLocalKeys(); } catch {}
 
         // Restore all sessions from persistence
         const restoredSessions = await sessionPersistence.restoreAllSessions();
+        console.log('[App] Restored sessions:', restoredSessions.size, 'session(s)');
         if (cancelled) return;
 
         if (restoredSessions.size > 0) {
           // Convert to Sessions object
           const sessionsObj: Record<string, Session> = {};
           restoredSessions.forEach((persistedSession, id) => {
+            console.log('[App] Processing session:', id, persistedSession.name, 'with', persistedSession.messages.length, 'messages');
             sessionsObj[id] = {
               id: persistedSession.id,
               name: persistedSession.name,
@@ -164,23 +219,27 @@ const App: React.FC = () => {
 
           // Restore active session or use most recent
           const savedActiveId = sessionPersistence.getActiveSessionId();
+          console.log('[App] Saved active ID:', savedActiveId, 'Available sessions:', Object.keys(sessionsObj));
           const activeId = savedActiveId && sessionsObj[savedActiveId] ? 
             savedActiveId : Object.keys(sessionsObj)[0];
+          console.log('[App] Setting active session to:', activeId);
           setActiveSessionId(activeId);
           sessionPersistence.saveActiveSessionId(activeId);
         } else {
+          console.log('[App] No existing sessions found, creating new session...');
           // Create new session if none exist
           // Attempt to create first session in the database so IDs are authoritative UUIDs
           try {
             const name = ensureUniqueSessionName(generateDefaultSessionName(1), []);
             const created = await enhancedApiService.createSession(name);
             const newId = created.session_id;
+            console.log('[App] Created new session:', newId, name);
             const initMessage: ChatMessage = {
               id: `init-${newId}`,
               type: 'system',
               content: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.',
               timestamp: new Date(),
-              persisted: false
+              persisted: true
             };
             const newSession: Session = {
               id: newId,
@@ -193,15 +252,14 @@ const App: React.FC = () => {
             setActiveSessionId(newId);
             sessionPersistence.saveActiveSessionId(newId);
             await sessionPersistence.saveSession({ ...newSession, analysisMessageId: undefined });
-            try {
-              await enhancedApiService.persistMessage(newId, {
-                message_id: initMessage.id,
-                type: 'system',
-                content: initMessage.content,
-                metadata: { kind: 'init' },
-                session_state: 'idle'
-              });
-            } catch {}
+            // Fire-and-forget persistence; already marked persisted to avoid double-save
+            enhancedApiService.persistMessage(newId, {
+              message_id: initMessage.id,
+              type: 'system',
+              content: initMessage.content,
+              metadata: { kind: 'init' },
+              session_state: 'idle'
+            }).catch(() => {});
           } catch {
             // Offline/local fallback
             const newId = generateSessionId();
@@ -238,6 +296,10 @@ const App: React.FC = () => {
         };
         setSessions({ [fallbackId]: { id: fallbackId, name: 'Session 1', createdAt: new Date(), messages: [init], currentAnalysis: null } });
         setActiveSessionId(fallbackId);
+        
+        // Clear initialization loading even on error
+        setIsInitializing(false);
+        setLoadingMessage('');
       }
 
       addConsoleMessage('info', 'System', 'PyBOG Control Builder initialized');
@@ -249,9 +311,28 @@ const App: React.FC = () => {
         addConsoleMessage('info', 'n8n', 'Workflow engine ready');
         addConsoleMessage('success', 'WebSocket', 'Real-time updates enabled');
       }, 1000);
+      
+      // Clear initialization loading
+      setIsInitializing(false);
+      setLoadingMessage('');
     })();
     return () => { cancelled = true; };
   }, [addConsoleMessage]);
+
+  // Debug: log active session changes
+  useEffect(() => {
+    console.log('[App] Active session changed:', {
+      activeSessionId,
+      activeSession: activeSession ? {
+        id: activeSession.id,
+        name: activeSession.name,
+        messageCount: activeSession.messages.length,
+        firstMessage: activeSession.messages[0]?.content?.substring(0, 50)
+      } : null,
+      totalSessions: Object.keys(sessions).length,
+      sessionIds: Object.keys(sessions)
+    });
+  }, [activeSessionId, activeSession, sessions]);
 
   // Persist console preference
   useEffect(() => {
@@ -310,6 +391,10 @@ const App: React.FC = () => {
     const baseName = generateDefaultSessionName(count);
     const name = ensureUniqueSessionName(baseName, Object.values(sessions).map(s => s.name));
     
+    // Show loading while creating session
+    setIsLoading(true);
+    setLoadingMessage('Creating new session...');
+    
     try {
       // Create session in database - use server authoritative UUID
       const created = await enhancedApiService.createSession(name);
@@ -321,7 +406,8 @@ const App: React.FC = () => {
         type: 'system',
         content: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.',
         timestamp: new Date(),
-        sessionId: sessionId
+        sessionId: sessionId,
+        persisted: true,
       };
       
       // Update local state
@@ -338,23 +424,30 @@ const App: React.FC = () => {
       setActiveSessionId(sessionId);
       setFocusMessageId(undefined);
       
-      // Persist initial message
-      await enhancedApiService.persistMessage(sessionId, {
+      // Persist initial message (fire-and-forget); session auto-save will skip due to persisted=true
+      enhancedApiService.persistMessage(sessionId, {
         message_id: initMessage.id,
         type: 'system',
         content: initMessage.content,
         metadata: { kind: 'init' },
         session_state: 'idle'
-      });
+      }).catch(() => {});
       
       addConsoleMessage('success', 'Session', `Created new session: ${name}`);
     } catch (e) {
       console.error('Failed to create session:', e);
       addConsoleMessage('error', 'Session', 'Failed to create session in database');
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
     }
   }, [sessions, addConsoleMessage]);
 
   const switchSession = useCallback(async (id: string) => {
+    // Show loading while switching
+    setIsLoading(true);
+    setLoadingMessage('Loading session...');
+    
     try {
       // Save current session before switching
       if (activeSessionId && activeSession) {
@@ -405,6 +498,9 @@ const App: React.FC = () => {
         sessionPersistence.saveActiveSessionId(id);
         setFocusMessageId(undefined);
       }
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
     }
   }, [sessions, activeSessionId, activeSession, workflowState]);
 
@@ -512,6 +608,8 @@ const App: React.FC = () => {
           handleWorkflowFailure(msg);
         } else if (event.data.state === 'awaiting_approval' || event.data.state === 'complete' || event.data.state === 'generating') {
           clearAnalysisWatchdog();
+          setIsLoading(false);
+          setLoadingMessage('');
         }
       }
     });
@@ -550,6 +648,8 @@ const App: React.FC = () => {
           }
         }));
         setWorkflowState('idle');
+        setIsLoading(false);
+        setLoadingMessage('');
         addConsoleMessage('info', 'Workflow', p.message || 'Chat ready');
         addToast('info', 'Chat ready', p.message);
         return;
@@ -647,6 +747,8 @@ const App: React.FC = () => {
 
       if (p.type === 'workflow_completed') {
         setWorkflowState('complete');
+        setIsLoading(false);
+        setLoadingMessage('');
         if (p.message) {
           const assistantMessage: ChatMessage = { id: `assistant-${Date.now()}`, type: 'assistant', content: p.message, timestamp: new Date() } as any;
           setSessions(prev => ({ ...prev, [activeSessionId]: { ...prev[activeSessionId], messages: [...(prev[activeSessionId]?.messages || []), assistantMessage] } }));
@@ -669,9 +771,15 @@ const App: React.FC = () => {
   // Handle message sending
   const handleSendMessage = useCallback(async (text: string, files: File[]) => {
     if (!activeSessionId) return;
-    setIsLoading(true);
+    
+    // Prevent duplicate sends
+    if (workflowState === 'analyzing') {
+      addToast('warning', 'Please wait', 'Still processing previous request');
+      return;
+    }
+    
+    // Don't show loading overlay for analysis - n8n provides its own feedback
     setWorkflowState('analyzing');
-    addToast('info', 'Analyzing', files.length > 0 ? 'Analyzing uploaded document' : 'Analyzing your request');
     clearAnalysisWatchdog();
     analysisWatchdogRef.current = window.setTimeout(() => {
       handleWorkflowFailure('Workflow did not respond in time. You can retry.');
@@ -679,20 +787,37 @@ const App: React.FC = () => {
     
     // Check if we should auto-update session name
     const currentSession = sessions[activeSessionId];
-    if (currentSession && shouldUpdateSessionName(currentSession.name, currentSession.messages)) {
-      const newName = generateSessionDisplayName([...currentSession.messages, { type: 'user', content: text }]);
-      setSessions(prev => ({
-        ...prev,
-        [activeSessionId]: {
-          ...prev[activeSessionId],
-          name: newName
+    const isGeneric = (n: string | undefined) => {
+      if (!n) return true;
+      const s = n.trim();
+      return s.startsWith('Session ') || s.startsWith('New Session') || /untitled/i.test(s) || /session at /i.test(s);
+    };
+    if (currentSession) {
+      let proposed: string | null = null;
+      // Prefer text-based naming when user typed something meaningful
+      if (shouldUpdateSessionName(currentSession.name, currentSession.messages)) {
+        proposed = generateSessionDisplayName([...currentSession.messages, { type: 'user', content: text }]);
+      }
+      // If no text or heuristics didn't trigger, name based on first uploaded file
+      if ((!proposed || proposed === 'New Session') && isGeneric(currentSession.name) && files && files.length > 0) {
+        const base = (files[0].name || 'Document').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        proposed = base.length > 0 ? `Review: ${base}` : null;
+      }
+      if (proposed && proposed.trim() && proposed !== currentSession.name) {
+        const newName = proposed.trim();
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            name: newName
+          }
+        }));
+        // Update in database
+        try {
+          await enhancedApiService.renameSession(activeSessionId, newName);
+        } catch (e) {
+          console.warn('Failed to update session name:', e);
         }
-      }));
-      // Update in database
-      try {
-        await enhancedApiService.renameSession(activeSessionId, newName);
-      } catch (e) {
-        console.warn('Failed to update session name:', e);
       }
     }
     
@@ -716,39 +841,59 @@ const App: React.FC = () => {
     }));
     
     try {
-      // Add live status message
-      const statusId = `status-${Date.now()}`;
-      const statusMessage: ChatMessage = {
-        id: statusId,
-        type: 'system',
-        messageType: 'status',
-        content: files.length > 0 ? 'Analyzing uploaded document…' : 'Analyzing your request…',
-        timestamp: new Date(),
-        sessionId: activeSessionId,
-      };
-      setSessions(prev => ({
-        ...prev,
-        [activeSessionId]: {
-          ...prev[activeSessionId],
-          messages: [...(prev[activeSessionId]?.messages || []), statusMessage]
-        }
-      }));
-      try { await apiService.persistMessage(activeSessionId, { message_id: statusId, type: 'system', content: statusMessage.content, metadata: { kind: 'status' }, session_state: 'analyzing' }); } catch {}
+      // Add live status message only for text-only requests (avoid clutter for file uploads)
+      if (files.length === 0) {
+        const statusId = `status-${Date.now()}`;
+        const statusMessage: ChatMessage = {
+          id: statusId,
+          type: 'system',
+          messageType: 'status',
+          content: 'Analyzing your request…',
+          timestamp: new Date(),
+          sessionId: activeSessionId,
+        };
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            messages: [...(prev[activeSessionId]?.messages || []), statusMessage]
+          }
+        }));
+        try { 
+          await apiService.persistMessage(activeSessionId, { message_id: statusId, type: 'system', content: statusMessage.content, metadata: { kind: 'status' }, session_state: 'analyzing' });
+          // Mark status message as persisted
+          setSessions(prev => {
+            const s = prev[activeSessionId];
+            if (!s) return prev;
+            const msgs = s.messages.map(m => m.id === statusId ? { ...m, persisted: true } : m);
+            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+          });
+        } catch {}
+      }
 
       if (files.length > 0) {
+        // Persist user message ONCE before processing files
+        try {
+          const fileMetadata = files.map(f => ({ name: f.name, size: f.size, type: f.type }));
+          await enhancedApiService.persistMessage(activeSessionId, {
+            message_id: userMessage.id,
+            type: 'user',
+            content: userMessage.content,
+            metadata: { files: fileMetadata },
+            session_state: 'analyzing'
+          });
+          // Mark user message as persisted
+          setSessions(prev => {
+            const s = prev[activeSessionId];
+            if (!s) return prev;
+            const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, persisted: true } : m);
+            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+          });
+        } catch (e) {
+          console.error('Failed to persist user message:', e);
+        }
+        
         for (const f of files) {
-          // Persist user message for file upload
-          try {
-            await enhancedApiService.persistMessage(activeSessionId, {
-              message_id: userMessage.id,
-              type: 'user',
-              content: userMessage.content,
-              metadata: { files: [{ name: f.name, size: f.size, type: f.type }] },
-              session_state: 'analyzing'
-            });
-          } catch (e) {
-            console.error('Failed to persist message:', e);
-          }
 
           // Upload file to backend with proper persistence
           try {
@@ -761,11 +906,13 @@ const App: React.FC = () => {
               content: `File uploaded: ${fileResult.filename} (${(fileSizeBytes / 1024).toFixed(1)} KB)`,
               timestamp: new Date(),
               sessionId: activeSessionId,
+              persisted: true,
               metadata: { 
                 status: 'complete' as const, 
                 fileName: fileResult.filename,
                 file_id: fileResult.file_id,
-                previewUrl: (fileResult as any).preview_url,
+                preview_url: (fileResult as any).preview_url,
+                previewUrl: (fileResult as any).preview_url,  // Keep both for compatibility
               }
             };
             
@@ -777,11 +924,19 @@ const App: React.FC = () => {
               }
             }));
             
+            // Persist (already marked persisted to avoid auto-save duplication)
             await enhancedApiService.persistMessage(activeSessionId, {
               message_id: fileStoredMsg.id,
               type: 'system',
               content: fileStoredMsg.content,
               metadata: fileStoredMsg.metadata
+            });
+            // Mark file stored message as persisted
+            setSessions(prev => {
+              const s = prev[activeSessionId];
+              if (!s) return prev;
+              const msgs = s.messages.map(m => m.id === fileStoredMsg.id ? { ...m, persisted: true } : m);
+              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
             });
             
             addConsoleMessage('success', 'Upload', `File stored: ${fileResult.filename}`);
@@ -790,16 +945,28 @@ const App: React.FC = () => {
             addConsoleMessage('error', 'Upload', `Failed to upload ${f.name}`);
           }
 
-          const response = await n8nService.current.uploadDocument(f);
-          
-          // Parse and handle webhook response with resumeUrl
-          const parsedResponse = n8nWebhookService.parseWorkflowResponse(response);
+          // Note: Do not trigger analysis here to avoid duplicate uploads.
+          // Analysis will be triggered once after all files are uploaded using the backend replay mechanism.
+        }
+        // After uploading all files, trigger analysis by replaying stored files from backend once
+        try {
+          // Compose a single execution: include the user's text if provided
+          if (replayInFlightRef.current[activeSessionId]) {
+            addConsoleMessage('warning', 'Workflow', 'Replay already in progress – skipping duplicate trigger');
+          } else {
+            replayInFlightRef.current[activeSessionId] = true;
+          }
+          const replayResp = await enhancedApiService.replayFiles(activeSessionId, undefined, text?.trim() ? text : undefined);
+          const parsedResponse = n8nWebhookService.parseWorkflowResponse(replayResp);
           if (parsedResponse && parsedResponse.resumeUrl) {
-            // Store resume URL for later approval
             n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl);
-            
-            // Handle text extraction review (waiting for approval)
-            if (parsedResponse.status === 'text_extracted' || parsedResponse.step === 'text_review') {
+            if (
+              parsedResponse.status === 'text_extracted' ||
+              parsedResponse.step === 'text_review' ||
+              parsedResponse.approvalType === 'text_review' ||
+              parsedResponse.data?.requiresApproval ||
+              Boolean(parsedResponse.extractedText)
+            ) {
               const textReviewMsg: ChatMessage = {
                 id: `text-review-${Date.now()}`,
                 type: 'system',
@@ -807,10 +974,11 @@ const App: React.FC = () => {
                 content: parsedResponse.message || 'Text extracted. Please review before analysis.',
                 timestamp: new Date(),
                 sessionId: activeSessionId,
-                metadata: {
-                  status: 'awaiting_approval',
-                  extractedText: parsedResponse.extractedText,
-                  textQuality: parsedResponse.textQuality,
+                  metadata: {
+                    status: 'awaiting_approval',
+                    extractedText: parsedResponse.extractedText,
+                    data: { fullText: (parsedResponse as any)?.fullText },
+                    textQuality: parsedResponse.textQuality,
                   qualityScore: parsedResponse.qualityScore,
                   qualityIssues: parsedResponse.qualityIssues,
                   recommendations: parsedResponse.recommendations,
@@ -825,7 +993,6 @@ const App: React.FC = () => {
                   resumeUrl: parsedResponse.resumeUrl
                 }
               };
-              
               setSessions(prev => ({
                 ...prev,
                 [activeSessionId]: {
@@ -833,12 +1000,11 @@ const App: React.FC = () => {
                   messages: [...(prev[activeSessionId]?.messages || []), textReviewMsg]
                 }
               }));
-              
+              // Focus the canvas on the new review node
+              setFocusMessageId(textReviewMsg.id);
               setWorkflowState('awaiting_approval');
               addConsoleMessage('info', 'Workflow', 'Text extraction complete. Awaiting user approval.');
-            }
-            // Handle analysis review (waiting for approval)
-            else if (parsedResponse.status === 'analysis_complete' || parsedResponse.step === 'analysis_review') {
+            } else if (parsedResponse.status === 'analysis_complete' || parsedResponse.step === 'analysis_review') {
               const analysisMsgId = `analysis-${Date.now()}`;
               const analysisMessage: ChatMessage = {
                 id: analysisMsgId,
@@ -855,7 +1021,6 @@ const App: React.FC = () => {
                   resumeUrl: parsedResponse.resumeUrl
                 }
               };
-              
               setSessions(prev => ({
                 ...prev,
                 [activeSessionId]: {
@@ -865,12 +1030,11 @@ const App: React.FC = () => {
                   analysisMessageId: analysisMsgId,
                 }
               }));
-              
+              // Focus the canvas on the review node
+              setFocusMessageId(analysisMsgId);
               setWorkflowState('awaiting_approval');
               addConsoleMessage('success', 'Analysis', 'HVAC analysis complete. Ready for review.');
-            }
-            // Handle generation confirmation (if ever returned at this stage)
-            else if (parsedResponse.step === 'generation_confirmation' || parsedResponse.status === 'generation_complete') {
+            } else if (parsedResponse.step === 'generation_confirmation' || parsedResponse.status === 'generation_complete') {
               n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl || '');
               const confirmationMsg: ChatMessage = {
                 id: `generation-confirm-${Date.now()}`,
@@ -894,58 +1058,35 @@ const App: React.FC = () => {
               }));
               setWorkflowState('awaiting_approval');
               addConsoleMessage('info', 'Generation', 'Awaiting generation confirmation.');
+            } else {
+              // Fallback: we received a resumeUrl but not enough hints to classify; show generic approval
+              const waitingMsg: ChatMessage = {
+                id: `wait-approval-${Date.now()}`,
+                type: 'system',
+                messageType: 'status',
+                content: parsedResponse.message || 'Awaiting your approval to continue…',
+                timestamp: new Date(),
+                sessionId: activeSessionId,
+                metadata: {
+                  status: 'awaiting_approval',
+                  resumeUrl: parsedResponse.resumeUrl
+                }
+              } as any;
+              setSessions(prev => ({
+                ...prev,
+                [activeSessionId]: {
+                  ...prev[activeSessionId],
+                  messages: [...(prev[activeSessionId]?.messages || []), waitingMsg]
+                }
+              }));
+              setWorkflowState('awaiting_approval');
+              addConsoleMessage('info', 'Workflow', 'Waiting for approval.');
             }
           }
-          // Chat-ready fallback (e.g., router fallback sent Chat Response)
-          else if ((response as any)?.status === 'chat_ready' || (response as any)?.status === 'chat_response') {
-            const assistantMessage: ChatMessage = {
-              id: `assistant-${Date.now()}`,
-              type: 'assistant',
-              content: response.message || 'Ready.',
-              timestamp: new Date(),
-            };
-            setSessions(prev => ({
-              ...prev,
-              [activeSessionId]: {
-                ...prev[activeSessionId],
-                messages: [...(prev[activeSessionId]?.messages || []), assistantMessage]
-              }
-            }));
-            setWorkflowState('idle');
-            addConsoleMessage('info', 'Workflow', response.message || 'Chat ready');
-            addToast('info', 'Chat ready', response.message);
-          }
-          // Fallback to original handling if no resumeUrl
-          else if (response?.status === 'ready_for_review' && response.analysis) {
-            const analysisMsgId = `analysis-${Date.now()}`;
-            const analysisMessage: ChatMessage = {
-              id: analysisMsgId,
-              type: 'assistant',
-              content: response.message || 'HVAC analysis complete. Please review.',
-              timestamp: new Date(),
-              sessionId: activeSessionId,
-              metadata: { analysisData: response.analysis }
-            };
-            setSessions(prev => ({
-              ...prev,
-              [activeSessionId]: {
-                ...prev[activeSessionId],
-                messages: [...(prev[activeSessionId]?.messages || []), analysisMessage],
-                currentAnalysis: { ...response.analysis, _messageId: analysisMsgId },
-                analysisMessageId: analysisMsgId,
-              }
-            }));
-            setWorkflowState('awaiting_approval');
-            try {
-              await apiService.persistMessage(activeSessionId, {
-                message_id: analysisMsgId,
-                type: 'assistant',
-                content: analysisMessage.content,
-                metadata: { analysisData: response.analysis },
-                session_state: 'awaiting_approval'
-              });
-            } catch {}
-          }
+        } catch (e) {
+          console.warn('Replay trigger failed:', e);
+        } finally {
+          delete replayInFlightRef.current[activeSessionId];
         }
       } else if (text) {
         // Persist user text message first
@@ -957,10 +1098,18 @@ const App: React.FC = () => {
             metadata: {},
             session_state: 'analyzing'
           });
+          // Mark user text message as persisted
+          setSessions(prev => {
+            const s = prev[activeSessionId];
+            if (!s) return prev;
+            const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, persisted: true } : m);
+            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+          });
         } catch {}
 
-        const response = await n8nService.current.sendMessage(text, text.length > 100);
-        if (response?.status === 'ready_for_review' && response.analysis) {
+        const raw = await workflowAPI.sendChatMessage({ sessionId: activeSessionId, message: text, includeContext: true });
+        const response = n8nWebhookService.parseWorkflowResponse(raw) || raw;
+        if ((response?.status === 'ready_for_review' || response?.status === 'analysis_complete') && (response.analysis || response.summary)) {
           const analysisMsgId = `analysis-${Date.now()}`;
           const analysisMessage: ChatMessage = {
             id: analysisMsgId,
@@ -987,6 +1136,13 @@ const App: React.FC = () => {
               metadata: { analysisData: response.analysis },
               session_state: 'awaiting_approval'
             });
+            // Mark analysis message as persisted
+            setSessions(prev => {
+              const s = prev[activeSessionId];
+              if (!s) return prev;
+              const msgs = s.messages.map(m => m.id === analysisMsgId ? { ...m, persisted: true } : m);
+              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+            });
           } catch {}
         } else if (response?.message) {
           const assistantMessage: ChatMessage = {
@@ -1002,11 +1158,19 @@ const App: React.FC = () => {
               messages: [...(prev[activeSessionId]?.messages || []), assistantMessage],
             }
           }));
-          try { await apiService.persistMessage(activeSessionId, { message_id: assistantMessage.id, type: 'assistant', content: assistantMessage.content }); } catch {}
+          try { 
+            await apiService.persistMessage(activeSessionId, { message_id: assistantMessage.id, type: 'assistant', content: assistantMessage.content });
+            setSessions(prev => {
+              const s = prev[activeSessionId];
+              if (!s) return prev;
+              const msgs = s.messages.map(m => m.id === assistantMessage.id ? { ...m, persisted: true } : m);
+              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+            });
+          } catch {}
         }
       }
     } catch (error: any) {
-      const errMsg = error?.message || 'Failed to send message';
+      const errMsg = typeof error?.message === 'string' ? error.message : 'Failed to send message';
       handleWorkflowFailure(errMsg);
     } finally {
       setIsLoading(false);
@@ -1019,122 +1183,60 @@ const App: React.FC = () => {
     setWorkflowState('generating');
     
     try {
-      // Check if we have a resume URL from n8n webhook
-      const resumeUrl = n8nWebhookService.getResumeUrl(activeSessionId);
-      
-      let response;
-      if (resumeUrl) {
-        // Use webhook service to approve via resumeUrl
-        const currentAnalysis = activeSession.currentAnalysis;
-        response = await n8nWebhookService.approveAnalysis(
-          activeSessionId, 
-          currentAnalysis,
-          resumeUrl
-        );
+      // Always use backend approval API to resume workflows
+      const response = await workflowAPI.handleApproval({ sessionId: activeSessionId, action: 'approve_analysis' });
+
+      if ((response?.status === 'complete' || response?.status === 'bog_generated') && response?.downloadUrl) {
+        const bogMessage: ChatMessage = {
+          id: `bog-${Date.now()}`,
+          type: 'assistant',
+          content: response.message || 'BOG file generated successfully!',
+          timestamp: new Date(),
+          metadata: { downloadUrl: response.downloadUrl }
+        };
         
-        // Parse the response to get next state
-        const parsedResponse = n8nWebhookService.parseWorkflowResponse(response);
-        if (parsedResponse) {
-          // If generation preview/confirmation step, confirm automatically for now
-          if (parsedResponse.step === 'generation_confirmation' || parsedResponse.status === 'generation_complete') {
-            if (parsedResponse.resumeUrl) {
-              n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl);
-            }
-            try {
-              const final = await n8nWebhookService.confirmGeneration(activeSessionId, 'confirm');
-              const done = n8nWebhookService.parseWorkflowResponse(final) || final;
-              const bogMessage: ChatMessage = {
-                id: `bog-${Date.now()}`,
-                type: 'assistant',
-                content: done.message || 'BOG file confirmed and ready for download!',
-                timestamp: new Date(),
-                metadata: { 
-                  downloadUrl: done.downloadUrl || final.downloadUrl,
-                  bogFilePath: done.bogFilePath || final.bogFilePath
-                }
-              } as any;
-              setSessions(prev => ({
-                ...prev,
-                [activeSessionId]: {
-                  ...prev[activeSessionId],
-                  messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
-                }
-              }));
-              setWorkflowState('complete');
-              addConsoleMessage('success', 'BOG', 'BOG file generated and confirmed');
-            } catch (e) {
-              addConsoleMessage('error', 'Generation', 'Failed to confirm generation');
-              setWorkflowState('awaiting_approval');
-            }
-          } else if (parsedResponse.status === 'complete' || parsedResponse.status === 'bog_generated') {
-            const bogMessage: ChatMessage = {
-              id: `bog-${Date.now()}`,
-              type: 'assistant',
-              content: parsedResponse.message || 'BOG file generated successfully!',
-              timestamp: new Date(),
-              metadata: { 
-                downloadUrl: parsedResponse.downloadUrl || response.downloadUrl,
-                bogFilePath: response.bogFilePath
-              }
-            };
-            setSessions(prev => ({
-              ...prev,
-              [activeSessionId]: {
-                ...prev[activeSessionId],
-                messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
-              }
-            }));
-            setWorkflowState('complete');
-            addConsoleMessage('success', 'BOG', 'BOG file generated successfully');
-          } else if (parsedResponse.resumeUrl) {
-            // Store new resume URL for next step
-            n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl);
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
           }
-        }
-      } else {
-        // Fallback to direct n8n service call
-        response = await n8nService.current.approveAnalysis();
+        }));
         
-        if (response.status === 'complete' && response.downloadUrl) {
-          const bogMessage: ChatMessage = {
-            id: `bog-${Date.now()}`,
-            type: 'assistant',
-            content: response.message || 'BOG file generated successfully!',
-            timestamp: new Date(),
-            metadata: { downloadUrl: response.downloadUrl }
-          };
-          
-          setSessions(prev => ({
-            ...prev,
-            [activeSessionId]: {
-              ...prev[activeSessionId],
-              messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
-            }
-          }));
-          
-          setWorkflowState('complete');
-        }
+        setWorkflowState('complete');
+      } else if (response?.resumeUrl) {
+        // If another wait step is returned, store resume URL client-side for UI
+        n8nWebhookService.storeResumeUrl(activeSessionId, response.resumeUrl);
+        setWorkflowState('awaiting_approval');
       }
-      
-      // Persist completion message
+
+      // Persist completion or status message
       try {
         const completeMsgId = `complete-${Date.now()}`;
         await apiService.persistMessage(activeSessionId, {
           message_id: completeMsgId,
           type: 'assistant',
-          content: response?.message || 'BOG file generated successfully!',
+          content: response?.message || 'Action completed',
           metadata: { downloadUrl: response?.downloadUrl },
-          session_state: 'complete'
+          session_state: response?.downloadUrl ? 'complete' : 'awaiting_approval'
+        });
+        setSessions(prev => {
+          const s = prev[activeSessionId];
+          if (!s) return prev;
+          const msgs = s.messages.map(m => m.id === completeMsgId ? { ...m, persisted: true } : m);
+          return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
         });
       } catch {}
       
     } catch (error: any) {
       console.error('Approval failed:', error);
-      handleWorkflowFailure(error?.message || 'Failed to approve analysis');
+      const errMsg = typeof error?.message === 'string' ? error.message : 'Failed to approve analysis';
+      handleWorkflowFailure(errMsg);
     }
   }, [activeSessionId, activeSession, addConsoleMessage]);
 
   // Handle analysis changes request
+
   const handleResendMessage = useCallback(async (message: ChatMessage) => {
     if (!activeSessionId) return;
     
@@ -1181,6 +1283,35 @@ const App: React.FC = () => {
         if (parsed?.status === 'text_extracted' || parsed?.step === 'text_review') {
           addConsoleMessage('success', 'Retry', 'Replayed stored files successfully');
           addToast('success', 'Retry', 'Replayed stored files successfully');
+          // Render a Text Review approval message node
+          const textReviewMsg: ChatMessage = {
+            id: `text-review-${Date.now()}`,
+            type: 'system',
+            messageType: 'status',
+            content: parsed?.message || 'Text extracted. Please review before analysis.',
+            timestamp: new Date(),
+            sessionId: activeSessionId,
+            metadata: {
+              status: 'awaiting_approval',
+              extractedText: parsed?.extractedText,
+              textQuality: parsed?.textQuality,
+              qualityScore: parsed?.qualityScore,
+              qualityIssues: parsed?.qualityIssues,
+              recommendations: parsed?.recommendations,
+              hvacTermsFound: parsed?.hvacTermsFound,
+              actions: parsed?.actions,
+              progress: parsed?.progress,
+              resumeUrl: parsed?.resumeUrl
+            }
+          } as any;
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), textReviewMsg]
+            }
+          }));
+          setWorkflowState('awaiting_approval');
           replaySucceeded = true;
         } else if (parsed?.status === 'chat_ready' || parsed?.status === 'chat_response' || replay?.status === 'chat_ready') {
           const assistantMessage: ChatMessage = {
@@ -1207,9 +1338,13 @@ const App: React.FC = () => {
       
       // If replay didn’t work, try re-uploading local files (last resort)
       if (!replaySucceeded) {
-        if (message.files && message.files.length > 0) {
-          await handleSendMessage(message.content, message.files);
+        const isRealFile = (f: any) => !!f && typeof f === 'object' && 'name' in f && 'size' in f && typeof (f as any).arrayBuffer === 'function';
+        const realFiles = Array.isArray(message.files) ? message.files.filter(isRealFile) as unknown as File[] : [];
+        if (realFiles.length > 0) {
+          await handleSendMessage(message.content, realFiles);
         } else {
+          // No server files and no in-memory files: prompt user to re-upload or fallback to extracted text
+          addToast('warning', 'Retry', 'Original files are not available. Re-upload the document or retry with extracted text.');
           // Fallback: re-analyze from extracted text or resend plain text
           const extracted = findLatestExtractedText();
           if (extracted) {
@@ -1218,7 +1353,8 @@ const App: React.FC = () => {
             analysisWatchdogRef.current = window.setTimeout(() => {
               handleWorkflowFailure('Workflow did not respond in time. You can retry.');
             }, 60000);
-            await n8nService.current.sendMessage(extracted, true);
+            // Re-run analysis through backend API (unified path)
+            await workflowAPI.sendChatMessage({ sessionId: activeSessionId, message: extracted, includeContext: true });
             addConsoleMessage('info', 'Retry', 'Re-analyzing from extracted text');
             addToast('info', 'Retry', 'Re-analyzing from extracted text');
           } else {
@@ -1287,10 +1423,10 @@ const App: React.FC = () => {
     if (!activeSessionId) return;
     
     try {
-      // This now calls Generation Workflow correctly
-      const response = await n8nService.current.requestChanges(feedback);
+      // Request modification via backend approval API
+      const response = await workflowAPI.handleApproval({ sessionId: activeSessionId, action: 'modify', feedback });
       
-      if (response.status === 'refinement_requested') {
+      if (response?.success || response?.status === 'refinement_requested') {
         const feedbackMessage: ChatMessage = {
           id: `feedback-${Date.now()}`,
           type: 'assistant', 
@@ -1329,6 +1465,7 @@ const App: React.FC = () => {
         currentAnalysis={currentAnalysis}
         analysisMessageId={analysisMessageId}
         focusMessageId={focusMessageId}
+        sessionFiles={sessionFiles}
         // highlightTarget={highlightTarget}
         
         // actions
@@ -1358,6 +1495,12 @@ const App: React.FC = () => {
         onClose={() => setIsConsoleOpen(false)}
         messages={consoleMessages}
         onClear={() => setConsoleMessages([])}
+      />
+      
+      {/* Loading Overlay - Show for: initial load, session operations, NOT for analyzing (has its own UI) */}
+      <LoadingOverlay 
+        isVisible={isInitializing || (isLoading && workflowState !== 'analyzing')} 
+        message={loadingMessage || (isInitializing ? 'Loading PyBOG Control Builder...' : 'Processing...')}
       />
     </div>
   );

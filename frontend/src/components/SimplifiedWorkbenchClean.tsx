@@ -83,10 +83,16 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = () => {
-    if (inputText.trim() || selectedFiles.length > 0) {
-      onSendMessage(inputText, selectedFiles);
+    if (selectedFiles.length > 0) {
+      // IMPORTANT: When files are attached, send an empty text payload to avoid chat-only routing.
+      onSendMessage('', selectedFiles);
       setInputText('');
       setSelectedFiles([]);
+      return;
+    }
+    if (inputText.trim()) {
+      onSendMessage(inputText, []);
+      setInputText('');
     }
   };
 
@@ -167,7 +173,26 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
           )}
           {workflowState === 'awaiting_approval' && (
             <>
-              <span style={{ color: '#f59e0b' }}>Review Required</span>
+              <span style={{ color: '#f59e0b', fontWeight: 700 }}>Review Required</span>
+              {focusMessageId && (
+                <button
+                  onClick={() => onNavigateToMessage(focusMessageId)}
+                  style={{
+                    marginLeft: 8,
+                    padding: '4px 8px',
+                    border: '1px solid #d97706',
+                    borderRadius: 6,
+                    background: '#FEF3C7',
+                    color: '#92400E',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="Jump to review"
+                >
+                  Open Review
+                </button>
+              )}
             </>
           )}
           {workflowState === 'generating' && (

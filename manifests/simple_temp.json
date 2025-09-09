@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "name": "SimpleTemperatureControl",
+    "description": "Basic temperature control loop",
+    "version": "1.0",
+    "author": "PyBOG Demo"
+  },
+  "layout": {
+    "style": "compact",
+    "spacing": "normal"
+  },
+  "folders": [
+    {
+      "name": "SimpleTemperatureControl",
+      "components": [
+        {
+          "type": "NumericWritable",
+          "name": "Room_Temp",
+          "properties": {
+            "value": 72.0
+          }
+        },
+        {
+          "type": "NumericWritable",
+          "name": "Setpoint",
+          "properties": {
+            "value": 70.0
+          }
+        },
+        {
+          "type": "LoopPoint",
+          "name": "PID_Controller",
+          "properties": {
+            "proportionalConstant": 2.0,
+            "integralConstant": 0.5
+          }
+        },
+        {
+          "type": "NumericWritable",
+          "name": "Output",
+          "properties": {
+            "value": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "source": "Room_Temp.out",
+      "target": "PID_Controller.controlledVariable"
+    },
+    {
+      "source": "Setpoint.out",
+      "target": "PID_Controller.setpoint"
+    },
+    {
+      "source": "PID_Controller.out",
+      "target": "Output.in16"
+    }
+  ],
+  "templates": []
+}

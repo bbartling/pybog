@@ -1,0 +1,191 @@
+# VAV Box Control Logic Manifest
+# This manifest defines a complete VAV box control sequence
+
+metadata:
+  name: "VAV_Box_Control"
+  description: "Variable Air Volume box control with temperature and airflow control"
+  version: "1.0"
+  author: "Building Automation Team"
+  tags: ["hvac", "vav", "temperature", "airflow"]
+
+layout:
+  style: hierarchical
+  spacing: normal
+  routing: orthogonal
+  grid_size: 50
+
+folders:
+  - name: "Inputs"
+    components:
+      # Temperature sensors
+      - type: NumericWritable
+        name: Zone_Temperature
+        properties:
+          value: 72.0
+        annotation: "Zone temperature sensor (°F)"
+      
+      - type: NumericWritable
+        name: Zone_Setpoint
+        properties:
+          value: 70.0
+        annotation: "Zone temperature setpoint (°F)"
+      
+      - type: NumericWritable
+        name: Discharge_Air_Temp
+        properties:
+          value: 55.0
+        annotation: "Discharge air temperature (°F)"
+      
+      # Airflow sensors
+      - type: NumericWritable
+        name: Airflow_Actual
+        properties:
+          value: 500.0
+        annotation: "Actual airflow (CFM)"
+      
+      - type: NumericWritable
+        name: Airflow_Setpoint
+        properties:
+          value: 500.0
+        annotation: "Airflow setpoint (CFM)"
+      
+      # Operating modes
+      - type: EnumWritable
+        name: Operating_Mode
+        properties:
+          facets: "range=E:{Off=0,Cooling=1,Heating=2,Ventilation=3}"
+          default: "1"
+        annotation: "Current operating mode"
+      
+      # Occupancy
+      - type: BooleanWritable
+        name: Occupied
+        properties:
+          value: true
+        annotation: "Occupancy status"
+
+  - name: "Control_Logic"
+    components:
+      # Temperature PID control
+      - type: LoopPoint
+        name: Temperature_PID
+        properties:
+          loopEnable: true
+          proportionalConstant: 2.0
+          integralConstant: 0.5
+          loopAction: 1
+        annotation: "Temperature control PID loop"
+      
+      # Airflow PID control
+      - type: LoopPoint
+        name: Airflow_PID
+        properties:
+          loopEnable: true
+          proportionalConstant: 1.5
+          integralConstant: 0.3
+          loopAction: 1
+        annotation: "Airflow control PID loop"
+      
+      # Min/Max airflow limits
+      - type: NumericWritable
+        name: Min_Airflow
+        properties:
+          value: 200.0
+        annotation: "Minimum airflow limit (CFM)"
+      
+      - type: NumericWritable
+        name: Max_Airflow
+        properties:
+          value: 1000.0
+        annotation: "Maximum airflow limit (CFM)"
+      
+      # Damper position limits
+      - type: Minimum
+        name: Damper_Min_Limit
+        annotation: "Enforce minimum damper position"
+      
+      - type: Maximum
+        name: Damper_Max_Limit
+        annotation: "Enforce maximum damper position"
+      
+      # Mode selection logic
+      - type: NumericSwitch
+        name: Cooling_Heating_Switch
+        annotation: "Switch between cooling and heating control"
+      
+      - type: BooleanSwitch
+        name: Occupied_Switch
+        annotation: "Switch between occupied/unoccupied setpoints"
+
+  - name: "Outputs"
+    components:
+      # Damper control
+      - type: NumericWritable
+        name: Damper_Command
+        properties:
+          value: 0.0
+        annotation: "Damper position command (0-100%)"
+      
+      # Reheat control
+      - type: NumericWritable
+        name: Reheat_Command
+        properties:
+          value: 0.0
+        annotation: "Reheat valve command (0-100%)"
+      
+      # Status outputs
+      - type: BooleanWritable
+        name: Alarm_Status
+        properties:
+          value: false
+        annotation: "System alarm status"
+
+connections:
+  # Temperature control loop
+  - source: Zone_Temperature.out
+    target: Temperature_PID.controlledVariable
+    annotation: "Zone temp to PID"
+  
+  - source: Zone_Setpoint.out
+    target: Temperature_PID.setpoint
+    annotation: "Setpoint to PID"
+  
+  # Airflow control loop
+  - source: Airflow_Actual.out
+    target: Airflow_PID.controlledVariable
+    annotation: "Actual flow to PID"
+  
+  - source: Airflow_Setpoint.out
+    target: Airflow_PID.setpoint
+    annotation: "Flow setpoint to PID"
+  
+  # Connect PIDs to damper control
+  - source: Temperature_PID.out
+    target: Cooling_Heating_Switch.inTrue
+    annotation: "Temp PID to cooling control"
+  
+  - source: Airflow_PID.out
+    target: Cooling_Heating_Switch.inFalse
+    annotation: "Flow PID to heating control"
+  
+  - source: Cooling_Heating_Switch.out
+    target: Damper_Min_Limit.inA
+    annotation: "Control signal to min limit"
+  
+  - source: Min_Airflow.out
+    target: Damper_Min_Limit.inB
+    annotation: "Min limit value"
+  
+  - source: Damper_Min_Limit.out
+    target: Damper_Max_Limit.inA
+    annotation: "Apply min limit"
+  
+  - source: Max_Airflow.out
+    target: Damper_Max_Limit.inB
+    annotation: "Max limit value"
+  
+  - source: Damper_Max_Limit.out
+    target: Damper_Command.in16
+    annotation: "Final damper command"
+
+templates: []  # No templates for this manifest

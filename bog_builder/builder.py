@@ -1,7 +1,7 @@
 """Main builder class for constructing Niagara .bog files.
 
-This module exposes the :class:`BogFolderBuilder` which provides a high‑level API
-for creating components, linking them together, organising them into sub‑folders
+This module exposes the :class:`BogFolderBuilder` which provides a high-level API
+for creating components, linking them together, organising them into sub-folders
 and saving the resulting graph as a `.bog` archive.  The builder delegates
 validation of component definitions, link definitions and reduction blocks to
 Pydantic models defined in :mod:`bog_builder.models`.
@@ -31,14 +31,14 @@ from .models import (
 class BogFolderBuilder:
     """
     Builds a Niagara `.bog` file with an intelligent layout engine.  The builder
-    supports automatic sub‑folder creation to manage complexity, rigorous input
+    supports automatic sub-folder creation to manage complexity, rigorous input
     validation via Pydantic models, and a variety of helper methods for common
     component types.
 
     Parameters
     ----------
     folder_name : str
-        The name of the root folder for the graph.  This becomes the top‑level
+        The name of the root folder for the graph.  This becomes the top-level
         folder name in the resulting `.bog` file.
     debug : bool, optional
         If ``True``, additional layout debug messages will be printed to stdout.
@@ -78,11 +78,11 @@ class BogFolderBuilder:
     # Folder management
     # ------------------------------------------------------------------
     def start_sub_folder(self, name: str) -> None:
-        """Starts a new sub‑folder context with validation.
+        """Starts a new sub-folder context with validation.
 
-        Sub‑folder names follow the same naming rules as component names:
+        Sub-folder names follow the same naming rules as component names:
         they must start with a letter or underscore and contain only
-        letters, digits or underscores.  Duplicate sub‑folder names at the
+        letters, digits or underscores.  Duplicate sub-folder names at the
         same level are not allowed.
 
         Raises
@@ -91,25 +91,25 @@ class BogFolderBuilder:
             If the folder name is invalid or already exists at the current level.
         """
         if not isinstance(name, str) or not name:
-            raise ValueError("Sub‑folder name must be a non‑empty string.")
+            raise ValueError("Sub-folder name must be a non-empty string.")
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
             suggestion = f"Calc_{re.sub(r'[^A-Za-z0-9_]', '_', name)}"
             raise ValueError(
-                f"Invalid sub‑folder name '{name}'. Folder names must start with a letter or "
+                f"Invalid sub-folder name '{name}'. Folder names must start with a letter or "
                 f"underscore and contain only letters, digits or underscores. Consider "
                 f"renaming it to '{suggestion}'."
             )
         parent_path = self._current_folder_path
         if name in self._sub_folders.get(parent_path, []):
             raise ValueError(
-                f"A sub‑folder named '{name}' already exists under '{self.get_current_path_str()}'. "
-                f"Choose a unique sub‑folder name."
+                f"A sub-folder named '{name}' already exists under '{self.get_current_path_str()}'. "
+                f"Choose a unique sub-folder name."
             )
         self._sub_folders[parent_path].append(name)
         self._current_folder_path = parent_path + (name,)
 
     def end_sub_folder(self) -> None:
-        """Exits the current sub‑folder, returning to the parent.
+        """Exits the current sub-folder, returning to the parent.
 
         Raises
         ------
@@ -118,7 +118,7 @@ class BogFolderBuilder:
         """
         if len(self._current_folder_path) <= 1:
             raise ValueError(
-                "Cannot end sub‑folder: already at the root folder. Ensure that "
+                "Cannot end sub-folder: already at the root folder. Ensure that "
                 "start_sub_folder() was called before end_sub_folder()."
             )
         self._current_folder_path = self._current_folder_path[:-1]
@@ -242,9 +242,9 @@ class BogFolderBuilder:
         This method validates the component definition using a Pydantic model.  It
         enforces naming conventions (names cannot start with a number and must be
         composed of letters, digits and underscores) and ensures the component
-        type follows the expected "palette:TypeName" format.  Time‑based
+        type follows the expected "palette:TypeName" format.  Time-based
         properties (e.g. 'onDelay', 'offDelay', 'period') are automatically
-        converted to millisecond strings if supplied in a human‑friendly format
+        converted to millisecond strings if supplied in a human-friendly format
         ("1m" -> "60000").
 
         Raises
@@ -354,7 +354,7 @@ class BogFolderBuilder:
         self.add_component("kitControl:BooleanSwitch", name)
 
     def add_numeric_select(self, name: str) -> None:
-        """Adds a NumericSelect component with default 10 inputs (A‑J)."""
+        """Adds a NumericSelect component with default 10 inputs (A-J)."""
         self.add_component(
             "kitControl:NumericSelect", name, properties={"numberValues": "10"}
         )
@@ -558,7 +558,7 @@ class BogFolderBuilder:
         The reduction logic splits the inputs into manageable chunks, creates
         tiers of comparison or aggregation blocks, and finally writes the result
         to a new writable component.  Input validation ensures the block type,
-        final output name and input names are well‑formed and that all
+        final output name and input names are well-formed and that all
         referenced inputs exist within the builder state.
 
         Raises
@@ -726,7 +726,7 @@ class BogFolderBuilder:
         Special layout for the root folder with column wrapping.
         Layout: Outputs (left, wraps) | Folders (center) | Inputs (right, wraps).
         """
-        self.log("Using TOP‑LEVEL interface layout.", is_layout_log=True)
+        self.log("Using TOP-LEVEL interface layout.", is_layout_log=True)
         coords: Dict[str, Tuple[int, int]] = {}
         inputs: List[str] = []
         outputs: List[str] = []
@@ -748,7 +748,7 @@ class BogFolderBuilder:
 
         self.log(f"Categorised as INPUTS: {sorted(inputs)}", is_layout_log=True)
         self.log(f"Categorised as OUTPUTS: {sorted(outputs)}", is_layout_log=True)
-        self.log(f"Found SUB‑FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
+        self.log(f"Found SUB-FOLDERS: {sorted(sub_folders)}", is_layout_log=True)
 
         # --- Position Outputs with wrapping ---
         x = self.START_X
@@ -815,7 +815,7 @@ class BogFolderBuilder:
         """
         Perform a rudimentary topological sort to group components into tiers.
 
-        Components are assigned to tiers based on their data‑flow dependencies.
+        Components are assigned to tiers based on their data-flow dependencies.
         If a complete DAG cannot be obtained (e.g. cycles exist), any components
         that are not visited by the topological pass are collected into an
         additional tier.  This prevents components involved in feedback loops
@@ -824,7 +824,7 @@ class BogFolderBuilder:
         """
         in_degree: Dict[str, int] = {name: 0 for name in components_in_scope}
         adj: Dict[str, List[str]] = defaultdict(list)
-        # Build adjacency and in‑degree counts for links internal to this scope
+        # Build adjacency and in-degree counts for links internal to this scope
         for link in self._links:
             source, target = link["source_name"], link["target_name"]
             if source in components_in_scope and target in components_in_scope:
@@ -1698,7 +1698,7 @@ class BogFolderBuilder:
         """Adds nested link tags for all links targeting components in this folder.
 
         Niagara Workbench expects links to be represented as child ``<p>`` elements
-        underneath the target component rather than as top‑level ``<l>`` tags.  Each
+        underneath the target component rather than as top-level ``<l>`` tags.  Each
         link element receives a sequential name (``Link``, ``Link1``, …) based on
         how many links already exist for the target component.  The link
         definition includes ``sourceOrd``, ``sourceSlotName`` and

@@ -89,7 +89,7 @@ async def create_session(
                 session_id=session_id,
                 type='system',
                 content=payload.initial_message,
-                metadata={"kind": "init"}
+                meta={"kind": "init"}
             )
             db.add(init_message)
         
@@ -181,7 +181,7 @@ async def get_full_session(
                     "type": m.type,
                     "content": m.content,
                     "created_at": m.timestamp.isoformat() if m.timestamp else None,
-                    "metadata": m.metadata
+                    "metadata": m.meta
                 }
                 for m in sorted(session.messages, key=lambda m: m.timestamp)
             ],
@@ -190,7 +190,8 @@ async def get_full_session(
                     "file_id": f.file_id,
                     "filename": f.filename,
                     "file_type": f.file_type,
-                    "file_size": f.file_size
+                    "file_size": f.file_size,
+                    "preview_url": f"/api/files/{session_id}/{f.filename}?inline=1"
                 }
                 for f in session.files
             ],
@@ -234,7 +235,7 @@ async def add_message(
             type=payload.type,
             message_type=payload.message_type,
             content=payload.content,
-            metadata=payload.metadata or {}
+            meta=payload.metadata or {}
         )
         db.add(new_message)
         
@@ -304,11 +305,17 @@ async def upload_file(
         
         await db.commit()
         
+        # Generate preview and download URLs
+        preview_url = f"/api/files/{session_id}/{file.filename}?inline=1"
+        download_url = f"/api/files/{session_id}/{file.filename}?download=1"
+        
         return {
             "file_id": file_id,
             "filename": file.filename,
             "size": len(content),
-            "stored": True
+            "preview_url": preview_url,
+            "download_url": download_url,
+            "status": "stored"
         }
     except HTTPException:
         raise
@@ -421,7 +428,7 @@ async def update_session(
         if payload.state is not None:
             session.state = payload.state
         if payload.metadata is not None:
-            session.metadata = {**session.metadata, **payload.metadata}
+            session.meta = {**(session.meta or {}), **payload.metadata}
         
         session.last_activity = datetime.utcnow()
         
