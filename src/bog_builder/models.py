@@ -35,6 +35,94 @@ except ImportError as exc:
         "pydantic is required for bog_builder models. Please install pydantic>=2."
     ) from exc
 
+# ==========================================================================
+# Data structures for robust type checking and conversion
+# ==========================================================================
+
+# Maps a component type to its primary output data type.
+# This helps the builder know what type of data is coming out of a source component.
+COMPONENT_OUTPUT_TYPE = {
+    "control:NumericWritable": "StatusNumeric",
+    "control:BooleanWritable": "StatusBoolean",
+    "control:EnumWritable": "StatusEnum",
+    "kitControl:NumericConst": "StatusNumeric",
+    "kitControl:BooleanConst": "StatusBoolean",
+    "kitControl:EnumConst": "StatusEnum",
+    "kitControl:Add": "StatusNumeric",
+    "kitControl:Subtract": "StatusNumeric",
+    "kitControl:Multiply": "StatusNumeric",
+    "kitControl:Divide": "StatusNumeric",
+    "kitControl:Average": "StatusNumeric",
+    "kitControl:Minimum": "StatusNumeric",
+    "kitControl:Maximum": "StatusNumeric",
+    "kitControl:SineWave": "StatusNumeric",
+    "kitControl:Counter": "StatusNumeric",
+    "kitControl:NumericLatch": "StatusNumeric",
+    "kitControl:BooleanLatch": "StatusBoolean",
+    "kitControl:NumericSwitch": "StatusNumeric",
+    "kitControl:BooleanSwitch": "StatusBoolean",
+    "kitControl:NumericSelect": "StatusNumeric",
+    "kitControl:Reset": "StatusNumeric",
+    "kitControl:LoopPoint": "StatusNumeric",
+    "kitControl:GreaterThan": "StatusBoolean",
+    "kitControl:LessThan": "StatusBoolean",
+    "kitControl:Equal": "StatusBoolean",
+    "kitControl:NotEqual": "StatusBoolean",
+    "kitControl:GreaterThanEqual": "StatusBoolean",
+    "kitControl:LessThanEqual": "StatusBoolean",
+    "kitControl:And": "StatusBoolean",
+    "kitControl:Or": "StatusBoolean",
+    "kitControl:Xor": "StatusBoolean",
+    "kitControl:Not": "StatusBoolean",
+    "kitControl:Tstat": "StatusBoolean",
+    "kitControl:OneShot": "StatusBoolean",
+    "kitControl:MultiVibrator": "StatusBoolean",
+    "kitControl:BooleanDelay": "StatusBoolean",
+    "kitControl:NumericDelay": "StatusNumeric",
+    "sch:BooleanSchedule": "StatusBoolean",
+    "sch:NumericSchedule": "StatusNumeric",
+    "sch:EnumSchedule": "StatusEnum",
+}
+
+# Maps a (component_type, slot_name) tuple to the data type that slot EXPECTS.
+# This is the "knowledge base" of special slot requirements.
+SLOT_TYPE_MAPPING = {
+    ("kitControl:MultiVibrator", "period"): "RelTime",
+    ("kitControl:MultiVibrator", "enabled"): "Boolean",
+    ("kitControl:BooleanDelay", "onDelay"): "RelTime",
+    ("kitControl:BooleanDelay", "offDelay"): "RelTime",
+    ("kitControl:NumericDelay", "updateTime"): "RelTime",
+    ("kitControl:NumericDelay", "maxStepSize"): "Number",
+    ("kitControl:LoopPoint", "proportionalConstant"): "Number",
+    ("kitControl:LoopPoint", "integralConstant"): "Number",
+    ("kitControl:LoopPoint", "derivativeConstant"): "Number",
+    ("kitControl:LoopPoint", "loopAction"): "FrozenEnum",
+    ("kitControl:Counter", "countIncrement"): "Number",
+    ("kitControl:LeadLagCycles", "cycleCountA"): "Number",
+    ("kitControl:LeadLagCycles", "cycleCountB"): "Number",
+    ("kitControl:LeadLagCycles", "cycleCountC"): "Number",
+    ("kitControl:LeadLagCycles", "cycleCountD"): "Number",
+    ("kitControl:LeadLagRuntime", "runtimeA"): "RelTime",
+    ("kitControl:LeadLagRuntime", "runtimeB"): "RelTime",
+    ("kitControl:LeadLagRuntime", "runtimeC"): "RelTime",
+    ("kitControl:LeadLagRuntime", "runtimeD"): "RelTime",
+    ("kitControl:LeadLagRuntime", "maxRuntime"): "RelTime",
+    ("kitControl:NumericSelect", "select"): "StatusEnum",
+    ("kitControl:Tstat", "action"): "FrozenEnum",
+}
+
+# Maps a (source_type, target_type) tuple to the required converter.
+# This is the "how-to" guide for fixing type mismatches.
+CONVERSION_MAP = {
+    ("StatusNumeric", "RelTime"): "conv:StatusNumericToRelTime",
+    ("StatusNumeric", "Number"): "conv:StatusNumericToNumber",
+    ("StatusNumeric", "StatusEnum"): "conv:StatusNumericToStatusEnum",
+    ("StatusBoolean", "Boolean"): "conv:StatusBooleanToBoolean",
+    ("StatusBoolean", "FrozenEnum"): "conv:StatusBooleanToFrozenEnum",
+    ("StatusBoolean", "StatusNumeric"): "conv:StatusBooleanToStatusNumeric",
+    ("StatusEnum", "StatusNumeric"): "conv:StatusEnumToStatusNumeric",
+}
+
 
 COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:Add": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},

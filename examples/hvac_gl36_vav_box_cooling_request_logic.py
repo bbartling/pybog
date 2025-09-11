@@ -57,29 +57,21 @@ def main():
     builder.add_greater_than("Temp_GT_SP_plus_5F")
     builder.add_boolean_delay("Timer_2min_Delay3", on_delay="120000")
     builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_numeric_const(
-        "Const_3_Req", properties={"out": 3.0}
-    )
+    builder.add_numeric_const("Const_3_Req", properties={"out": 3.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_greater_than("Temp_GT_SP_plus_3F")
     builder.add_boolean_delay("Timer_2min_Delay2", on_delay="120000")
     builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_numeric_const(
-        "Const_2_Req", properties={"out": 2.0}
-    )
+    builder.add_numeric_const("Const_2_Req", properties={"out": 2.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate1RequestLogic")
     builder.add_greater_than("Demand_GT_95")
     builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_numeric_const(
-        "Const_95", properties={"out": 95.0}
-    )
-    builder.add_numeric_const(
-        "Const_1_Req", properties={"out": 1.0}
-    )
+    builder.add_numeric_const("Const_95", properties={"out": 95.0})
+    builder.add_numeric_const("Const_1_Req", properties={"out": 1.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Prioritization")

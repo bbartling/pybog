@@ -96,9 +96,7 @@ def main():
     b.add_subtract("ExcessRequests")
 
     b.add_multiply("ProportionalResponse")
-    b.add_maximum(
-        "CappedResponse"
-    )  # Use Maximum for negative response cap
+    b.add_maximum("CappedResponse")  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 

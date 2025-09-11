@@ -22,7 +22,10 @@ def main():
         description="Build an AHU fan duct static pressure control loop (.bog file)."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
@@ -180,12 +183,8 @@ def main():
     builder.add_maximum("Max_Final")
 
     # --- Hysteresis (SR Latch) Logic ---
-    builder.add_numeric_const(
-        "Enable_Setpoint", properties={"value": 30.0}
-    )
-    builder.add_numeric_const(
-        "Disable_Setpoint", properties={"value": 15.0}
-    )
+    builder.add_numeric_const("Enable_Setpoint", properties={"value": 30.0})
+    builder.add_numeric_const("Disable_Setpoint", properties={"value": 15.0})
     builder.add_greater_than("Set_Condition")
     builder.add_less_than("Reset_Condition_Raw")
     builder.add_not("Reset_Condition")
@@ -262,7 +261,6 @@ def main():
     print(
         f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
     )
-    print("Drag this file into Niagara Workbench to test the logic.")
 
 
 if __name__ == "__main__":
@@ -603,9 +601,7 @@ def main():
     b.add_subtract("ExcessRequests")
 
     b.add_multiply("ProportionalResponse")
-    b.add_maximum(
-        "CappedResponse"
-    )  # Use Maximum for negative response cap
+    b.add_maximum("CappedResponse")  # Use Maximum for negative response cap
 
     b.add_numeric_switch("AdjustmentSwitch")
 
@@ -813,29 +809,21 @@ def main():
     builder.add_greater_than("Temp_GT_SP_plus_5F")
     builder.add_boolean_delay("Timer_2min_Delay3", on_delay="120000")
     builder.add_numeric_switch("NumericSwitch_3_Req")
-    builder.add_numeric_const(
-        "Const_3_Req", properties={"out": 3.0}
-    )
+    builder.add_numeric_const("Const_3_Req", properties={"out": 3.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate2RequestsLogic")
     builder.add_greater_than("Temp_GT_SP_plus_3F")
     builder.add_boolean_delay("Timer_2min_Delay2", on_delay="120000")
     builder.add_numeric_switch("NumericSwitch_2_Req")
-    builder.add_numeric_const(
-        "Const_2_Req", properties={"out": 2.0}
-    )
+    builder.add_numeric_const("Const_2_Req", properties={"out": 2.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Generate1RequestLogic")
     builder.add_greater_than("Demand_GT_95")
     builder.add_numeric_switch("NumericSwitch_1_Req")
-    builder.add_numeric_const(
-        "Const_95", properties={"out": 95.0}
-    )
-    builder.add_numeric_const(
-        "Const_1_Req", properties={"out": 1.0}
-    )
+    builder.add_numeric_const("Const_95", properties={"out": 95.0})
+    builder.add_numeric_const("Const_1_Req", properties={"out": 1.0})
     builder.end_sub_folder()
 
     builder.start_sub_folder("Prioritization")
@@ -1023,20 +1011,8 @@ if __name__ == "__main__":
 DIR: .
 === CODE START ===
 """
-Human asks via Chat input:
-
-Create a Niagara .bog for a simple chiller plant with one air-cooled chiller and two chilled-water pumps.
-Expose at the top level: a Boolean output for the chiller start command, two Boolean outputs for Pump A/B
-commands, and two Boolean input statuses for Pump A/B. Use a single “Logic” sub-folder for all internal
-blocks. Enable the plant from an outside-air temperature input wired into a kitControl Tstat block with
-setpoint 60 and a differential of 2; when the Tstat output is true, drive the chiller start Boolean
-output true immediately with correct settings on the Tstat direction. Feed that same Tstat boolean output
-into a kitControl LeadLagRuntime/Cycles "in" and have the block configured for 2 pumps, with rotation
-based on a max runtime of 40 hours, and use Counters to record each pump start. Before each pump command
-leaves the Lead/Lag block, insert a kitControl BooleanDelay set to 30 seconds, one delay per pump output,
-then wire each delayed signal to its respective Pump A/B command. OR the two pump status inputs and wire
-the OR output back to the Lead/Lag feedback input. Keep all algorithm inputs/outputs at top level,
-all logic inside the single sub-folder, and arrange the wiresheet cleanly.
+Creates a Niagara .bog for a simple chiller plant with one air-cooled chiller and two chilled-water pumps.
+The logic enables the plant based on outside air temperature and rotates the pumps based on cycle count.
 """
 
 import os, argparse
@@ -1048,7 +1024,7 @@ def main():
     Builds and saves the simple chiller plant .bog file with refactored configuration links.
     """
     p = argparse.ArgumentParser(
-        description="Build a G36 Trim & Respond for duct pressure"
+        description="Build a .bog file for a simple one-chiller, two-pump plant."
     )
     p.add_argument("-o", "--output_dir", default="examples")
     args = p.parse_args()
@@ -1056,6 +1032,7 @@ def main():
     # Initialize the BogFolderBuilder with the top-level folder name.
     builder = BogFolderBuilder("SimpleChillerPlant", debug=True)
 
+    print("--- Creating Top-Level Inputs & Outputs ---")
     # --- Top-Level Inputs & Outputs ---
     builder.add_numeric_writable("Outside_Air_Temperature", default_value=75.0)
     builder.add_boolean_writable("Pump_A_Status", default_value=False)
@@ -1065,21 +1042,16 @@ def main():
     builder.add_boolean_writable("Pump_A_Cmd", default_value=False)
     builder.add_boolean_writable("Pump_B_Cmd", default_value=False)
 
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
     # --- Logic Components (organized inside a single sub-folder) ---
     builder.start_sub_folder("Logic")
 
-    # --- Tstat Refactoring Start ---
-    # 1. Add Tstat component without complex properties.
+    # Tstat block to enable the plant based on OAT.
     builder.add_tstat("Plant_Enable_Tstat")
-
-    # 2. Create explicit constants for Tstat configuration.
-    builder.add_numeric_const("Enable_Setpoint", properties={"value": 60.0})
-    builder.add_numeric_const("Enable_Differential", properties={"value": 2.0})
-    # action=False means direct-acting.
-    builder.add_boolean_const(
-        "Enable_Action_Direct", properties={"value": False}
-    )
-    # --- Tstat Refactoring End ---
+    builder.add_numeric_const("Enable_Setpoint", value=60.0)
+    builder.add_numeric_const("Enable_Differential", value=2.0)
+    # action=False means direct-acting (output is true when CV > SP).
+    builder.add_boolean_const("Enable_Action_Direct", value=True)
 
     # LeadLagCycles block to rotate the two pumps.
     lead_lag_properties = {"numberOutputs": 2, "maxRuntime": "40h"}
@@ -1090,24 +1062,18 @@ def main():
     builder.add_counter("Pump_B_Start_Counter")
 
     # BooleanDelay blocks to delay the start command to each pump.
-    delay_properties = {"onDelay": "30000"}
-    builder.add_boolean_delay(
-        "Pump_A_Start_Delay", on_delay=delay_properties["onDelay"]
-    )
-    builder.add_boolean_delay(
-        "Pump_B_Start_Delay", on_delay=delay_properties["onDelay"]
-    )
+    builder.add_boolean_delay("Pump_A_Start_Delay", on_delay="30000") # 30 seconds
+    builder.add_boolean_delay("Pump_B_Start_Delay", on_delay="30000") # 30 seconds
 
     # OR gate to combine pump status signals for feedback.
     builder.add_or("Pump_Feedback_Or")
 
     builder.end_sub_folder()
 
+    print("\n--- Wiring Components ---")
     # --- Wiring ---
     # 1. Wire the plant enable logic.
     builder.add_link("Outside_Air_Temperature", "out", "Plant_Enable_Tstat", "cv")
-
-    # --- Tstat Refactoring Links ---
     builder.add_link("Enable_Setpoint", "out", "Plant_Enable_Tstat", "sp")
     builder.add_link("Enable_Differential", "out", "Plant_Enable_Tstat", "diff")
     # Apply the necessary conversion for the action slot.
@@ -1119,110 +1085,270 @@ def main():
         link_type="b:ConversionLink",
         converter_type="conv:StatusBooleanToFrozenEnum",
     )
-    # --- End Tstat Refactoring Links ---
 
-    # The Tstat output enables both the chiller and the pump rotator.
+    # 2. The Tstat output enables both the chiller and the pump rotator.
     builder.add_link("Plant_Enable_Tstat", "out", "Chiller_Start_Cmd", "in16")
     builder.add_link("Plant_Enable_Tstat", "out", "Pump_Rotator", "in")
 
-    # 2. Wire the pump command chain: LeadLag -> Delay -> Final Command.
+    # 3. Wire the pump command chain: LeadLag -> Delay -> Final Command.
     builder.add_link("Pump_Rotator", "outA", "Pump_A_Start_Delay", "in")
     builder.add_link("Pump_Rotator", "outB", "Pump_B_Start_Delay", "in")
 
     builder.add_link("Pump_A_Start_Delay", "out", "Pump_A_Cmd", "in16")
     builder.add_link("Pump_B_Start_Delay", "out", "Pump_B_Cmd", "in16")
 
-    # 3. Wire the pump start counters. The final command triggers the count.
+    # 4. Wire the pump start counters. The final command triggers the count.
     builder.add_link("Pump_A_Cmd", "out", "Pump_A_Start_Counter", "countUp")
     builder.add_link("Pump_B_Cmd", "out", "Pump_B_Start_Counter", "countUp")
 
-    # 4. Wire the counter outputs back to the LeadLag block for rotation logic.
-    # Note: The builder automatically handles StatusNumericToNumber conversion here.
+    # 5. Wire the counter outputs back to the LeadLag block for rotation logic.
     builder.add_link("Pump_A_Start_Counter", "out", "Pump_Rotator", "cycleCountA")
     builder.add_link("Pump_B_Start_Counter", "out", "Pump_Rotator", "cycleCountB")
 
-    # 5. Wire the pump status feedback logic.
+    # 6. Wire the pump status feedback logic.
     builder.add_link("Pump_A_Status", "out", "Pump_Feedback_Or", "inA")
     builder.add_link("Pump_B_Status", "out", "Pump_Feedback_Or", "inB")
     builder.add_link("Pump_Feedback_Or", "out", "Pump_Rotator", "feedback")
 
     # --- Save the .bog file ---
+    bog_filename = "hvac_simple_chiller_plant_one.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
-    out = os.path.join(args.output_dir, "simple_chiller_plant.bog")
-    builder.save(out)
-    print(f"Created {out}")
+    builder.save(output_path)
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
 
 
 if __name__ == "__main__":
     main()
 === CODE END ===
 
+=== FILE: hvac_simple_chiller_plant_three.py ===
+DIR: .
+=== CODE START ===
+import os, argparse
+from bog_builder import BogFolderBuilder
+
+def main():
+    """
+    Builds and saves a robust, clarified chiller plant staging logic .bog file.
+
+    This definitive version (v3) separates the master enable signal (boolean) from
+    the staging demand (numeric). It uses And gates on the final outputs to ensure
+    the plant enable signal acts as a master interlock, which is a more robust
+    and standard design pattern.
+
+    It also retains the robust latching mechanism for runtime feedback from v2.
+    """
+    parser = argparse.ArgumentParser(
+        description="Build a definitive .bog file for chiller staging logic."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
+    builder = BogFolderBuilder("cooling_plant_staging_v3", debug=True)
+
+    print("--- Creating Top-Level Inputs & Outputs ---")
+
+    # --- System Master Inputs ---
+    builder.add_boolean_writable("Plant_Enable", default_value=False)
+    builder.add_numeric_writable("Chiller_Demand_Raw", default_value=0.0) # 0-3 raw demand
+
+    # --- Equipment Command & Runtime Outputs ---
+    num_equipment = 3
+    chiller_names = [f"Chiller_{i+1}" for i in range(num_equipment)]
+    pump_names = [f"Pump_{i+1}" for i in range(num_equipment)]
+    all_equipment_names = chiller_names + pump_names
+
+    for name in all_equipment_names:
+        builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
+        builder.add_numeric_writable(f"{name}_Runtime_Seconds", default_value=0.0)
+        
+    # --- Intermediate Logic Outputs for Visibility ---
+    builder.add_numeric_writable("Total_Chillers_Running", default_value=0.0)
+
+    print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
+    builder.start_sub_folder("Logic")
+
+    # --- Staging Blocks ---
+    builder.add_lead_lag_runtime("Chiller_LeadLag", properties={"numberOutputs": 3, "maxRuntime": "200h"})
+    builder.add_lead_lag_runtime("Pump_LeadLag", properties={"numberOutputs": 3, "maxRuntime": "200h"})
+    
+    # --- Command Gating Logic (NEW CLEANER PATTERN) ---
+    for name in all_equipment_names:
+        builder.add_and(f"{name}_Cmd_Gate")
+
+    # --- Runtime Accumulation & Latching ---
+    builder.add_multi_vibrator("One_Second_Timer", period_ms="1000")
+    builder.add_one_shot("Timer_Pulse")
+    builder.add_numeric_const("Increment_Value", value=1.0)
+    for name in all_equipment_names:
+        builder.add_counter(f"{name}_RuntimeCounter")
+        builder.add_and(f"{name}_IncrementGate")
+        builder.add_numeric_latch(f"{name}_RuntimeLatch")
+        builder.add_not(f"{name}_Cmd_Off_Detector")
+
+    # --- Interlock to calculate Pump Demand & Convert Demands to Boolean ---
+    builder.add_numeric_const("Const_1", value=1.0)
+    builder.add_numeric_const("Const_0", value=0.0)
+    builder.add_greater_than("Is_Chiller_Demand_Active")
+    builder.add_greater_than("Is_Pump_Demand_Active")
+    for name in chiller_names:
+        builder.add_numeric_switch(f"{name}_BoolToNum")
+    builder.add_add("Sum_Running_Chillers")
+    
+    builder.end_sub_folder()
+
+    print("\n--- Wiring Components ---")
+
+    # --- Wire Master Timer ---
+    builder.add_link("One_Second_Timer", "out", "Timer_Pulse", "in")
+
+    # --- CORRECTED: Convert Numeric Demands to Boolean Enables for LeadLag Blocks ---
+    # Per user feedback, the '.in' slot must be driven by a boolean output.
+    # This logic converts any numeric demand > 0 into a boolean 'true'.
+    builder.add_link("Chiller_Demand_Raw", "out", "Is_Chiller_Demand_Active", "inA")
+    builder.add_link("Const_0", "out", "Is_Chiller_Demand_Active", "inB")
+    builder.add_link("Is_Chiller_Demand_Active", "out", "Chiller_LeadLag", "in")
+
+    builder.add_link("Sum_Running_Chillers", "out", "Is_Pump_Demand_Active", "inA")
+    builder.add_link("Const_0", "out", "Is_Pump_Demand_Active", "inB")
+    builder.add_link("Is_Pump_Demand_Active", "out", "Pump_LeadLag", "in")
+
+    # --- Wire Commands through Final Enable Gates ---
+    equip_map = {"A": chiller_names[0], "B": chiller_names[1], "C": chiller_names[2]}
+    pump_map = {"A": pump_names[0], "B": pump_names[1], "C": pump_names[2]}
+
+    for slot, name in equip_map.items(): # Chillers
+        builder.add_link("Chiller_LeadLag", f"out{slot}", f"{name}_Cmd_Gate", "inA")
+        builder.add_link("Plant_Enable", "out", f"{name}_Cmd_Gate", "inB")
+        builder.add_link(f"{name}_Cmd_Gate", "out", f"{name}_Cmd", "in16")
+    
+    for slot, name in pump_map.items(): # Pumps
+        builder.add_link("Pump_LeadLag", f"out{slot}", f"{name}_Cmd_Gate", "inA")
+        builder.add_link("Plant_Enable", "out", f"{name}_Cmd_Gate", "inB")
+        builder.add_link(f"{name}_Cmd_Gate", "out", f"{name}_Cmd", "in16")
+
+    # --- Wire Runtime, and Latching Logic ---
+    for name in all_equipment_names:
+        lead_lag_block = "Chiller_LeadLag" if "Chiller" in name else "Pump_LeadLag"
+        
+        # Determine the correct runtime slot (runtimeA, runtimeB, etc.)
+        runtime_slot = ""
+        if "Chiller_1" in name or "Pump_1" in name: runtime_slot = "runtimeA"
+        elif "Chiller_2" in name or "Pump_2" in name: runtime_slot = "runtimeB"
+        elif "Chiller_3" in name or "Pump_3" in name: runtime_slot = "runtimeC"
+        
+        # Wire runtime accumulation
+        builder.add_link("Timer_Pulse", "out", f"{name}_IncrementGate", "inA")
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_IncrementGate", "inB") # Use final gated command
+        builder.add_link(f"{name}_IncrementGate", "out", f"{name}_RuntimeCounter", "countUp")
+        builder.add_link("Increment_Value", "out", f"{name}_RuntimeCounter", "countIncrement")
+        
+        # Wire runtime display and latching
+        builder.add_link(f"{name}_RuntimeCounter", "out", f"{name}_Runtime_Seconds", "in16")
+        builder.add_link(f"{name}_RuntimeCounter", "out", f"{name}_RuntimeLatch", "in")
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_Cmd_Off_Detector", "in") # Use final gated command
+        builder.add_link(f"{name}_Cmd_Off_Detector", "out", f"{name}_RuntimeLatch", "clock")
+        
+        # Wire latched runtime back to the correct lead-lag block
+        if runtime_slot:
+            builder.add_link(f"{name}_RuntimeLatch", "out", lead_lag_block, runtime_slot,
+                link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+            
+    # --- Wire Interlock Logic ---
+    for i, name in enumerate(chiller_names):
+        slot = chr(ord('A') + i)
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_BoolToNum", "inSwitch") # Use final gated command
+        builder.add_link("Const_1", "out", f"{name}_BoolToNum", "inTrue")
+        builder.add_link(f"{name}_BoolToNum", "out", "Sum_Running_Chillers", f"in{slot}")
+    
+    builder.add_link("Sum_Running_Chillers", "out", "Total_Chillers_Running", "in16")
+
+    # --- Save the .bog file ---
+    bog_filename = "hvac_simple_chiller_plant_three.bog"
+    output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+
+if __name__ == "__main__":
+    main()
+
+=== CODE END ===
+
 === FILE: hvac_simple_chiller_plant_two.py ===
 DIR: .
 === CODE START ===
 """
-Human asks via Chat input:
-
-Create a Niagara .bog file for a plant with three chillers and three primary pumps.
-Each chiller shall be staged for lead, lag, and standby based on runtime.
-Each primary pump shall be staged for lead, lag, and standby based on runtime.
-Calculate the total number of running chillers. Use this count as the demand signal
-for the pumps (e.g., if 2 chillers are running, then run a minimum of 2 pumps).
-Track runtime for all 6 pieces of equipment and expose the runtime in seconds as top-level outputs.
+Combines a simple Tstat-based plant enable with advanced multi-stage,
+runtime-based sequencing for a three-chiller, three-pump central plant.
 """
 
 import os
 import argparse
 from bog_builder import BogFolderBuilder
 
-
 def main():
-
-    # --- Setup argument parser ---
+    """
+    Builds the advanced chiller plant .bog file.
+    """
     parser = argparse.ArgumentParser(
-        description="Build a chiller plant staging logic with runtime-based rotation."
+        description="Build a .bog file for an advanced chiller plant."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 
-    # Initialize the BogFolderBuilder with the top-level folder name.
-    builder = BogFolderBuilder("Chiller_Pump_Staging", debug=True)
+    builder = BogFolderBuilder("AdvancedChillerPlant", debug=True)
 
-    # --- Configuration Constants ---
+    # --- Configuration ---
     NUM_EQUIPMENT = 3
     CHILLER_MAX_RUNTIME = "200h"
     PUMP_MAX_RUNTIME = "200h"
-    TIMER_PERIOD_MS = "1000"  # 1 second pulse for runtime accumulation
+    TIMER_PERIOD_MS = "1000"  # 1 second pulse
 
-    # --- Top-Level Inputs & Outputs ---
     print("--- Creating Top-Level Inputs & Outputs ---")
 
-    # System Master Input: Number of chillers requested to run (0-3)
+    # --- Inputs ---
+    builder.add_numeric_writable("Outside_Air_Temperature", default_value=75.0)
     builder.add_numeric_writable("Chiller_Demand", default_value=0.0)
 
-    # Equipment Command & Runtime Outputs
     chiller_names = [f"Chiller_{i+1}" for i in range(NUM_EQUIPMENT)]
     pump_names = [f"Pump_{i+1}" for i in range(NUM_EQUIPMENT)]
+    all_equipment_names = chiller_names + pump_names
 
-    for name in chiller_names:
+    # CORRECTED: Create pump status points with letter names (A, B, C) to match linking logic
+    for i in range(NUM_EQUIPMENT):
+        slot_letter = chr(ord('A') + i)
+        builder.add_boolean_writable(f"Pump_{slot_letter}_Status", default_value=False)
+
+    # --- Outputs ---
+    for name in all_equipment_names:
         builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
         builder.add_numeric_writable(f"{name}_Runtime_Seconds", default_value=0.0)
 
-    for name in pump_names:
-        builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
-        builder.add_numeric_writable(f"{name}_Runtime_Seconds", default_value=0.0)
-
-    # Intermediate Logic Outputs for Visibility
     builder.add_numeric_writable("Total_Chillers_Running", default_value=0.0)
-    builder.add_numeric_writable("Pump_Demand", default_value=0.0)
 
-    # --- Logic Components (organized inside a single sub-folder) ---
     print("\n--- Creating Logic Components inside 'Logic' sub-folder ---")
     builder.start_sub_folder("Logic")
 
-    # --- Staging Blocks ---
+    # --- Master Plant Enable ---
+    builder.add_tstat("Plant_Enable_Tstat")
+    builder.add_numeric_const("Enable_Setpoint", value=60.0)
+    builder.add_numeric_const("Enable_Differential", value=2.0)
+    builder.add_boolean_const("Enable_Action_Direct", value=True) # True for direct-acting enable
+
+    # --- Staging & Rotation Blocks ---
     builder.add_lead_lag_runtime(
         "Chiller_LeadLag",
         properties={"numberOutputs": NUM_EQUIPMENT, "maxRuntime": CHILLER_MAX_RUNTIME},
@@ -1232,160 +1358,173 @@ def main():
         properties={"numberOutputs": NUM_EQUIPMENT, "maxRuntime": PUMP_MAX_RUNTIME},
     )
 
-    # --- Runtime Accumulation Timer ---
+    # --- Staging Logic ---
+    # Convert numeric demand into boolean stage requests
+    for i in range(1, NUM_EQUIPMENT + 1):
+        builder.add_greater_than_equal(f"Chiller_Stage_{i}_Req_Check")
+        builder.add_numeric_const(f"Const_{i}", value=float(i))
+        builder.add_and(f"Chiller_Stage_{i}_Req")
+
+    # --- Runtime Accumulation & Latching ---
     builder.add_multi_vibrator("One_Second_Timer", period_ms=TIMER_PERIOD_MS)
     builder.add_one_shot("Timer_Pulse")
     builder.add_numeric_const("Increment_Value", value=1.0)
-
-    # --- Runtime Logic for each piece of equipment ---
-    for name in chiller_names + pump_names:
+    for name in all_equipment_names:
         builder.add_counter(f"{name}_RuntimeCounter")
         builder.add_and(f"{name}_IncrementGate")
-
-    # --- Interlock: Count Running Chillers to determine Pump Demand ---
-    builder.add_numeric_const("Const_1", value=1.0)
+        builder.add_numeric_latch(f"{name}_RuntimeLatch")
+        builder.add_not(f"{name}_Cmd_Off_Detector")
+    
+    # --- Pump Demand Interlock ---
+    builder.add_add("Sum_Running_Chillers")
     for name in chiller_names:
         builder.add_numeric_switch(f"{name}_BoolToNum")
-
-    builder.add_add("Sum_Running_Chillers")
+    builder.add_numeric_const("Const_1_Num", value=1.0)
+    for i in range(1, NUM_EQUIPMENT + 1):
+        builder.add_greater_than_equal(f"Pump_Stage_{i}_Req_Check")
+        builder.add_and(f"Pump_Stage_{i}_Req")
+    
+    # --- Feedback Logic ---
+    builder.add_or("Chiller_Feedback_Or")
+    builder.add_or("Pump_Feedback_Or")
 
     builder.end_sub_folder()
 
-    # --- Wiring ---
     print("\n--- Wiring Components ---")
 
-    # --- 1. Wire Master Timer ---
-    # MultiVibrator output triggers OneShot to create a clean pulse every second.
+    # --- 1. Wire Master Enable ---
+    builder.add_link("Outside_Air_Temperature", "out", "Plant_Enable_Tstat", "cv")
+    builder.add_link("Enable_Setpoint", "out", "Plant_Enable_Tstat", "sp")
+    builder.add_link("Enable_Differential", "out", "Plant_Enable_Tstat", "diff")
+    builder.add_link(
+        "Enable_Action_Direct", "out", "Plant_Enable_Tstat", "action",
+        link_type="b:ConversionLink", converter_type="conv:StatusBooleanToFrozenEnum"
+    )
+
+    # --- 2. Wire Chiller Staging and Rotation ---
+    builder.add_link("Plant_Enable_Tstat", "out", "Chiller_LeadLag", "in")
+    for i in range(1, NUM_EQUIPMENT + 1):
+        builder.add_link("Chiller_Demand", "out", f"Chiller_Stage_{i}_Req_Check", "inA")
+        builder.add_link(f"Const_{i}", "out", f"Chiller_Stage_{i}_Req_Check", "inB")
+        builder.add_link(f"Chiller_Stage_{i}_Req_Check", "out", f"Chiller_Stage_{i}_Req", "inA")
+        builder.add_link("Plant_Enable_Tstat", "out", f"Chiller_Stage_{i}_Req", "inB")
+
+    # --- 3. Wire Pump Demand Interlock & Staging ---
+    builder.add_link("Plant_Enable_Tstat", "out", "Pump_LeadLag", "in")
+    for i, name in enumerate(chiller_names):
+        slot = chr(ord('A') + i)
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_BoolToNum", "inSwitch")
+        builder.add_link("Const_1_Num", "out", f"{name}_BoolToNum", "inTrue")
+        builder.add_link(f"{name}_BoolToNum", "out", "Sum_Running_Chillers", f"in{slot}")
+    builder.add_link("Sum_Running_Chillers", "out", "Total_Chillers_Running", "in16")
+    
+    for i in range(1, NUM_EQUIPMENT + 1):
+        builder.add_link("Sum_Running_Chillers", "out", f"Pump_Stage_{i}_Req_Check", "inA")
+        builder.add_link(f"Const_{i}", "out", f"Pump_Stage_{i}_Req_Check", "inB")
+        builder.add_link(f"Pump_Stage_{i}_Req_Check", "out", f"Pump_Stage_{i}_Req", "inA")
+        builder.add_link("Plant_Enable_Tstat", "out", f"Pump_Stage_{i}_Req", "inB")
+
+    # --- 4. Wire Master Timer ---
     builder.add_link("One_Second_Timer", "out", "Timer_Pulse", "in")
 
-    # --- 2. Wire Chiller Staging ---
-    # External demand signal drives the chiller lead/lag block.
-    builder.add_link("Chiller_Demand", "out", "Chiller_LeadLag", "in")
-
-    # --- 3. Wire Runtime and Commands for Chillers and Pumps ---
+    # --- 5. Wire Final Commands and Runtime Logic for All Equipment ---
     equip_map = {
         "A": (chiller_names[0], pump_names[0]),
         "B": (chiller_names[1], pump_names[1]),
-        "C": (chiller_names[2], pump_names[2]),
+        "C": (chiller_names[2], pump_names[2])
     }
+    for i, (slot, (chiller_name, pump_name)) in enumerate(equip_map.items()):
+        stage = i + 1
+        # Chiller Command and Runtime
+        builder.add_and(f"{chiller_name}_Cmd_Gate")
+        builder.add_link(f"Chiller_Stage_{stage}_Req", "out", f"{chiller_name}_Cmd_Gate", "inA")
+        builder.add_link(f"Chiller_LeadLag", f"out{slot}", f"{chiller_name}_Cmd_Gate", "inB")
+        builder.add_link(f"{chiller_name}_Cmd_Gate", "out", f"{chiller_name}_Cmd", "in16")
 
+        # Pump Command and Runtime
+        builder.add_and(f"{pump_name}_Cmd_Gate")
+        builder.add_link(f"Pump_Stage_{stage}_Req", "out", f"{pump_name}_Cmd_Gate", "inA")
+        builder.add_link(f"Pump_LeadLag", f"out{slot}", f"{pump_name}_Cmd_Gate", "inB")
+        builder.add_link(f"{pump_name}_Cmd_Gate", "out", f"{pump_name}_Cmd", "in16")
+
+    for name in all_equipment_names:
+        # Runtime Accumulation
+        builder.add_link("Timer_Pulse", "out", f"{name}_IncrementGate", "inA")
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_IncrementGate", "inB")
+        builder.add_link(f"{name}_IncrementGate", "out", f"{name}_RuntimeCounter", "countUp")
+        builder.add_link("Increment_Value", "out", f"{name}_RuntimeCounter", "countIncrement")
+        builder.add_link(f"{name}_RuntimeCounter", "out", f"{name}_Runtime_Seconds", "in16")
+        # Runtime Latching
+        builder.add_link(f"{name}_RuntimeCounter", "out", f"{name}_RuntimeLatch", "in")
+        builder.add_link(f"{name}_Cmd", "out", f"{name}_Cmd_Off_Detector", "in")
+        builder.add_link(f"{name}_Cmd_Off_Detector", "out", f"{name}_RuntimeLatch", "clock")
+    
+    # --- 6. Wire Feedback and Runtime to LeadLag blocks ---
     for slot, (chiller_name, pump_name) in equip_map.items():
-        # --- Chiller Command and Runtime Calculation ---
-        # LeadLag output -> Chiller Command output point
-        builder.add_link(f"Chiller_LeadLag", f"out{slot}", f"{chiller_name}_Cmd", "in16")
-        # Runtime Gate: Timer_Pulse AND Chiller_Cmd must both be true to increment counter.
-        builder.add_link("Timer_Pulse", "out", f"{chiller_name}_IncrementGate", "inA")
-        builder.add_link(f"{chiller_name}_Cmd", "out", f"{chiller_name}_IncrementGate", "inB")
-        builder.add_link(
-            f"{chiller_name}_IncrementGate", "out", f"{chiller_name}_RuntimeCounter", "countUp"
-        )
-        # Set counter increment value to 1.
-        builder.add_link(
-            "Increment_Value", "out", f"{chiller_name}_RuntimeCounter", "countIncrement"
-        )
-        # Counter output -> Runtime_Seconds output point
-        builder.add_link(
-            f"{chiller_name}_RuntimeCounter", "out", f"{chiller_name}_Runtime_Seconds", "in16"
-        )
-        # Feedback loop: Counter output -> LeadLag runtime input (converts seconds to runtime format)
-        builder.add_link(
-            f"{chiller_name}_RuntimeCounter", "out", "Chiller_LeadLag", f"runtime{slot}"
-        )
+        # Feedback
+        builder.add_link(f"{chiller_name}_Cmd", "out", "Chiller_Feedback_Or", f"in{slot}")
+        builder.add_link(f"Pump_{slot}_Status", "out", "Pump_Feedback_Or", f"in{slot}")
+        # Runtime
+        builder.add_link(f"{chiller_name}_RuntimeLatch", "out", "Chiller_LeadLag", f"runtime{slot}",
+            link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
+        builder.add_link(f"{pump_name}_RuntimeLatch", "out", "Pump_LeadLag", f"runtime{slot}",
+            link_type="b:ConversionLink", converter_type="conv:StatusNumericToRelTime")
 
-        # --- Pump Command and Runtime Calculation (identical logic) ---
-        builder.add_link(f"Pump_LeadLag", f"out{slot}", f"{pump_name}_Cmd", "in16")
-        builder.add_link("Timer_Pulse", "out", f"{pump_name}_IncrementGate", "inA")
-        builder.add_link(f"{pump_name}_Cmd", "out", f"{pump_name}_IncrementGate", "inB")
-        builder.add_link(
-            f"{pump_name}_IncrementGate", "out", f"{pump_name}_RuntimeCounter", "countUp"
-        )
-        builder.add_link(
-            "Increment_Value", "out", f"{pump_name}_RuntimeCounter", "countIncrement"
-        )
-        builder.add_link(
-            f"{pump_name}_RuntimeCounter", "out", f"{pump_name}_Runtime_Seconds", "in16"
-        )
-        builder.add_link(
-            f"{pump_name}_RuntimeCounter", "out", "Pump_LeadLag", f"runtime{slot}"
-        )
-
-    # --- 4. Wire Interlock Logic ---
-    # Convert each chiller command boolean to a number (1 if true, 0 if false)
-    for i, name in enumerate(chiller_names):
-        slot_letter = chr(ord('A') + i)
-        builder.add_link(f"{name}_Cmd", "out", f"{name}_BoolToNum", "inSwitch")
-        builder.add_link("Const_1", "out", f"{name}_BoolToNum", "inTrue")
-        # inFalse defaults to 0.0, so no explicit link needed.
-        builder.add_link(f"{name}_BoolToNum", "out", "Sum_Running_Chillers", f"in{slot_letter}")
-
-    # The sum of running chillers drives the pump demand.
-    builder.add_link("Sum_Running_Chillers", "out", "Total_Chillers_Running", "in16")
-    builder.add_link("Sum_Running_Chillers", "out", "Pump_Demand", "in16")
-    builder.add_link("Sum_Running_Chillers", "out", "Pump_LeadLag", "in")
+    builder.add_link("Chiller_Feedback_Or", "out", "Chiller_LeadLag", "feedback")
+    builder.add_link("Pump_Feedback_Or", "out", "Pump_LeadLag", "feedback")
 
     # --- Save the .bog file ---
-    os.makedirs(args.output_dir, exist_ok=True)
-    bog_filename = "chiller_pump_staging.bog"
+    bog_filename = "hvac_simple_chiller_plant_two.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-
     print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
 
 
 if __name__ == "__main__":
     main()
+
 === CODE END ===
 
 === FILE: hvac_two_pump_rotator.py ===
 DIR: .
 === CODE START ===
 """
+Generic 2-Pump Rotator with Auto-Failover without kitControl widget
+Does not require calculating run hours and can be manually 
+linked up to a schedule to rotate when central plant is off which
+humans may like better than kitControl rotatation widgets that can
+rotate equipment at random including peak central plant loads and cause
+lots of havoc and angry clients.
 
-kitControl:LeadLagCycles 2-Pump Rotator (AI-Generated)
--------------------------------------------------------
+This script builds a robust pump sequencing and failover wiresheet using
+fundamental logic blocks. It avoids specialized components, providing an
+explicit and clear control sequence.
 
-This script, generated by an AI assistant based on user requirements,
-creates a robust demonstration for a 2-pump lead-lag rotator using the
-kitControl:LeadLagCycles component.
-
-All core calculation logic is organized into a 'Logic' sub-folder to
-keep the top-level view clean and focused on the main inputs and outputs.
-
-Use in Central Plant staging for chillers, boilers, pumps, etc.
-The 'maxRuntime' property is set to "8h" but can be configured for any
-desired rotation interval, such as weekly.
+This revised version replaces the `BooleanLatch` component with a classic
+Set-Reset (SR) latch built from basic OR and AND gates. This provides a
+more fundamental and transparent implementation of the failure memory.
 
 Algorithm:
-- A self-enabling signal is created by combining both 'Pump_Status'
-    points through an 'Or' block. This signal is fed into the 'in' slot
-    of the LeadLagCycles block, calling for one pump to run.
-- The block is configured for two outputs ('numberOutputs' = 2).
-- The outputs of the block command two individual pumps (represented by
-    BooleanWritables at the top level).
-- Each pump command is also wired to the 'countUp' slot of a dedicated
-    'kitControl:Counter' block to track start/stop cycles.
-- The output of each counter is wired back into the corresponding 'cycleCount'
-    slot on the LeadLagCycles block. This is the primary rotation method.
-- The combined status signal is also wired to the 'feedback' slot for
-    failure detection.
-- A secondary rotation occurs if a pump exceeds the 'maxRuntime'.
-- Configurable timers for 'feedbackDelay' and 'clearAlarmTime'
-    are included as component properties for robust operation.
-
-
-How it Works:
-The logic creates a self-enabling loop. If either of the two pump status
-points is 'true', the 'in' slot of the rotator block is enabled, calling
-for one pump to run.
-
-Rotation Logic:
-Every time the block needs to start a pump, it looks at the
-cycleCount input for both pumps and always chooses the one with the lower number.
-
-This is its primary method for keeping the wear on the pumps
-as even as possible over time. The maxRuntime setting is just
-a backup to force a rotation if one pump happens to run for
-10 hours straight without ever shutting off.
+1.  **Lead Selection**: A top-level boolean, 'Pump_1_Lead_Select', determines
+    the desired lead pump. If true, Pump 1 is lead; if false, Pump 2 is lead.
+2.  **Command Generation**: When the 'System_Enable' signal is true, a command
+    is sent to the designated lead pump, provided it is not in a failure state.
+3.  **Failure Detection**:
+    - For each pump, the logic checks if a command has been sent (`Pump_Cmd`)
+      but the status feedback (`Pump_Status`) has not become true.
+    - If this condition (Cmd ON, Status OFF) persists for 60 seconds (configurable),
+      the pump is considered to be in a failure state.
+4.  **Failure Latching (SR Latch)**:
+    - Once a failure is detected, an SR latch constructed from logic gates
+      locks the pump in a failure state, preventing it from being commanded again.
+    - This also illuminates a top-level 'Pump_Failure_Alarm' boolean.
+    - The failure state can only be cleared by a 'Manual_Reset' signal or by
+      disabling the entire system.
+5.  **Automatic Failover**:
+    - If the designated lead pump enters a failure state, the logic
+      automatically stops commanding it and sends a command to the lag pump
+      to take over.
 """
 
 import sys
@@ -1398,10 +1537,11 @@ from bog_builder import BogFolderBuilder
 
 
 def main():
-
-    # Per instructions, accept an output directory via command-line argument.
+    """
+    Main function to build and save the generic pump rotator .bog file.
+    """
     parser = argparse.ArgumentParser(
-        description="Build a .bog file for a 2-pump lead-lag rotator with status-driven input."
+        description="Build a .bog file for a generic 2-pump rotator with auto-failover."
     )
     parser.add_argument(
         "-o",
@@ -1411,81 +1551,155 @@ def main():
     )
     args = parser.parse_args()
 
-    builder = BogFolderBuilder("Two_Pump_Lead_Lag_Rotator_Status_Input", debug=True)
-    NUM_PUMPS = 2
+    builder = BogFolderBuilder("Generic_Pump_Rotator_With_Failover", debug=True)
 
-    # --- Top-Level I/O Components ---
-    # Create command and status writable points for each of the 2 pumps.
-    pump_names = [f"Pump_{i+1}" for i in range(NUM_PUMPS)]
-    for name in pump_names:
-        builder.add_boolean_writable(f"{name}_Cmd", default_value=False)
-        # The status writable simulates feedback from the pump's motor starter.
-        builder.add_boolean_writable(f"{name}_Status", default_value=False)
+    # --- Top-Level I/O and Configuration ---
+    print("--- Creating Top-Level Inputs & Outputs ---")
+    builder.add_boolean_writable("System_Enable", default_value=False)
+    builder.add_boolean_writable("Pump_1_Lead_Select", default_value=True)
+    builder.add_boolean_writable("Manual_Reset", default_value=False)
 
-    builder.add_boolean_writable(f"Chiller_sys_Enable", default_value=False)
+    builder.add_boolean_writable("Pump_1_Status", default_value=False)
+    builder.add_boolean_writable("Pump_2_Status", default_value=False)
 
-    # The core LeadLagCycles block, configured for 2 outputs.
-    # Time values must be specified as a string of milliseconds or a time format like "10s".
-    lead_lag_properties = {
-        "numberOutputs": NUM_PUMPS,
-        "feedbackDelay": "30",
-        "clearAlarmTime": "1m",
-    }
-    builder.add_lead_lag_cycles("Pump_Rotator_Block", properties=lead_lag_properties)
+    builder.add_boolean_writable("Pump_1_Cmd", default_value=False)
+    builder.add_boolean_writable("Pump_2_Cmd", default_value=False)
+    builder.add_boolean_writable("Pump_1_Failure_Alarm", default_value=False)
+    builder.add_boolean_writable("Pump_2_Failure_Alarm", default_value=False)
 
-    # A counter for each pump to track start/stop cycles for rotation logic.
-    for name in pump_names:
-        builder.add_counter(f"{name}_CycleCounter")
+    # --- Logic Components (organized in a sub-folder) ---
+    print("\n--- Creating Logic Components ---")
+    builder.start_sub_folder("PumpControlLogic")
 
-    # An OR gate combines the 2 status signals into a single signal.
-    builder.add_or("Feedback_Or")
+    # REVISED: Lead Pump Selection using fundamental gates
+    builder.add_not("Pump_2_Is_Lead_Calc")
+    builder.add_and("P1_Lead_Cmd_Request")
+    builder.add_and("P2_Lead_Cmd_Request")
+
+    # Final Command Generation (before interlocks)
+    builder.add_or("Final_Cmd_Logic_P1")
+    builder.add_or("Final_Cmd_Logic_P2")
+    builder.add_and("Normal_Run_Cmd_P1")
+    builder.add_and("Normal_Run_Cmd_P2")
+    builder.add_and("Failover_Run_Cmd_P1")
+    builder.add_and("Failover_Run_Cmd_P2")
+
+    # Failure Detection
+    builder.add_not("Pump_1_Status_Not")
+    builder.add_not("Pump_2_Status_Not")
+    builder.add_and("Pump_1_Fail_Condition")
+    builder.add_and("Pump_2_Fail_Condition")
+    builder.add_boolean_delay("Pump_1_Fail_Timer", on_delay="60s")
+    builder.add_boolean_delay("Pump_2_Fail_Timer", on_delay="60s")
+
+    # --- NEW: Failure Latching and Reset using SR Latch ---
+    # Pump 1 SR Latch
+    builder.add_or("P1_Latch_Set_Logic")
+    builder.add_not("P1_Reset_Condition")
+    builder.add_and("Pump_1_In_Failure") # This AND gate is the latch's memory
+
+    # Pump 2 SR Latch
+    builder.add_or("P2_Latch_Set_Logic")
+    builder.add_not("P2_Reset_Condition")
+    builder.add_and("Pump_2_In_Failure") # This AND gate is the latch's memory
+
+    # Shared Reset Logic
+    builder.add_or("Reset_Signal_P1")
+    builder.add_or("Reset_Signal_P2")
+    builder.add_not("System_Is_Off")
+
+    builder.end_sub_folder()
 
     # --- Component Wiring ---
+    print("\n--- Wiring Components ---")
 
-    # --- Wire the status and feedback logic ---
-    # The OR gate combines the status signals from both pumps.
-    builder.add_link("Pump_1_Status", "out", "Feedback_Or", "inA")
-    builder.add_link("Pump_2_Status", "out", "Feedback_Or", "inB")
+    # 1. REVISED: Wire the Lead Pump Selector Logic
+    builder.add_link("Pump_1_Lead_Select", "out", "Pump_2_Is_Lead_Calc", "in")
 
-    # The combined status from the OR gate now drives the main 'in' slot.
-    # A boolean 'true' will be interpreted as a numeric '1.0', calling for one pump.
-    builder.add_link("Chiller_sys_Enable", "out", "Pump_Rotator_Block", "in")
+    builder.add_link("System_Enable", "out", "P1_Lead_Cmd_Request", "inA")
+    builder.add_link("Pump_1_Lead_Select", "out", "P1_Lead_Cmd_Request", "inB")
 
-    # The combined status is ALSO wired to the feedback slot for failure detection.
-    builder.add_link("Feedback_Or", "out", "Pump_Rotator_Block", "feedback")
+    builder.add_link("System_Enable", "out", "P2_Lead_Cmd_Request", "inA")
+    builder.add_link("Pump_2_Is_Lead_Calc", "out", "P2_Lead_Cmd_Request", "inB")
 
-    # Loop through each pump to wire its command and cycle counter.
-    for i in range(NUM_PUMPS):
-        pump_name = pump_names[i]
 
-        # Generate alphabetic slot names ('outA', 'outB') for the rotator block.
-        output_slot = f"out{chr(ord('A') + i)}"
-        cycle_count_slot = f"cycleCount{chr(ord('A') + i)}"
+    # 2. Wire the Failure Detection Logic for each pump
+    # Pump 1 Failure Detection
+    builder.add_link("Pump_1_Status", "out", "Pump_1_Status_Not", "in")
+    builder.add_link("Pump_1_Cmd", "out", "Pump_1_Fail_Condition", "inA")
+    builder.add_link("Pump_1_Status_Not", "out", "Pump_1_Fail_Condition", "inB")
+    builder.add_link("Pump_1_Fail_Condition", "out", "Pump_1_Fail_Timer", "in")
 
-        # 1. Link the rotator's output to the final pump command writable.
-        builder.add_link("Pump_Rotator_Block", output_slot, f"{pump_name}_Cmd", "in16")
+    # Pump 2 Failure Detection
+    builder.add_link("Pump_2_Status", "out", "Pump_2_Status_Not", "in")
+    builder.add_link("Pump_2_Cmd", "out", "Pump_2_Fail_Condition", "inA")
+    builder.add_link("Pump_2_Status_Not", "out", "Pump_2_Fail_Condition", "inB")
+    builder.add_link("Pump_2_Fail_Condition", "out", "Pump_2_Fail_Timer", "in")
 
-        # 2. When a pump is commanded on, trigger its cycle counter to increment.
-        builder.add_link(
-            f"{pump_name}_Cmd", "out", f"{pump_name}_CycleCounter", "countUp"
-        )
+    # 3. --- NEW: Wire the SR Latch for Failure Memory ---
+    # Latch Logic: Output = (Set OR Output_Feedback) AND (NOT Reset)
+    builder.add_link("System_Enable", "out", "System_Is_Off", "in")
 
-        # 3. Link the accumulated cycle count back to the rotator block.
-        builder.add_link(
-            f"{pump_name}_CycleCounter", "out", "Pump_Rotator_Block", cycle_count_slot
-        )
+    # Pump 1 SR Latch Wiring
+    builder.add_link("Pump_1_Fail_Timer", "out", "P1_Latch_Set_Logic", "inA")      # Set signal
+    builder.add_link("Pump_1_In_Failure", "out", "P1_Latch_Set_Logic", "inB")      # Feedback for latching
+    builder.add_link("Manual_Reset", "out", "Reset_Signal_P1", "inA")
+    builder.add_link("System_Is_Off", "out", "Reset_Signal_P1", "inB")
+    builder.add_link("Reset_Signal_P1", "out", "P1_Reset_Condition", "in")         # Reset signal
+    builder.add_link("P1_Latch_Set_Logic", "out", "Pump_1_In_Failure", "inA")
+    builder.add_link("P1_Reset_Condition", "out", "Pump_1_In_Failure", "inB")
+
+    # Pump 2 SR Latch Wiring
+    builder.add_link("Pump_2_Fail_Timer", "out", "P2_Latch_Set_Logic", "inA")      # Set signal
+    builder.add_link("Pump_2_In_Failure", "out", "P2_Latch_Set_Logic", "inB")      # Feedback for latching
+    builder.add_link("Manual_Reset", "out", "Reset_Signal_P2", "inA")
+    builder.add_link("System_Is_Off", "out", "Reset_Signal_P2", "inB")
+    builder.add_link("Reset_Signal_P2", "out", "P2_Reset_Condition", "in")         # Reset signal
+    builder.add_link("P2_Latch_Set_Logic", "out", "Pump_2_In_Failure", "inA")
+    builder.add_link("P2_Reset_Condition", "out", "Pump_2_In_Failure", "inB")
+
+    # 4. REVISED: Wire the Final Command Logic with Failover
+    # P1 Command Logic: Run P1 if it's lead and not failed, OR if P2 is lead and IS failed.
+    builder.add_link("P1_Lead_Cmd_Request", "out", "Normal_Run_Cmd_P1", "inA") # P1 Lead selected
+    builder.add_not("Pump_1_In_Failure_Not")
+    builder.add_link("Pump_1_In_Failure", "out", "Pump_1_In_Failure_Not", "in")
+    builder.add_link("Pump_1_In_Failure_Not", "out", "Normal_Run_Cmd_P1", "inB") # and P1 not failed
+
+    builder.add_link("P2_Lead_Cmd_Request", "out", "Failover_Run_Cmd_P1", "inA") # P2 Lead selected
+    builder.add_link("Pump_2_In_Failure", "out", "Failover_Run_Cmd_P1", "inB")   # and P2 IS failed
+
+    builder.add_link("Normal_Run_Cmd_P1", "out", "Final_Cmd_Logic_P1", "inA")
+    builder.add_link("Failover_Run_Cmd_P1", "out", "Final_Cmd_Logic_P1", "inB")
+    builder.add_link("Final_Cmd_Logic_P1", "out", "Pump_1_Cmd", "in16")
+
+    # P2 Command Logic: Run P2 if it's lead and not failed, OR if P1 is lead and IS failed.
+    builder.add_link("P2_Lead_Cmd_Request", "out", "Normal_Run_Cmd_P2", "inA") # P2 Lead selected
+    builder.add_not("Pump_2_In_Failure_Not")
+    builder.add_link("Pump_2_In_Failure", "out", "Pump_2_In_Failure_Not", "in")
+    builder.add_link("Pump_2_In_Failure_Not", "out", "Normal_Run_Cmd_P2", "inB") # and P2 not failed
+
+    builder.add_link("P1_Lead_Cmd_Request", "out", "Failover_Run_Cmd_P2", "inA") # P1 Lead selected
+    builder.add_link("Pump_1_In_Failure", "out", "Failover_Run_Cmd_P2", "inB")  # and P1 IS failed
+
+    builder.add_link("Normal_Run_Cmd_P2", "out", "Final_Cmd_Logic_P2", "inA")
+    builder.add_link("Failover_Run_Cmd_P2", "out", "Final_Cmd_Logic_P2", "inB")
+    builder.add_link("Final_Cmd_Logic_P2", "out", "Pump_2_Cmd", "in16")
+
+    # 5. Wire the Final Alarms
+    builder.add_link("Pump_1_In_Failure", "out", "Pump_1_Failure_Alarm", "in16")
+    builder.add_link("Pump_2_In_Failure", "out", "Pump_2_Failure_Alarm", "in16")
 
     # --- Save the .bog file ---
-    # The final .bog filename is hardcoded within the script.
-    bog_filename = "two_pump_rotator_rotator.bog"
+    bog_filename = "generic_pump_rotator.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
-    print(f"Successfully created Niagara .bog file at: {os.path.abspath(output_path)}")
+    print(f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}")
 
 
 if __name__ == "__main__":
     main()
+
 === CODE END ===
 
 === FILE: lead_lag_cycles_block_playground.py ===
@@ -1782,7 +1996,7 @@ def main():
         converter_type="conv:StatusNumericToRelTime",
     )
 
-    bog_filename = "lead_lag_runtime_block_playground.bog"
+    bog_filename = "lead_lag_runtime_block.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)
@@ -2289,97 +2503,9 @@ import os
 import sys
 
 # Append project src directory to path for bog_builder import
+# This line might need adjustment based on your project structure.
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 from bog_builder import BogFolderBuilder
-
-
-def build_rate_limiter(b: BogFolderBuilder) -> None:
-    """Builds the Rate of Change Limiter logic graph with a configurable time delta."""
-
-    # ==========================================================================
-    # 1. TOP-LEVEL I/O AND CONFIGURATION
-    # ==========================================================================
-    b.add_sine_wave("FastChangingInput")
-    b.add_numeric_writable("MaxChangePerSecond", default_value=5.0)
-
-    # New configurable time delta
-    update_seconds_default = 5.0
-    b.add_numeric_writable("UpdateSeconds", default_value=update_seconds_default)
-
-    b.add_numeric_writable("RateLimitedOutput", default_value=0.0)
-
-    # ==========================================================================
-    # 2. ALGORITHM LOGIC (SUB-FOLDER)
-    # ==========================================================================
-    b.start_sub_folder("RateLimiterLogic")
-
-    # --- Timer for periodic updates ---
-    # The initial period is set from the default value.
-    b.add_multi_vibrator(
-        "UpdateTimer",
-        period_ms=str(int(update_seconds_default * 1000)),
-    )
-    b.add_one_shot("UpdateTick")
-
-    # --- Visual feedback for timer period in milliseconds ---
-    b.add_numeric_const("Const_1000", properties={"value": 1000.0})
-    b.add_multiply("Update_ms_Display")
-    b.add_numeric_writable("CalculatedPeriod_ms")
-
-    # --- Memory to hold the last output value ---
-    b.add_numeric_latch("PreviousOutput_Latch")
-
-    # --- Calculate the desired change (Delta) ---
-    b.add_subtract("CalculateDelta")
-
-    # --- Logic to clamp the change within limits (using Multiply by -1) ---
-    b.add_numeric_const("Const_Neg_1", properties={"value": -1.0})
-    b.add_multiply("CreateNegativeLimit")
-    b.add_maximum("Clamp_Low")
-    b.add_minimum("Clamp_High")
-
-    # --- Calculate the new rate-limited output ---
-    b.add_add("CalculateNewOutput")
-
-    b.end_sub_folder()
-
-    # ==========================================================================
-    # 3. WIRING LOGIC
-    # ==========================================================================
-
-    # --- Wire the Timer and its configuration display ---
-    b.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
-    b.add_link("Const_1000", "out", "Update_ms_Display", "inB")
-    b.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-
-    # NOTE: As seen in ping_pong_algorithm.py, this link may not allow for live updates
-    # of the MultiVibrator's period in the Workbench. The initial value will be set correctly.
-    b.add_link("CalculatedPeriod_ms", "out", "UpdateTimer", "Period")
-
-    b.add_link("UpdateTimer", "out", "UpdateTick", "in")
-
-    # --- Wire the Delta Calculation ---
-    b.add_link("FastChangingInput", "out", "CalculateDelta", "inA")
-    b.add_link("PreviousOutput_Latch", "out", "CalculateDelta", "inB")
-
-    # --- Wire the Clamping Logic ---
-    b.add_link("MaxChangePerSecond", "out", "CreateNegativeLimit", "inA")
-    b.add_link("Const_Neg_1", "out", "CreateNegativeLimit", "inB")
-    b.add_link("CalculateDelta", "out", "Clamp_Low", "inA")
-    b.add_link("CreateNegativeLimit", "out", "Clamp_Low", "inB")
-    b.add_link("Clamp_Low", "out", "Clamp_High", "inA")
-    b.add_link("MaxChangePerSecond", "out", "Clamp_High", "inB")
-
-    # --- Wire the New Output Calculation ---
-    b.add_link("PreviousOutput_Latch", "out", "CalculateNewOutput", "inA")
-    b.add_link("Clamp_High", "out", "CalculateNewOutput", "inB")
-
-    # --- Wire the Memory Update ---
-    b.add_link("CalculateNewOutput", "out", "PreviousOutput_Latch", "in")
-    b.add_link("UpdateTick", "out", "PreviousOutput_Latch", "clock")
-
-    # --- Wire the Final Output ---
-    b.add_link("CalculateNewOutput", "out", "RateLimitedOutput", "in16")
 
 
 def main() -> None:
@@ -2395,11 +2521,93 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    builder = BogFolderBuilder("RateOfChangeLimiter_ConfigurableTime")
-    build_rate_limiter(builder)
+    builder = BogFolderBuilder("RateOfChangeLimiter_Fixed")
 
-    output_filename = "rate_of_change_limiter_configurable.bog"
+    # ==========================================================================
+    # 1. TOP-LEVEL I/O AND CONFIGURATION
+    # ==========================================================================
+    builder.add_sine_wave("FastChangingInput")
+    builder.add_numeric_writable("MaxChangePerSecond", default_value=5.0)
 
+    # New configurable time delta
+    update_seconds_default = 5.0
+    builder.add_numeric_writable("UpdateSeconds", default_value=update_seconds_default)
+
+    builder.add_numeric_writable("RateLimitedOutput", default_value=0.0)
+
+    # ==========================================================================
+    # 2. ALGORITHM LOGIC (organized in sub-folder for clarity)
+    # ==========================================================================
+    builder.start_sub_folder("RateLimiterLogic")
+
+    # --- Timer for periodic updates ---
+    # The initial period is set from the default value.
+    builder.add_multi_vibrator(
+        "UpdateTimer",
+        period_ms=str(int(update_seconds_default * 1000)),
+    )
+    builder.add_one_shot("UpdateTick")
+
+    # --- Visual feedback for timer period in milliseconds ---
+    builder.add_numeric_const("Const_1000", properties={"value": 1000.0})
+    builder.add_multiply("Update_ms_Display")
+    builder.add_numeric_writable("CalculatedPeriod_ms")
+
+    # --- Memory to hold the last output value ---
+    builder.add_numeric_latch("PreviousOutput_Latch")
+
+    # --- Calculate the desired change (Delta) ---
+    builder.add_subtract("CalculateDelta")
+
+    # --- Logic to clamp the change within limits (using Multiply by -1) ---
+    builder.add_numeric_const("Const_Neg_1", properties={"value": -1.0})
+    builder.add_multiply("CreateNegativeLimit")
+    builder.add_maximum("Clamp_Low")
+    builder.add_minimum("Clamp_High")
+
+    # --- Calculate the new rate-limited output ---
+    builder.add_add("CalculateNewOutput")
+
+    builder.end_sub_folder()
+
+    # ==========================================================================
+    # 3. WIRING LOGIC (Corrected)
+    # ==========================================================================
+
+    # --- Wire the Timer and its configuration display ---
+    builder.add_link("UpdateSeconds", "out", "Update_ms_Display", "inA")
+    builder.add_link("Const_1000", "out", "Update_ms_Display", "inB")
+    
+    # This link is for visual feedback only and is not in the critical control path.
+    builder.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
+    builder.add_link("Update_ms_Display", "out", "UpdateTimer", "Period")
+    builder.add_link("UpdateTimer", "out", "UpdateTick", "in")
+
+    # --- Wire the Delta Calculation ---
+    builder.add_link("FastChangingInput", "out", "CalculateDelta", "inA")
+    builder.add_link("PreviousOutput_Latch", "out", "CalculateDelta", "inB")
+
+    # --- Wire the Clamping Logic ---
+    builder.add_link("MaxChangePerSecond", "out", "CreateNegativeLimit", "inA")
+    builder.add_link("Const_Neg_1", "out", "CreateNegativeLimit", "inB")
+    builder.add_link("CalculateDelta", "out", "Clamp_Low", "inA")
+    builder.add_link("CreateNegativeLimit", "out", "Clamp_Low", "inB")
+    builder.add_link("Clamp_Low", "out", "Clamp_High", "inA")
+    builder.add_link("MaxChangePerSecond", "out", "Clamp_High", "inB")
+
+    # --- Wire the New Output Calculation ---
+    builder.add_link("PreviousOutput_Latch", "out", "CalculateNewOutput", "inA")
+    builder.add_link("Clamp_High", "out", "CalculateNewOutput", "inB")
+
+    # --- Wire the Memory Update ---
+    builder.add_link("CalculateNewOutput", "out", "PreviousOutput_Latch", "in")
+    builder.add_link("UpdateTick", "out", "PreviousOutput_Latch", "clock")
+
+    # --- Wire the Final Output ---
+    builder.add_link("CalculateNewOutput", "out", "RateLimitedOutput", "in16")
+
+    # --- Save the .bog file ---
+    output_filename = "rate_of_change_limiter.bog"
     os.makedirs(args.output_dir, exist_ok=True)
     out_path = os.path.join(args.output_dir, output_filename)
     builder.save(out_path)
@@ -2956,7 +3164,16 @@ def main():
             target_slot = f"in{chr(65 + i)}"
             builder.add_link(winner_name, "out", "Ignore", target_slot)
 
-        builder.add_link("I_ignore_var", "out", "Ignore", "select")
+        # FIXED: Add explicit conversion link for the 'select' slot
+        builder.add_link(
+            "I_ignore_var",
+            "out",
+            "Ignore",
+            "select",
+            link_type="b:ConversionLink",
+            converter_type="conv:StatusNumericToStatusEnum",
+        )
+        
         builder.add_link("Ignore", "out", "Filtered_Max", "in16")
 
     # --- Save file ---

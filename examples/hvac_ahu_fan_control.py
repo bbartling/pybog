@@ -19,7 +19,10 @@ def main():
         description="Build an AHU fan duct static pressure control loop (.bog file)."
     )
     parser.add_argument(
-        "-o", "--output_dir", default="examples", help="Output directory for the .bog file."
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
     )
     args = parser.parse_args()
 

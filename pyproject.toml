@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pybog"
-version = "0.1.4"
+version = "0.1.5"
 description = "A Python toolkit for programmatically generating Tridium Niagara .bog files for HVAC controls."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.8"

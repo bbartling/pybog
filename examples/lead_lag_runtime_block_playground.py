@@ -157,7 +157,7 @@ def main():
         converter_type="conv:StatusNumericToRelTime",
     )
 
-    bog_filename = "lead_lag_runtime_block_playground.bog"
+    bog_filename = "lead_lag_runtime_block.bog"
     output_path = os.path.join(args.output_dir, bog_filename)
     os.makedirs(args.output_dir, exist_ok=True)
     builder.save(output_path)

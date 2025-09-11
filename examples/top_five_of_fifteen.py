@@ -139,7 +139,16 @@ def main():
             target_slot = f"in{chr(65 + i)}"
             builder.add_link(winner_name, "out", "Ignore", target_slot)
 
-        builder.add_link("I_ignore_var", "out", "Ignore", "select")
+        # FIXED: Add explicit conversion link for the 'select' slot
+        builder.add_link(
+            "I_ignore_var",
+            "out",
+            "Ignore",
+            "select",
+            link_type="b:ConversionLink",
+            converter_type="conv:StatusNumericToStatusEnum",
+        )
+
         builder.add_link("Ignore", "out", "Filtered_Max", "in16")
 
     # --- Save file ---

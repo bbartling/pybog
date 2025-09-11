@@ -67,12 +67,8 @@ def main():
     builder.add_maximum("Max_Final")
 
     # --- Hysteresis (SR Latch) Logic ---
-    builder.add_numeric_const(
-        "Enable_Setpoint", properties={"value": 30.0}
-    )
-    builder.add_numeric_const(
-        "Disable_Setpoint", properties={"value": 15.0}
-    )
+    builder.add_numeric_const("Enable_Setpoint", properties={"value": 30.0})
+    builder.add_numeric_const("Disable_Setpoint", properties={"value": 15.0})
     builder.add_greater_than("Set_Condition")
     builder.add_less_than("Reset_Condition_Raw")
     builder.add_not("Reset_Condition")
@@ -149,7 +145,6 @@ def main():
     print(
         f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
     )
-    print("Drag this file into Niagara Workbench to test the logic.")
 
 
 if __name__ == "__main__":
