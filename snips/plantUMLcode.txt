@@ -1,0 +1,70 @@
+@startuml
+title Tiered Agent Process Flowchart
+
+' Style customizations to match the original feel
+skinparam activity {
+StartColor #22c55e
+StopColor #ef4444
+BorderColor #16a34a
+BackgroundColor #f0fdf4
+ArrowColor #333
+}
+skinparam partition {
+BorderColor #a1a1aa
+BackgroundColor #f4f4f5
+}
+
+start
+
+partition "Start & Setup" {
+if (API or CLI?) then (CLI)
+:Prompt for description & filename;
+else (API)
+:Receive JSON payload
+(description, filename, etc.);
+endif
+:Load & cache context files;
+}
+
+while (Attempt < max_iters?) is (Yes)
+partition "Main Agent Loop" {
+if (Attempt = 1?) then (Yes)
+:LLM Generate Script
+(using LITE model);
+else (No)
+if (Attempt = Escalation Point?) then (Yes)
+partition "Escalation" #f97316 {
+:⚠️ ESCALATE
+LLM Fix Script
+(using PRO model);
+}
+else (No)
+:LLM Fix Script
+(using LITE model);
+endif
+endif
+:Write script to temp folder;
+:Run script in subprocess;
+}
+
+partition "Outcome" {
+    if (Run OK AND .bog file created?) then (Yes)
+        #22c55e:-> 🏆 Success
+        Return ZIP
+        Print stats;
+        stop
+    else (No)
+        :Capture stderr/stdout;
+        :Increment attempt
+        Store code & error;
+    endif
+}
+
+endwhile (No)
+
+#ef4444:-> ❌ Failure
+Return error JSON
+Print stats;
+stop
+
+@enduml
