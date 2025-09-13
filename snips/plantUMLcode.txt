@@ -1,7 +1,7 @@
 @startuml
-title Tiered Agent Process Flowchart
+title Bog Maker - Tiered AI Agent Process
 
-' Style customizations to match the original feel
+' Style customizations
 skinparam activity {
 StartColor #22c55e
 StopColor #ef4444
@@ -13,58 +13,91 @@ skinparam partition {
 BorderColor #a1a1aa
 BackgroundColor #f4f4f5
 }
+skinparam note {
+BackgroundColor #feFce8
+BorderColor #eab308
+}
 
 start
 
-partition "Start & Setup" {
-if (API or CLI?) then (CLI)
-:Prompt for description & filename;
-else (API)
-:Receive JSON payload
+partition "API Request Handling" {
+:Receive user request
 (description, filename, etc.);
-endif
-:Load & cache context files;
+:Check user rate limit;
+:Create temporary directory;
 }
 
 while (Attempt < max_iters?) is (Yes)
 partition "Main Agent Loop" {
 if (Attempt = 1?) then (Yes)
-:LLM Generate Script
-(using LITE model);
+:Generate Script
+(using <b>Flash</b> model);
 else (No)
 if (Attempt = Escalation Point?) then (Yes)
-partition "Escalation" #f97316 {
+partition "Escalation" #fef2e2 {
 :⚠️ ESCALATE
-LLM Fix Script
-(using PRO model);
+Fix Script
+(using <b>Pro</b> model);
 }
 else (No)
-:LLM Fix Script
-(using LITE model);
+:Fix Script
+(using <b>Flash</b> model);
 endif
 endif
 :Write script to temp folder;
 :Run script in subprocess;
 }
 
-partition "Outcome" {
-    if (Run OK AND .bog file created?) then (Yes)
-        #22c55e:-> 🏆 Success
-        Return ZIP
-        Print stats;
-        stop
-    else (No)
-        :Capture stderr/stdout;
-        :Increment attempt
-        Store code & error;
-    endif
+if (Run OK AND .bog file created?) then (Yes)
+    break
+else (No)
+    :Capture stderr/stdout;
+    :Increment attempt;
+endif
+
+endwhile (is No)
+
+if (BOG File Exists?) then (Yes)
+partition "Quality Assurance (QA)" {
+if (Last attempt used <b>Pro</b> model?) then (No)
+#fefce8:-> Pro Verification Pass
+:<b>Pro</b> model reviews script;
+if (Refinements suggested?) then (Yes)
+:Write new script;
+:Re-run script;
+if (Run OK?) then (Yes)
+note right
+Final script is the
+Pro-verified version.
+end note
+else (No)
+#ef4444:⚠️ Revert to last
+working script;
+note right
+Pro verification failed.
+Use original successful script.
+end note
+endif
+else (No)
+:Keep original script;
+endif
+else (Yes)
+:Skip QA (Pro already ran);
+endif
 }
+partition "Final Packaging (Success)" {
+#22c55e:-> Create SUCCESS.zip
+(logs, script, .bog);
+}
+else (No)
+partition "Final Packaging (Failure)" {
+#ef4444:-> Create FAILURE.zip
+(logs, last failed script);
+}
+endif
 
-endwhile (No)
+:Send .zip file to user;
 
-#ef4444:-> ❌ Failure
-Return error JSON
-Print stats;
 stop
 
 @enduml
