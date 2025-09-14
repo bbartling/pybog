@@ -36,9 +36,10 @@ def main():
 
     # Tstat block to enable the plant based on OAT.
     builder.add_tstat("Plant_Enable_Tstat")
+    # FIXED: Re-instating the constant blocks for setpoint and differential
+    # This pattern is consistent with the tstat_block_playground.py example.
     builder.add_numeric_const("Enable_Setpoint", value=60.0)
     builder.add_numeric_const("Enable_Differential", value=2.0)
-    # action=False means direct-acting (output is true when CV > SP).
     builder.add_boolean_const("Enable_Action_Direct", value=True)
 
     # LeadLagCycles block to rotate the two pumps.
@@ -61,9 +62,12 @@ def main():
     print("\n--- Wiring Components ---")
     # --- Wiring ---
     # 1. Wire the plant enable logic.
+    # FIXED: Reverted target slot from 'in' back to 'cv'
     builder.add_link("Outside_Air_Temperature", "out", "Plant_Enable_Tstat", "cv")
+    # FIXED: Restore links for sp and diff
     builder.add_link("Enable_Setpoint", "out", "Plant_Enable_Tstat", "sp")
     builder.add_link("Enable_Differential", "out", "Plant_Enable_Tstat", "diff")
+
     # Apply the necessary conversion for the action slot.
     builder.add_link(
         "Enable_Action_Direct",

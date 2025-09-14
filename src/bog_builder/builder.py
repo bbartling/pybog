@@ -573,6 +573,9 @@ class BogFolderBuilder:
             "kitControl:Tstat", name, properties=properties, actions=actions
         )
 
+    def add_psychrometric(self, name: str) -> None:
+        self._add_component("kitControl:Psychrometric", name)
+
     def add_reset(
         self, name: str, properties: dict | None = None, actions: dict | None = None
     ) -> None:
@@ -731,6 +734,7 @@ class BogFolderBuilder:
                 "kitControl:BooleanDelay",
                 "kitControl:Tstat",
                 "kitControl:OneShot",
+                "kitControl:LoopPoint",
             ]
             if t_type in boolean_target_types or "Boolean" in t_type:
                 target_data_type = "StatusBoolean"
@@ -769,7 +773,8 @@ class BogFolderBuilder:
                 raise TypeError(
                     f"Type mismatch: Cannot link '{source_comp_name}' (output: {source_data_type}) "
                     f"to '{target_comp_name}.{target_slot}' (expects: {target_data_type}). "
-                    f"No automatic converter found in CONVERSION_MAP."
+                    f"No automatic converter found in CONVERSION_MAP.",
+                    f"Check models.py for the CONVERSION_MAP and SLOT_TYPE_MAPPING.",
                 )
 
         # --- 4. Store the Link ---
@@ -1237,6 +1242,8 @@ class BogFolderBuilder:
                 else:
                     attrs["m"] = f"{prefix}={prefix}"
             element = ET.SubElement(folder_element, "p", attrs)
+
+            """
             x, y = coords.get(name, (self.START_X, self.START_Y))
             ET.SubElement(
                 element,
@@ -1247,6 +1254,7 @@ class BogFolderBuilder:
                     "v": f"{int(x)},{int(y)},8",
                 },
             )
+            """
             if data["type"] == "control:NumericWritable":
                 default_val = data["properties"].get("defaultValue", 0.0)
                 out_slot = ET.SubElement(
@@ -1343,7 +1351,6 @@ class BogFolderBuilder:
                 out = ET.SubElement(element, "p", {"n": "out", "t": "b:StatusEnum"})
                 idx = data["properties"].get("index")
                 if idx is None and "value" in data["properties"]:
-                    # --- NEW ROBUST SANITIZATION LOGIC ---
                     raw_str = str(data["properties"]["value"])
                     # Split the string at the '@'
                     parts = raw_str.split("@", 1)
@@ -1752,9 +1759,42 @@ class BogFolderBuilder:
             elif data["type"] == "sch:NumericSchedule":
                 self._build_schedule_xml(element, name, data, "Numeric", 0.0)
 
+            elif data["type"] == "kitControl:Psychrometric":
+                # Define the linkable INPUT slots. This is correct and necessary.
+                in_temp_slot = ET.SubElement(
+                    element, "p", {"n": "inTemp", "f": "sL", "t": "b:StatusNumeric"}
+                )
+                ET.SubElement(in_temp_slot, "p", {"n": "value", "v": "0.0"})
+                ET.SubElement(
+                    in_temp_slot,
+                    "p",
+                    {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
+                )
+
+                in_humidity_slot = ET.SubElement(
+                    element, "p", {"n": "inHumidity", "f": "sL", "t": "b:StatusNumeric"}
+                )
+                ET.SubElement(in_humidity_slot, "p", {"n": "value", "v": "0.0"})
+                ET.SubElement(
+                    in_humidity_slot,
+                    "p",
+                    {"n": "status", "v": "0;activeLevel=e:17@control:PriorityLevel"},
+                )
+
             else:
                 for prop_name, prop_value in data["properties"].items():
                     ET.SubElement(element, "p", {"n": prop_name, "v": str(prop_value)})
+
+            x, y = coords.get(name, (self.START_X, self.START_Y))
+            ET.SubElement(
+                element,
+                "p",
+                {
+                    "n": "wsAnnotation",
+                    "t": "b:WsAnnotation",
+                    "v": f"{int(x)},{int(y)},8",
+                },
+            )
 
     def _build_schedule_xml(
         self,

@@ -6,10 +6,10 @@ from datetime import datetime
 # Paths
 EXAMPLES_DIR = os.path.join(os.getcwd(), "examples")
 # To this for WSL:
-OUTPUT_DIR = "/mnt/c/Users/ben/Niagara4.11/JENEsys"
+OUTPUT_DIR = "/mnt/c/Users/ben/Niagara4.13/JENEsys"
 
 # The LOG_FILE line can remain the same, it will be created in your current directory
-LOG_FILE = "/mnt/c/Users/ben/Niagara4.11/JENEsys/run_examples_log.txt"
+LOG_FILE = "/mnt/c/Users/ben/Niagara4.13/JENEsys/run_examples_log.txt"
 
 STOP_ON_ERROR = True
 

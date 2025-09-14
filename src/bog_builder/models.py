@@ -93,6 +93,9 @@ SLOT_TYPE_MAPPING = {
     ("kitControl:BooleanDelay", "offDelay"): "RelTime",
     ("kitControl:NumericDelay", "updateTime"): "RelTime",
     ("kitControl:NumericDelay", "maxStepSize"): "Number",
+    ("kitControl:LoopPoint", "loopEnable"): "StatusBoolean",
+    ("kitControl:LoopPoint", "controlledVariable"): "StatusNumeric",
+    ("kitControl:LoopPoint", "setpoint"): "StatusNumeric",
     ("kitControl:LoopPoint", "proportionalConstant"): "Number",
     ("kitControl:LoopPoint", "integralConstant"): "Number",
     ("kitControl:LoopPoint", "derivativeConstant"): "Number",
@@ -109,6 +112,9 @@ SLOT_TYPE_MAPPING = {
     ("kitControl:LeadLagRuntime", "maxRuntime"): "RelTime",
     ("kitControl:NumericSelect", "select"): "StatusEnum",
     ("kitControl:Tstat", "action"): "FrozenEnum",
+    ("kitControl:Tstat", "cv"): "StatusNumeric",
+    ("kitControl:Tstat", "sp"): "StatusNumeric",
+    ("kitControl:Tstat", "diff"): "StatusNumeric",
 }
 
 # Maps a (source_type, target_type) tuple to the required converter.
@@ -275,6 +281,17 @@ COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "sch:BooleanSchedule": {"outputs": ["out"]},
     "sch:NumericSchedule": {"outputs": ["out"]},
     "sch:EnumSchedule": {"outputs": ["out"]},
+    "kitControl:Psychrometric": {
+        "inputs": ["inTemp", "inHumidity"],
+        "outputs": [
+            "outDewPoint",
+            "outEnthalpy",
+            "outSatPress",
+            "outVaporPress",
+            "outWetBulbTemp",
+        ],
+    },
+    "sch:BooleanSchedule": {"outputs": ["out"]},
 }
 
 
