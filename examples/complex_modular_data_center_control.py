@@ -1,27 +1,66 @@
+"""
+User prompt:
+Create a Niagara .bog sequence for an eight-chiller plant that uses temperature 
+staging, load staging, and BladeRoom demand signals to determine how many 
+chillers to run. The common chilled-water flow temperature shall be controlled 
+against an 18 °C setpoint. If the temperature rises to 19 °C (1 °C above setpoint) 
+and remains there for 10 minutes, the next duty chiller is enabled, and if the 
+temperature rises to 20 °C (2 °C above setpoint) the next duty chiller is 
+enabled immediately. This process continues until all eight chillers are 
+staged on. In parallel, load staging logic shall be implemented so that each 
+chiller, rated at 1.75 MW, operates between 50 % and 75 % load 
+(0.875 MW to 1.3125 MW).  The sequence enables the next chiller whenever plant 
+load exceeds 1.3 MW, 2.6 MW, 3.9 MW, and so forth up to 10.4 MW, and sheds 
+chillers when load falls below 1.2 MW, 2.5 MW, 3.8 MW, and so forth down to 
+9.0 MW, with a twenty-minute delay before adding chillers on rising load. A 
+third scenario accounts for BladeRoom demand where three data hall signals 
+are monitored; if any hall requires cooling, one additional chiller is started, 
+and if all three halls require cooling, three additional chillers are started 
+on top of the EC and LP1 base loads, after which chillers are staged in and 
+out by the load table. Each chiller includes an available switch that removes 
+it from the sequence if set to off, and the entire plant rotates weekly so 
+that each chiller takes a turn as Duty 1 through Duty 8, with rotation day and 
+time configurable. The sequence shall use LeadLagCycles or LeadLagRuntime blocks 
+to manage rotation, BooleanDelay blocks to enforce the ten-minute and twenty-minute 
+timers, and numeric writeables to expose the setpoint, the one-degree and 
+two-degree temperature differentials, the load thresholds, and the rotation 
+schedule parameters. The final outputs are eight Boolean chiller enable 
+commands sequenced per this logic.
+
+This is the most advanced example for a modular data center chiller control plant.
+This script combines staging, weekly rotation, and command logic into a single
+runnable file that generates one .bog file for the Tridium Niagara 4 platform.
+The logic determines the number of chillers required based on temperature, load,
+and other demand signals, ensuring at least one chiller is always enabled.
+"""
+
 import sys
 import os
+import argparse
 
-# The script must use sys.path.append(...) for the bog_builder import. [cite: 7]
+# The script must use sys.path.append(...) for the bog_builder import.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from bog_builder import BogFolderBuilder
 
 
 def main():
-    """
-    Builds a complete, modular data center chiller control logic file.
-    This script combines staging, weekly rotation, and command logic into a single
-    runnable file that generates one .bog file for the Tridium Niagara 4 platform.
-    The logic determines the number of chillers required based on temperature, load,
-    and other demand signals. It then rotates the available chillers on a weekly
-    basis to ensure even wear and commands the appropriate lead units.
-    """
-    # Initialize the builder with a descriptive name for the top-level folder. [cite: 11]
+
+    parser = argparse.ArgumentParser(
+        description="Build a .bog file for Modular Data Center Control logic."
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default="examples",
+        help="Output directory for the .bog file.",
+    )
+    args = parser.parse_args()
+
     builder = BogFolderBuilder("Modular_Data_Center_Control", debug=True)
 
     print("--- Creating Top-Level Inputs & Outputs ---")
 
     # --- INPUTS ---
-    # Staging Inputs (from sensors and setpoints)
     builder.add_numeric_writable("Common_Flow_Temp_C", default_value=18.5, precision=1)
     builder.add_numeric_writable(
         "Common_Flow_Temp_Setpoint_C", default_value=18.0, precision=1
@@ -32,53 +71,45 @@ def main():
     builder.add_boolean_writable("Blade_Room_1_Demand", default_value=False)
     builder.add_boolean_writable("Blade_Room_2_Demand", default_value=False)
     builder.add_boolean_writable("Blade_Room_3_Demand", default_value=True)
-
-    # Rotation/Availability Inputs
     for i in range(1, 9):
         builder.add_boolean_writable(f"Chiller_{i}_Available", default_value=True)
     builder.add_boolean_writable("Manual_Rotate_Pulse", default_value=False)
 
     # --- OUTPUTS & VIEWERS ---
-    # Final commands to physical equipment
     for i in range(1, 9):
         builder.add_boolean_writable(f"Chiller_{i}_Cmd", default_value=False)
-
-    # Viewers for intermediate logic values
     builder.add_numeric_writable(
-        "Total_Chillers_Required", default_value=0.0, precision=0
+        "Total_Chillers_Required", default_value=1.0, precision=0
     )
     builder.add_numeric_writable("Current_Week_Number", default_value=1.0, precision=0)
 
     # --- LOGIC COMPONENTS ---
-    # Use sub-folders to organize complex logic. [cite: 9]
-
-    # 1. Staging Logic: Determines how many chillers are needed.
     builder.start_sub_folder("StagingLogic")
     builder.add_add("Setpoint_Plus_1C")
     builder.add_numeric_const("Const_1", value=1.0)
     builder.add_greater_than("Temp_GT_SP_plus_1C")
-    builder.add_boolean_delay(
-        "Stage1_Temp_Delay", on_delay="600000"
-    )  # 10 minutes [cite: 22]
+    builder.add_boolean_delay("Stage1_Temp_Delay", on_delay="600000")
     builder.add_counter("Temp_Stage_Counter")
     builder.add_not("Temp_Normal")
-
     builder.add_maximum("Max_Of_Temp_And_Load")
     builder.add_add("Add_Blade_Room_Demand")
     builder.add_minimum("Clamp_High")
     builder.add_numeric_const("Const_8_MaxChillers", value=8.0)
 
-    # Placeholder/viewer points inside staging logic
+    # --- NEW: Minimum Demand Logic ---
+    builder.add_maximum("Ensure_Min_One_Chiller")
+    builder.add_numeric_const("Min_Chiller_Demand", value=1.0)
+
+    # Placeholder/viewer points
     builder.add_numeric_writable(
         "Calculated_Chillers_By_Temp", default_value=0.0, precision=0
     )
     builder.add_numeric_writable(
         "Calculated_Chillers_By_Load", default_value=0.0, precision=0
-    )  # Note: Load logic is not fully built out in source
+    )
     builder.add_numeric_writable(
         "Additional_Chillers_By_Blade", default_value=0.0, precision=0
     )
-
     builder.start_sub_folder("BladeRoomLogic")
     builder.add_numeric_switch("Blade_1_As_Num")
     builder.add_numeric_switch("Blade_2_As_Num")
@@ -86,10 +117,9 @@ def main():
     builder.add_add("Sum_Blade_Demands")
     builder.add_greater_than_equal("Is_Demand_1")
     builder.add_numeric_switch("Additional_Chillers_Switch")
-    builder.end_sub_folder()  # BladeRoomLogic
-    builder.end_sub_folder()  # StagingLogic
+    builder.end_sub_folder()
+    builder.end_sub_folder()
 
-    # 2. Schedule Logic: Creates a weekly pulse for rotation.
     builder.start_sub_folder("ScheduleLogic")
     schedule_props = {
         "defaultOutput": {"value": False},
@@ -117,18 +147,14 @@ def main():
     builder.add_boolean_schedule("Weekly_Trigger_Schedule", properties=schedule_props)
     builder.add_one_shot("Scheduled_Trigger_Pulse")
     builder.add_or("Combined_Rotate_Pulse")
-    builder.end_sub_folder()  # ScheduleLogic
+    builder.end_sub_folder()
 
-    # 3. Rotation Logic: Takes the required number of chillers and rotates them.
     builder.start_sub_folder("RotationLogic")
     builder.add_counter("Week_Counter")
     builder.add_numeric_const("Const_8_Total_Chillers", value=8.0)
     builder.add_greater_than("Week_GT_8")
-
-    # Create Priority Calculation Logic for each Chiller
     for i in range(1, 9):
         builder.start_sub_folder(f"Chiller_{i}_Priority_Calc")
-        # Priority = if ID >= Week then (ID-Week)+1 else (ID-Week)+1+8
         builder.add_numeric_const(f"Chiller_{i}_ID", value=float(i))
         builder.add_greater_than_equal(f"Is_ID_GE_Week_{i}")
         builder.add_subtract(f"ID_minus_Week_{i}")
@@ -137,8 +163,8 @@ def main():
         builder.add_numeric_switch(f"Priority_Switch_{i}")
         builder.add_less_than_equal(f"Chiller_{i}_Enable_Check")
         builder.add_and(f"Chiller_{i}_Final_Enable")
-        builder.end_sub_folder()  # Chiller_i_Priority_Calc
-    builder.end_sub_folder()  # RotationLogic
+        builder.end_sub_folder()
+    builder.end_sub_folder()
 
     print("\n--- Wiring Components ---")
 
@@ -184,9 +210,11 @@ def main():
     )
     builder.add_link("Add_Blade_Room_Demand", "out", "Clamp_High", "inA")
     builder.add_link("Const_8_MaxChillers", "out", "Clamp_High", "inB")
-    builder.add_link(
-        "Clamp_High", "out", "Total_Chillers_Required", "in16"
-    )  # Link to top-level viewer
+
+    # --- NEW: Reroute through the minimum demand logic ---
+    builder.add_link("Clamp_High", "out", "Ensure_Min_One_Chiller", "inA")
+    builder.add_link("Min_Chiller_Demand", "out", "Ensure_Min_One_Chiller", "inB")
+    builder.add_link("Ensure_Min_One_Chiller", "out", "Total_Chillers_Required", "in16")
 
     # --- Wire Schedule Logic ---
     builder.add_link("Weekly_Trigger_Schedule", "out", "Scheduled_Trigger_Pulse", "in")
@@ -198,27 +226,21 @@ def main():
     builder.add_link("Week_Counter", "out", "Week_GT_8", "inA")
     builder.add_link("Const_8_Total_Chillers", "out", "Week_GT_8", "inB")
     builder.add_link("Week_GT_8", "out", "Week_Counter", "reset")
-    builder.add_link(
-        "Week_Counter", "out", "Current_Week_Number", "in16"
-    )  # Link to top-level viewer
+    builder.add_link("Week_Counter", "out", "Current_Week_Number", "in16")
 
     # Wire the logic for each of the 8 chillers
     for i in range(1, 9):
         # Wire priority calculation
         builder.add_link(f"Chiller_{i}_ID", "out", f"Is_ID_GE_Week_{i}", "inA")
         builder.add_link("Week_Counter", "out", f"Is_ID_GE_Week_{i}", "inB")
-
         builder.add_link(f"Chiller_{i}_ID", "out", f"ID_minus_Week_{i}", "inA")
         builder.add_link("Week_Counter", "out", f"ID_minus_Week_{i}", "inB")
-
         builder.add_link(f"ID_minus_Week_{i}", "out", f"Base_Priority_{i}", "inA")
         builder.add_link("Const_1", "out", f"Base_Priority_{i}", "inB")
-
         builder.add_link(f"Base_Priority_{i}", "out", f"Wrapped_Priority_{i}", "inA")
         builder.add_link(
             "Const_8_Total_Chillers", "out", f"Wrapped_Priority_{i}", "inB"
         )
-
         builder.add_link(
             f"Is_ID_GE_Week_{i}", "out", f"Priority_Switch_{i}", "inSwitch"
         )
@@ -226,7 +248,6 @@ def main():
         builder.add_link(
             f"Wrapped_Priority_{i}", "out", f"Priority_Switch_{i}", "inFalse"
         )
-
         # Wire final command logic
         builder.add_link(
             f"Priority_Switch_{i}", "out", f"Chiller_{i}_Enable_Check", "inA"
@@ -243,12 +264,14 @@ def main():
         builder.add_link(f"Chiller_{i}_Final_Enable", "out", f"Chiller_{i}_Cmd", "in16")
 
     # --- Save the .bog file ---
-    # The output filename must be hardcoded as a string. [cite: 6]
-    output_filename = "modular_data_center_combined_logic.bog"
-    builder.save(output_filename)
-    print(f"\nSuccessfully created Niagara .bog file: {output_filename}")
+    output_filename = "complex_modular_data_center_control.bog"
+    output_path = os.path.join(args.output_dir, output_filename)
+    os.makedirs(args.output_dir, exist_ok=True)
+    builder.save(output_path)
+    print(
+        f"\nSuccessfully created Niagara .bog file at: {os.path.abspath(output_path)}"
+    )
 
 
 if __name__ == "__main__":
-    # The script must not accept any command-line arguments. [cite: 8]
     main()

@@ -54,7 +54,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    builder = BogFolderBuilder("RateOfChangeLimiter_Fixed")
+    builder = BogFolderBuilder("RateOfChangeLimiter")
 
     # ==========================================================================
     # 1. TOP-LEVEL I/O AND CONFIGURATION
@@ -113,7 +113,8 @@ def main() -> None:
 
     # This link is for visual feedback only and is not in the critical control path.
     builder.add_link("Update_ms_Display", "out", "CalculatedPeriod_ms", "in16")
-    builder.add_link("Update_ms_Display", "out", "UpdateTimer", "Period")
+    # FIXED: Changed target slot from "Period" to "period"
+    builder.add_link("Update_ms_Display", "out", "UpdateTimer", "period")
     builder.add_link("UpdateTimer", "out", "UpdateTick", "in")
 
     # --- Wire the Delta Calculation ---

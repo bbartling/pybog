@@ -701,7 +701,7 @@ class BogFolderBuilder:
         target_comp_name: str,
         target_slot: str,
         *,
-        link_type: str = "b:Link",
+        link_type: str | None = None,  # Allow None to let the method decide
         converter_type: str | None = None,
     ) -> None:
         """
@@ -723,28 +723,16 @@ class BogFolderBuilder:
 
         # If target isn't in our special map, infer its type.
         if not target_data_type:
-            # List of component types that inherently accept boolean inputs
-            boolean_target_types = [
-                "kitControl:And",
-                "kitControl:Or",
-                "kitControl:Xor",
-                "kitControl:Not",
-                "kitControl:BooleanSwitch",
-                "kitControl:BooleanLatch",
-                "kitControl:BooleanDelay",
-                "kitControl:Tstat",
-                "kitControl:OneShot",
-                "kitControl:LoopPoint",
-            ]
-            if t_type in boolean_target_types or "Boolean" in t_type:
+            # If the target slot is a known boolean trigger, explicitly set its type
+            if target_slot in ("countUp", "countDown", "clear", "preset"):
                 target_data_type = "StatusBoolean"
+            # Fallback for other unknown types remains numeric
             else:
-                target_data_type = (
-                    "StatusNumeric"  # Default assumption for unknown types
-                )
+                target_data_type = "StatusNumeric"
 
         # --- 3. Check for Mismatch and Find Converter ---
-        final_link_type = link_type
+        # Set a default link_type if none was provided
+        final_link_type = link_type if link_type is not None else "b:Link"
         final_converter_type = converter_type
 
         # If a manual converter was provided, use it.
@@ -771,10 +759,12 @@ class BogFolderBuilder:
             else:
                 # EXCEPTION HANDLING: If types mismatch and no converter is found, raise an error.
                 raise TypeError(
-                    f"Type mismatch: Cannot link '{source_comp_name}' (output: {source_data_type}) "
-                    f"to '{target_comp_name}.{target_slot}' (expects: {target_data_type}). "
-                    f"No automatic converter found in CONVERSION_MAP.",
-                    f"Check models.py for the CONVERSION_MAP and SLOT_TYPE_MAPPING.",
+                    (
+                        f"Type mismatch: Cannot link '{source_comp_name}' (output: {source_data_type}) "
+                        f"to '{target_comp_name}.{target_slot}' (expects: {target_data_type}). "
+                        f"No automatic converter found in CONVERSION_MAP.",
+                        "Check models.py for the CONVERSION_MAP and SLOT_TYPE_MAPPING.",
+                    )
                 )
 
         # --- 4. Store the Link ---

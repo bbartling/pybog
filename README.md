@@ -8,7 +8,17 @@
 
 📦 PyPI project page: [https://pypi.org/project/pybog/](https://pypi.org/project/pybog/)
 
-This project has been tested on **WSL (Windows Subsystem for Linux)** using a Python **3.12.x** environment with a standard virtual environment (`venv`) and `pip`.
+
+The **pybog** project is fundamentally about constructing a **typed knowledge graph** of Niagara components. Every component, slot, and connection is represented as a node or edge in this graph, and the relationships are validated in real time using Pydantic models. This means that when a developer instantiates a component or links two slots together, pybog doesn’t just serialize arbitrary XML—it actively reasons over the structure being built, rejecting anything that doesn’t conform to Niagara’s strict typing rules. At the heart of this process is the `SLOT_TYPE_MAPPING` dictionary, which serves as an explicit ontology for the graph. It encodes the “ground truth” of what each slot expects—whether it’s a `StatusNumeric`, `StatusBoolean`, `RelTime`, `FrozenEnum`, or other Niagara type—and allows the `BogFolderBuilder` to act as a compiler rather than a blind assembler.
+
+When you call `builder.add_link()`, the builder consults this mapping to determine the expected data type of the target slot and compares it against the source component’s declared output type from the `COMPONENT_OUTPUT_TYPE` table. If the two do not match, the builder queries the `CONVERSION_MAP` to locate the proper Niagara converter block, automatically inserts that into the graph, and rewires the edge so the knowledge graph remains valid. This automatic mediation between mismatched types is what transforms pybog from a simple code generator into a **semantic builder**, capable of maintaining type-safety across thousands of links. By embedding these rules, pybog prevents runtime issues such as `ClassCastException` errors and ensures that the generated `.bog` files can be trusted to compile and execute correctly inside Niagara Workbench.
+
+In short, the knowledge graph that pybog produces is both **structural** and **semantic**: structural in that it captures the exact topology of components and links, and semantic in that every edge has been validated against an ontology of slot types and conversion rules. This layered validation gives developers confidence that their automatically generated graphs are not only well-formed but also meaningful in Niagara’s execution model.
+
+The project has been tested on **WSL (Windows Subsystem for Linux)** using a Python **3.12.x** environment with a standard virtual environment (`venv`) and `pip`, ensuring compatibility across modern development setups.
+
+---
+
 
 <details><summary><strong>Installation Details</strong></summary>
 
