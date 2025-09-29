@@ -1,0 +1,67 @@
+/* Node Styles for React Flow */
+
+.system-node {
+  background: white;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 10px;
+  min-width: 150px;
+  box-shadow: 2px 2px 0px #000;
+}
+
+.node-header {
+  font-weight: bold;
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #333;
+}
+
+.node-content {
+  font-size: 11px;
+  color: #666;
+}
+
+.node-port {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #333;
+  border-radius: 50%;
+  background: white;
+}
+
+.node-port.input {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.node-port.output {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.node-selected {
+  box-shadow: 4px 4px 0px #0066cc;
+  border-color: #0066cc;
+}
+
+.node-processing {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 2px 2px 0px #000;
+  }
+  50% {
+    box-shadow: 4px 4px 0px #0066cc;
+  }
+  100% {
+    box-shadow: 2px 2px 0px #000;
+  }
+}

@@ -1,10 +1,29 @@
-# Minimal production image: serve prebuilt React app via nginx
-# We intentionally avoid a Node build stage because the repo includes build/
-# and we want deterministic output matching the committed build.
+# Multi-stage build: Build React app with correct environment variables
+FROM node:18 AS build
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Set build-time environment variables
+ARG REACT_APP_API_URL=http://localhost:8847
+ARG REACT_APP_WS_URL=ws://localhost:8847
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+
+# Build the app
+RUN npm run build
+
+# Production stage: serve built app via nginx
 FROM nginx:alpine
 
-# Copy production build directly
-COPY build /usr/share/nginx/html
+# Copy built app from build stage
+COPY --from=build /app/build /usr/share/nginx/html
 
 # Copy nginx site config
 COPY nginx.conf /etc/nginx/conf.d/default.conf

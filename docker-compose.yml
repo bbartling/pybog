@@ -9,17 +9,20 @@ services:
       POSTGRES_DB: pybog
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database_schema.sql:/docker-entrypoint-initdb.d/01-existing-schema.sql:ro
-      - ./backend/database/migrate_to_unified_schema.sql:/docker-entrypoint-initdb.d/02-unified-schema.sql:ro
+      - ./init_database.sql:/docker-entrypoint-initdb.d/01-init-database.sql:ro
+    ports:
+      - "5433:5432"
     networks:
       - pybog-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pybog"]
+      test: ["CMD-SHELL", "pg_isready -U pybog -d pybog"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
-  # Redis Cache (optional, used by API for caching)
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: pybog-redis
@@ -28,86 +31,83 @@ services:
       - redis_data:/data
     networks:
       - pybog-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  # PyBog API (Core)
-  api:
+  # PyBog Backend (Development with hot reload)
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: pybog-api
+    container_name: pybog-backend
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DATABASE_URL=postgresql://pybog:pybog123@postgres:5432/pybog
       - REDIS_URL=redis://redis:6379/0
-      - DOCKER_MONITORING=true
-      # n8n connectivity inside Docker network
-      - N8N_URL=http://n8n:5678
-      - N8N_ANALYZE_WEBHOOK_PATH=/webhook/pybog-analyze
-      - N8N_CHAT_WEBHOOK_PATH=/webhook/pybog-chat
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3847
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
     volumes:
-      - ./api:/app/api
-      - ./bog_builder:/app/bog_builder
+      - ./backend:/app
       - ./data/outputs:/app/data/outputs
       - ./data/uploads:/app/data/uploads
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "8000:8000"
+      - "8847:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - pybog-network
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-use-colors"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 60s
 
-  # n8n Workflow Engine
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    container_name: pybog-n8n
+  # React Frontend (Development with hot reload)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: pybog-frontend
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=false
-      - N8N_HOST=0.0.0.0
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
-      # Postgres configuration for n8n
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=n8n
-      - DB_POSTGRESDB_USER=pybog
-      - DB_POSTGRESDB_PASSWORD=pybog123
-      # Development encryption key (change in prod)
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-dev_encryption_key_change_me}
-      # Pass API and OpenAI URL to workflows
-      - PYBOG_API_BASE=http://api:8000
-      - PYBOG_API_URL=http://api:8000/api/generate-bog
-      - OPENAI_API_BASE=https://api.openai.com/v1
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # Webhook authentication secrets
-      - WEBHOOK_USERNAME=${WEBHOOK_USERNAME:-webhook_user}
-      - WEBHOOK_PASSWORD=${WEBHOOK_PASSWORD:-webhook_pass_change_me}
-      # Enable community nodes
-      - NODE_FUNCTION_ALLOW_EXTERNAL=@n8n/n8n-nodes-langchain
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - REACT_APP_BACKEND_URL=http://backend:8000
+      - REACT_APP_WS_BACKEND_URL=ws://backend:8000
+      - REACT_APP_API_URL=http://localhost:8847
+      - REACT_APP_WS_URL=ws://localhost:8847
+      - WDS_SOCKET_HOST=127.0.0.1
+      - WDS_SOCKET_PORT=3847
     volumes:
-      - n8n_data:/home/node/.n8n
-      - ./workflow_data:/home/node/workflows
+      - ./frontend:/app
+      - /app/node_modules
     ports:
-      - "5678:5678"
+      - "3847:3000"
     depends_on:
-      postgres:
+      backend:
         condition: service_healthy
-      api:
-        condition: service_started
     networks:
       - pybog-network
+    restart: unless-stopped
+    command: npm start
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # pgAdmin for database management
   pgadmin:
@@ -122,37 +122,22 @@ services:
       - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
       - ./pgpass:/pgpass:ro
     ports:
-      - "5050:80"
+      - "5847:80"
     networks:
       - pybog-network
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-
-  # React Frontend (production, served by nginx)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: pybog-frontend
-    ports:
-      - "3000:80"  # serve prod build at http://localhost:3000
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_N8N_URL=http://localhost:5678
-      - RUNTIME_API_URL=http://localhost:8000
-      - RUNTIME_N8N_URL=http://localhost:5678
-    depends_on:
-      - api
-      - n8n
-    networks:
-      - pybog-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
   redis_data:
-  n8n_data:
   pgadmin_data:
 
 networks:

@@ -24,4 +24,4 @@ RUN mkdir -p /app/data/outputs /app/data/uploads
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "api.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

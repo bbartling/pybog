@@ -19,36 +19,19 @@ import {
   Clock
 } from 'lucide-react';
 import FileViewerModal from './FileViewerModal';
-
-interface Session {
-  id: string;
-  name: string;
-  createdAt: Date | string;
-}
-
-interface Message {
-  id: string;
-  type: 'user' | 'assistant' | 'system';
-  content: string;
-  sessionId?: string;
-  files?: File[];
-  metadata?: {
-    downloadUrl?: string;
-    fileName?: string;
-  };
-  timestamp?: Date;
-}
+import { ChatMessage, Session } from '../types/ChatMessage';
 
 interface ProjectNavigatorProps {
   sessionId: string;
   sessions: Session[];
   currentAnalysis?: any;
-  messages: Message[];
+  messages: ChatMessage[];
   sessionFiles?: { file_id: string; filename: string; file_type: string; file_size: number; preview_url: string; }[];
   onCreateSession: () => void;
   onSwitchSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession?: (id: string, name: string) => void;
+  onClearAllSessions?: () => void;
 }
 
 const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
@@ -61,6 +44,7 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
   onSwitchSession,
   onDeleteSession,
   onRenameSession,
+  onClearAllSessions,
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['sessions', `session-${sessionId}`])
@@ -68,7 +52,16 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerFile, setViewerFile] = useState<{ name: string; url: string; type?: 'pdf' | 'text' | 'json' | 'docx' | 'unknown' } | null>(null);
+  const [viewerFile, setViewerFile] = useState<{ 
+    name: string; 
+    url: string; 
+    type?: 'pdf' | 'text' | 'json' | 'docx' | 'unknown';
+    file_id?: string;
+    file_size?: number;
+    mime_type?: string;
+    state?: string;
+    created_at?: string;
+  } | null>(null);
 
   // Update expanded sections when session changes
   useEffect(() => {
@@ -121,18 +114,20 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
     const bogFiles = sessionMsgs
       .filter(m => {
         const meta = m.metadata;
-        return meta?.downloadUrl && (meta?.fileName?.includes('.json') || meta?.fileName?.includes('BOG'));
+        return (meta?.downloadUrl || meta?.bogFilePath) && 
+               (meta?.fileName?.includes('.json') || meta?.fileName?.includes('BOG') || 
+                meta?.fileName?.includes('.bog') || m.messageType === 'artifact');
       })
       .map((m) => {
         const meta = m.metadata!;
-        let fileName = meta.fileName || 'BOG.json';
+        let fileName = meta.fileName || meta.bogFilePath || 'BOG.json';
         if (fileName.includes('/')) {
           fileName = fileName.split('/').pop() || fileName;
         }
         return {
           id: m.id,
           name: fileName,
-          url: meta.downloadUrl,
+          url: meta.downloadUrl || meta.bogFilePath,
           messageId: m.id
         };
       });
@@ -186,33 +181,65 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
             CHAT SESSIONS
           </div>
         </div>
-        <button
-          onClick={onCreateSession}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            background: '#569BFF',
-            color: '#FFFFFF',
-            border: '2px solid #3F3F4B',
-            borderRadius: '8px',
-            padding: '6px 12px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 0 0 #3F3F4B';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          + New
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={onCreateSession}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: '#569BFF',
+              color: '#FFFFFF',
+              border: '2px solid #3F3F4B',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 0 0 #3F3F4B';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            + New
+          </button>
+          
+          {onClearAllSessions && sessions.length > 1 && (
+            <button
+              onClick={onClearAllSessions}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: '#FF6B6B',
+                color: '#FFFFFF',
+                border: '2px solid #3F3F4B',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 0 0 #3F3F4B';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              Clear All
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -461,7 +488,14 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                               e.currentTarget.style.background = '#FFFFFF';
                             }}
                             onClick={() => {
-                              setViewerFile({ name: file.name, url: file.previewUrl });
+                              setViewerFile({ 
+                                name: file.name, 
+                                url: file.previewUrl,
+                                file_id: file.id,
+                                file_size: file.size,
+                                mime_type: file.type,
+                                state: 'complete'
+                              });
                               setViewerOpen(true);
                             }}
                           >
@@ -472,7 +506,14 @@ const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
                               style={{ color: '#6B7280', cursor: 'pointer' }} 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setViewerFile({ name: file.name, url: file.previewUrl });
+                                setViewerFile({ 
+                                  name: file.name, 
+                                  url: file.previewUrl,
+                                  file_id: file.id,
+                                  file_size: file.size,
+                                  mime_type: file.type,
+                                  state: 'complete'
+                                });
                                 setViewerOpen(true);
                               }}
                             />

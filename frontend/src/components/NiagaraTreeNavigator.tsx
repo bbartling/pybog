@@ -12,7 +12,7 @@ import StreamIcon from '@mui/icons-material/Stream';
 import DownloadIcon from '@mui/icons-material/Download';
 import MemoryIcon from '@mui/icons-material/Memory';
 import StorageIcon from '@mui/icons-material/Storage';
-import apiService from '../services/apiService';
+import { unifiedAPIService } from '../services/UnifiedAPIService';
 import './NiagaraTreeNavigator.css';
 
 type ChatRow = { id: string; role: 'user'|'assistant'|'system'; text: string; ts: string; };
@@ -23,6 +23,8 @@ interface NiagaraTreeNavigatorProps {
 }
 
 const NiagaraTreeNavigator: React.FC<NiagaraTreeNavigatorProps> = ({ sessionId, currentAnalysis }) => {
+  let cancelled = false;
+  let refreshTimer: NodeJS.Timeout | null = null;
   const [chat, setChat] = useState<ChatRow[]>([]);
   const [files, setFiles] = useState<{ id: string; name: string; size?: number }[]>([]);
   const [analysis, setAnalysis] = useState<any | null>(currentAnalysis || null);
@@ -36,7 +38,7 @@ const NiagaraTreeNavigator: React.FC<NiagaraTreeNavigatorProps> = ({ sessionId, 
 
     const fetchAll = async () => {
       try {
-        const full = await apiService.getFullSession(sessionId);
+        const full = await unifiedAPIService.getFullSession(sessionId);
         if (cancelled) return;
         const msgs = (full.messages || []).map((m: any) => ({ id: m.message_id, role: (m.type as any)||'system', text: String(m.content||''), ts: m.created_at||new Date().toISOString(), metadata: m.metadata||{} }));
         setChat(msgs.map((m: any) => ({ id: m.id, role: m.role, text: m.text, ts: m.ts })));
@@ -53,8 +55,9 @@ const NiagaraTreeNavigator: React.FC<NiagaraTreeNavigatorProps> = ({ sessionId, 
         });
         setFiles(uploaded);
 
-        const state = await apiService.getSessionState(sessionId).catch(() => null);
-        const a = state?.analysis?.analysis_data || state?.analysis_data || full.analysis?.analysis_data || null;
+        const state = await unifiedAPIService.getSession(sessionId).catch(() => null);
+        // Analysis data would be in the full session response
+        const a = full.analysis?.analysis_data || null;
         if (a) setAnalysis(a);
 
         const bog = msgs.filter((m: any, i: number) => (full.messages[i]?.metadata?.downloadUrl)).map((m: any, i: number) => ({ id: m.id, name: (full.messages[i]?.metadata?.fileName) || `BOG_${i+1}.bog`, url: full.messages[i]?.metadata?.downloadUrl }));
@@ -64,17 +67,13 @@ const NiagaraTreeNavigator: React.FC<NiagaraTreeNavigatorProps> = ({ sessionId, 
 
     fetchAll();
 
-    // Subscribe to SSE and debounce refresh
-    const sub = apiService.subscribeToSessionEvents(
-      sessionId,
-      () => {
-        if (refreshTimer) clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(fetchAll, 250);
-      },
-      () => {}
-    );
-
-    return () => { cancelled = true; if (sub) sub.close(); if (refreshTimer) clearTimeout(refreshTimer); };
+    // Subscribe to WebSocket events instead of SSE
+    // TODO: Implement WebSocket subscription for session events
+    
+    return () => { 
+      cancelled = true; 
+      if (refreshTimer) clearTimeout(refreshTimer); 
+    };
   }, [sessionId]);
 
   const onDragStart = (evt: React.DragEvent, payload: any) => {

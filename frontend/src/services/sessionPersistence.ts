@@ -1,9 +1,8 @@
 // Session Persistence Service
 // Handles saving and restoring chat sessions including workflow wait states
 
-import { ChatMessage } from '../components/ChatCanvasGrid';
-import enhancedApiService from './apiServiceEnhanced';
-import n8nWebhookService from './n8nWebhookService';
+import { ChatMessage } from '../types/ChatMessage';
+import { unifiedAPIService } from './UnifiedAPIService';
 
 export interface PersistedSession {
   id: string;
@@ -13,7 +12,7 @@ export interface PersistedSession {
   currentAnalysis: any | null;
   analysisMessageId?: string;
   workflowState?: {
-    state: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
+    state: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete' | 'awaiting_analysis_review';
     resumeUrl?: string;
     waitingData?: any;
   };
@@ -23,15 +22,16 @@ class SessionPersistenceService {
   private readonly SESSION_KEY_PREFIX = 'pybog_session_';
   private readonly ACTIVE_SESSION_KEY = 'pybog_active_session';
   private readonly WORKFLOW_STATE_KEY_PREFIX = 'pybog_workflow_state_';
-  private readonly API_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+  private readonly API_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8847').replace(/\/$/, '');
 
   private isValidSessionId(id: string | null | undefined): boolean {
     if (!id) return false;
     const s = String(id).trim();
-    // Allow formats like session_1699999999999 or UUIDs
+    // Allow formats like session_1699999999999, session-708587f7, or UUIDs
     const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
     const legacy = /^session_\d{6,}$/;
-    return uuid.test(s) || legacy.test(s);
+    const current = /^session-[0-9a-fA-F]{8}$/; // New format: session-708587f7
+    return uuid.test(s) || legacy.test(s) || current.test(s);
   }
 
   /**
@@ -118,7 +118,7 @@ class SessionPersistenceService {
       for (const message of session.messages) {
         if (!message.persisted) {
           try {
-            await enhancedApiService.persistMessage(session.id, {
+            await unifiedAPIService.persistMessage(session.id, {
               message_id: message.id,
               type: message.type,
               content: message.content,
@@ -179,26 +179,22 @@ class SessionPersistenceService {
           session.workflowState = JSON.parse(workflowData);
         }
 
-        // Check for pending resume URL
-        const resumeUrl = n8nWebhookService.getResumeUrl(sessionId);
-        if (resumeUrl && session.workflowState) {
-          session.workflowState.resumeUrl = resumeUrl;
-        }
+        // Resume URL handling removed - now handled by unified backend
 
         console.log('[SessionPersistence] Loaded session from localStorage:', sessionId);
         return session;
       }
 
       // Fallback to database
-      const fullSession = await enhancedApiService.getFullSession(sessionId);
+      const fullSession = await unifiedAPIService.getFullSession(sessionId);
       if (fullSession && fullSession.messages) {
         const messages: ChatMessage[] = fullSession.messages.map((m: any) => ({
-          id: m.message_id,
+          id: String(m.id || m.message_id), // Handle both id formats
           type: m.type || 'system',
           content: String(m.content || ''),
-          timestamp: new Date(m.timestamp || m.created_at || Date.now()),
+          timestamp: new Date(m.created_at || m.timestamp || Date.now()),
           sessionId: sessionId,
-          metadata: m.metadata || undefined,
+          metadata: typeof m.metadata === 'string' ? JSON.parse(m.metadata || '{}') : (m.metadata || {}),
           persisted: true,
         }));
 
@@ -214,7 +210,14 @@ class SessionPersistenceService {
               const fid = (f as any).file_id;
               if (!fid || referencedFileIds.has(fid)) continue;
               const sizeKb = f.file_size ? `${(f.file_size / 1024).toFixed(1)} KB` : undefined;
-              const absolutize = (u?: string) => !u ? undefined : (/^https?:\/\//i.test(u) ? u : `${this.API_BASE}${u.startsWith('/') ? u : '/' + u}`);
+              // Use relative URLs for file previews to work through proxy
+              const absolutize = (u?: string) => {
+                if (!u) return undefined;
+                // If already absolute URL, return as-is
+                if (/^https?:\/\//i.test(u)) return u;
+                // Return relative URL that will go through the proxy
+                return u.startsWith('/') ? u : `/${u}`;
+              };
               const fileMsg: ChatMessage = {
                 id: `file-stored-${fid}`,
                 type: 'system',
@@ -248,15 +251,7 @@ class SessionPersistenceService {
           session.workflowState = lastMessage.metadata.workflowState;
         }
 
-        // Check for pending resume URL
-        const resumeUrl = n8nWebhookService.getResumeUrl(sessionId);
-        if (resumeUrl) {
-          session.workflowState = {
-            state: 'awaiting_approval',
-            resumeUrl,
-            ...(session.workflowState || {}),
-          };
-        }
+        // Resume URL handling removed - now handled by unified backend
 
         console.log('[SessionPersistence] Loaded session from database:', sessionId);
         this.saveSession(session); // Cache in localStorage
@@ -321,7 +316,6 @@ class SessionPersistenceService {
     try {
       localStorage.removeItem(`${this.SESSION_KEY_PREFIX}${sessionId}`);
       localStorage.removeItem(`${this.WORKFLOW_STATE_KEY_PREFIX}${sessionId}`);
-      n8nWebhookService.clearResumeUrl(sessionId);
     } catch (e) {
       console.warn('[SessionPersistence] Failed to clear session:', e);
     }
@@ -343,6 +337,13 @@ class SessionPersistenceService {
     try {
       localStorage.removeItem(this.ACTIVE_SESSION_KEY);
     } catch (e) {}
+  }
+
+  /**
+   * Clear all sessions (alias for clearAllLocalSessions)
+   */
+  clearAllSessions(): void {
+    this.clearAllLocalSessions();
   }
 
 
@@ -397,7 +398,7 @@ class SessionPersistenceService {
     // Then check database for recent sessions not in localStorage
     try {
       console.log('[SessionPersistence] Fetching recent sessions from database...');
-      const recent = await enhancedApiService.getRecentSessions(10);
+      const recent = await unifiedAPIService.getRecentSessions(10);
       console.log('[SessionPersistence] Database returned:', recent.sessions?.length || 0, 'recent session(s)');
       if (recent.sessions) {
         for (const dbSession of recent.sessions) {
@@ -426,18 +427,7 @@ class SessionPersistenceService {
     }
 
     // Check for any sessions with pending workflow approvals
-    const pendingSessions = n8nWebhookService.getPendingSessions();
-    for (const pendingId of pendingSessions) {
-      if (sessions.has(pendingId)) {
-        const session = sessions.get(pendingId)!;
-        if (!session.workflowState || session.workflowState.state !== 'awaiting_approval') {
-          session.workflowState = {
-            state: 'awaiting_approval',
-            resumeUrl: n8nWebhookService.getResumeUrl(pendingId) || undefined,
-          };
-        }
-      }
-    }
+    // Pending workflow approvals now handled by unified backend
 
     console.log('[SessionPersistence] Restored sessions:', sessions.size);
     return sessions;

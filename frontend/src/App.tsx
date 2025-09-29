@@ -1,28 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SimplifiedWorkbench from './components/SimplifiedWorkbench';
 import ConsolePanel, { ConsoleMessage } from './components/ConsolePanel';
-import SystemMonitor from './components/SystemMonitor';
-import { Terminal } from 'lucide-react';
-import { workflowAPI } from './services/workflowAPI';
-import apiService from './services/apiService';
-import enhancedApiService from './services/apiServiceEnhanced';
-import n8nWebhookService from './services/n8nWebhookService';
 import { useToast } from './components/ToastProvider';
-import websocketService from './services/websocketService';
-import { ChatMessage } from './components/ChatCanvasGrid';
-import sessionPersistence from './services/sessionPersistence';
-import { generateSessionId, generateDefaultSessionName, generateSessionDisplayName, shouldUpdateSessionName, ensureUniqueSessionName } from './utils/sessionNaming';
+import { ChatMessage, Session, WorkflowState } from './types/ChatMessage';
 import LoadingOverlay from './components/LoadingOverlay';
-
-// Session model
-interface Session {
-  id: string;
-  name: string;
-  createdAt: Date;
-  messages: ChatMessage[];
-  currentAnalysis: any | null;
-  analysisMessageId?: string;
-}
+import { unifiedAPIService } from './services/UnifiedAPIService';
+import chatService from './services/chatService';
+import websocketService from './services/websocketService';
+import sessionPersistence from './services/sessionPersistence';
+import { useChatPipeline } from './hooks/useChatPipeline';
+import { generateSessionId, ensureUniqueSessionName, generateSessionDisplayName, shouldUpdateSessionName } from './utils/sessionNaming';
+import './utils/clearStorage'; // Import to make clearPyBOGData available globally
 
 const App: React.FC = () => {
   // Sessions and active selection
@@ -43,15 +31,16 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [isInitializing, setIsInitializing] = useState(true);  // For initial app load
-  const [workflowState, setWorkflowState] = useState<'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete'>('idle');
+  const [lastFileId, setLastFileId] = useState<number | null>(null);
+  const [lastUploadedFile, setLastUploadedFile] = useState<File | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowState['state']>('idle');
   const [focusMessageId, setFocusMessageId] = useState<string | undefined>(undefined);
   const [sessionFiles, setSessionFiles] = useState<{ file_id: string; filename: string; file_type: string; file_size: number; preview_url: string; }[]>([]);
   // const [highlightTarget, setHighlightTarget] = useState<{kind:'analysis'|'block'|'input'|'output', label?: string}|undefined>(undefined);
 
   const analysisWatchdogRef = useRef<number | null>(null);
-  const replayInFlightRef = useRef<Record<string, boolean>>({});
 
-  // Using API-based workflow integration exclusively (no direct n8n client)
+  // Using unified API service for all backend communication
   const { addToast } = useToast();
   
   const activeSession = activeSessionId ? sessions[activeSessionId] : undefined;
@@ -59,6 +48,37 @@ const App: React.FC = () => {
   const sessionId = activeSessionId;
   const currentAnalysis = activeSession?.currentAnalysis || null;
   const analysisMessageId = activeSession?.analysisMessageId;
+
+  // Chat pipeline integration
+  const addMessageToSession = useCallback((message: ChatMessage) => {
+    setSessions(prev => ({
+      ...prev,
+      [activeSessionId]: {
+        ...prev[activeSessionId],
+        messages: [...(prev[activeSessionId]?.messages || []), message]
+      }
+    }));
+  }, [activeSessionId]);
+
+  const { 
+    pipelineState, 
+    startChatPipeline, 
+    retryLastStep,
+    error: pipelineError 
+  } = useChatPipeline(activeSessionId, addMessageToSession);
+
+  // Update workflow state based on pipeline state
+  useEffect(() => {
+    if (pipelineState.currentStep === 'analyzing') {
+      setWorkflowState('analyzing');
+    } else if (pipelineState.currentStep === 'generating_bog') {
+      setWorkflowState('generating');
+    } else if (pipelineState.currentStep === 'complete') {
+      setWorkflowState('complete');
+    } else if (pipelineState.currentStep === 'error') {
+      setWorkflowState('idle');
+    }
+  }, [pipelineState.currentStep]);
   
   // Load session files when active session changes
   useEffect(() => {
@@ -71,7 +91,7 @@ const App: React.FC = () => {
     (async () => {
       try {
         console.log('[App] Loading files for session:', activeSessionId);
-        const fullSession = await enhancedApiService.getFullSession(activeSessionId);
+        const fullSession = await unifiedAPIService.getFullSession(activeSessionId);
         if (cancelled) return;
         
         setSessionFiles(fullSession.files || []);
@@ -84,19 +104,6 @@ const App: React.FC = () => {
 
     return () => { cancelled = true; };
   }, [activeSessionId]);
-
-  // Debug: Log messages being passed to UI
-  useEffect(() => {
-    console.log('[App] Messages for UI:', {
-      activeSessionId,
-      messageCount: messages.length,
-      messages: messages.map(m => ({
-        id: m.id,
-        type: m.type,
-        content: m.content?.substring(0, 50) + '...'
-      }))
-    });
-  }, [activeSessionId, messages]);
 
   // Centralized workflow failure handler: stops loading, surfaces error, enables resend
   const clearAnalysisWatchdog = useCallback(() => {
@@ -154,7 +161,14 @@ const App: React.FC = () => {
 
       return { ...prev, [activeSessionId]: { ...session, messages: newMessages } };
     });
-  }, [activeSessionId, setConsoleMessages, setSessions]);
+  }, [activeSessionId, setConsoleMessages, setSessions, addToast, clearAnalysisWatchdog, setWorkflowState, setIsLoading, setLoadingMessage]);
+
+  // Handle pipeline errors
+  useEffect(() => {
+    if (pipelineError) {
+      handleWorkflowFailure(pipelineError);
+    }
+  }, [pipelineError, handleWorkflowFailure]);
 
   // Add console message helper
   const addConsoleMessage = useCallback((
@@ -172,9 +186,8 @@ const App: React.FC = () => {
       details
     };
     setConsoleMessages(prev => [...prev, consoleMsg]);
-  }, []);
-
-  // Restore sessions from localStorage and database
+  }, []); 
+ // Restore sessions from localStorage and database
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -183,19 +196,83 @@ const App: React.FC = () => {
         setIsInitializing(true);
         setLoadingMessage('Loading your sessions...');
         
-        // Clean invalid local keys before restoring sessions
-        try { sessionPersistence.cleanupInvalidLocalKeys(); } catch {}
+        // Clean invalid local keys only
+        try { 
+          sessionPersistence.cleanupInvalidLocalKeys();
+        } catch (e) {
+          console.warn('[App] Cleanup failed:', e);
+        }
 
-        // Restore all sessions from persistence
-        const restoredSessions = await sessionPersistence.restoreAllSessions();
-        console.log('[App] Restored sessions:', restoredSessions.size, 'session(s)');
-        if (cancelled) return;
+        // First, fetch recent sessions from backend to get fresh data
+        let sessionsObj: Record<string, Session> = {};
 
-        if (restoredSessions.size > 0) {
-          // Convert to Sessions object
-          const sessionsObj: Record<string, Session> = {};
+        try {
+          console.log('[App] Fetching recent sessions from backend...');
+          const recentSessions = await unifiedAPIService.getRecentSessions(10);
+          const sessionsList = Array.isArray(recentSessions) ? recentSessions : ((recentSessions as any)?.sessions || []);
+          console.log('[App] Got', sessionsList.length, 'recent sessions from backend');
+
+          // Load each session with full data from backend
+          for (const sessionInfo of sessionsList) {
+            try {
+              const fullSession = await unifiedAPIService.getFullSession(sessionInfo.session_id);
+              console.log('[App] Loaded full session from backend:', sessionInfo.session_id, 'with', fullSession.messages?.length || 0, 'messages');
+
+              // Convert backend messages to frontend format and attach session files
+              const messages = (fullSession.messages || []).map((msg: any) => {
+                const message: ChatMessage = {
+                  id: msg.id || `msg-${msg.created_at}`,
+                  type: msg.type,
+                  content: msg.content,
+                  timestamp: new Date(msg.created_at),
+                  sessionId: sessionInfo.session_id,
+                  persisted: true,
+                  status: 'sent'
+                };
+
+                // If this is a system message with file uploads, attach converted files
+                if (msg.type === 'system' && fullSession.files && fullSession.files.length > 0) {
+                  const messageFiles = fullSession.files.map((file: any) => ({
+                    name: file.filename,
+                    url: `${process.env.REACT_APP_API_URL || 'http://localhost:8847'}${file.preview_url}`,
+                    type: file.file_type?.includes('pdf') ? 'pdf' as const : 'unknown' as const,
+                    file_id: file.file_id.toString(),
+                    file_size: file.file_size,
+                    mime_type: file.file_type
+                  }));
+
+                  // Only attach files to messages that mention uploads or are first system messages after user messages
+                  if (message.content.toLowerCase().includes('file') || message.content.toLowerCase().includes('upload')) {
+                    message.files = messageFiles;
+                  }
+                }
+
+                return message;
+              });
+
+              sessionsObj[sessionInfo.session_id] = {
+                id: sessionInfo.session_id,
+                name: sessionInfo.name || `Session (${new Date(sessionInfo.created_at).toLocaleTimeString()})`,
+                createdAt: new Date(sessionInfo.created_at),
+                messages: messages,
+                currentAnalysis: null,
+                analysisMessageId: undefined,
+              };
+            } catch (error) {
+              console.warn('[App] Failed to load full session:', sessionInfo.session_id, error);
+            }
+          }
+
+          console.log('[App] Successfully loaded', Object.keys(sessionsObj).length, 'sessions from backend');
+        } catch (error) {
+          console.warn('[App] Failed to fetch sessions from backend, falling back to localStorage:', error);
+
+          // Fallback to localStorage if backend is unavailable
+          const restoredSessions = await sessionPersistence.restoreAllSessions();
+          console.log('[App] Restored sessions from localStorage:', restoredSessions.size, 'session(s)');
+
           restoredSessions.forEach((persistedSession, id) => {
-            console.log('[App] Processing session:', id, persistedSession.name, 'with', persistedSession.messages.length, 'messages');
+            console.log('[App] Processing localStorage session:', id, persistedSession.name, 'with', persistedSession.messages.length, 'messages');
             sessionsObj[id] = {
               id: persistedSession.id,
               name: persistedSession.name,
@@ -205,17 +282,20 @@ const App: React.FC = () => {
               analysisMessageId: persistedSession.analysisMessageId,
             };
 
-          // If session has workflow state, update UI state
-          if (persistedSession.workflowState?.state === 'awaiting_approval') {
-            setWorkflowState('awaiting_approval');
-          }
-          
-          // Ensure createdAt is a valid Date
-          if (!sessionsObj[id].createdAt || isNaN(sessionsObj[id].createdAt.getTime())) {
-            sessionsObj[id].createdAt = new Date();
-          }
-        });
-        setSessions(sessionsObj);
+            // If session has workflow state, update UI state
+            if (persistedSession.workflowState?.state === 'awaiting_approval') {
+              setWorkflowState('awaiting_approval');
+            }
+
+            // Ensure createdAt is a valid Date
+            if (!sessionsObj[id].createdAt || isNaN(sessionsObj[id].createdAt.getTime())) {
+              sessionsObj[id].createdAt = new Date();
+            }
+          });
+        }
+
+        if (Object.keys(sessionsObj).length > 0) {
+          setSessions(sessionsObj);
 
           // Restore active session or use most recent
           const savedActiveId = sessionPersistence.getActiveSessionId();
@@ -230,8 +310,13 @@ const App: React.FC = () => {
           // Create new session if none exist
           // Attempt to create first session in the database so IDs are authoritative UUIDs
           try {
-            const name = ensureUniqueSessionName(generateDefaultSessionName(1), []);
-            const created = await enhancedApiService.createSession(name);
+            const timestamp = new Date().toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false 
+            });
+            const name = ensureUniqueSessionName(`Session 1 (${timestamp})`, []);
+            const created = await unifiedAPIService.createSession(name);
             const newId = created.session_id;
             console.log('[App] Created new session:', newId, name);
             const initMessage: ChatMessage = {
@@ -239,7 +324,8 @@ const App: React.FC = () => {
               type: 'system',
               content: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.',
               timestamp: new Date(),
-              persisted: true
+              persisted: true,
+              status: 'sent'
             };
             const newSession: Session = {
               id: newId,
@@ -253,7 +339,7 @@ const App: React.FC = () => {
             sessionPersistence.saveActiveSessionId(newId);
             await sessionPersistence.saveSession({ ...newSession, analysisMessageId: undefined });
             // Fire-and-forget persistence; already marked persisted to avoid double-save
-            enhancedApiService.persistMessage(newId, {
+            unifiedAPIService.persistMessage(newId, {
               message_id: initMessage.id,
               type: 'system',
               content: initMessage.content,
@@ -263,16 +349,22 @@ const App: React.FC = () => {
           } catch {
             // Offline/local fallback
             const newId = generateSessionId();
+            const timestamp = new Date().toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false 
+            });
             const initMessage: ChatMessage = {
               id: `init-${newId}`,
               type: 'system',
               content: 'PyBOG Control Builder is ready. Provide a detailed sequence of operations (or upload HVAC control docs: PDFs/specs). I will extract I/O points and synthesize Niagara wire‑sheet logic blocks. Start with equipment type, stages, economizer, occupancy schedule, and key setpoints.',
               timestamp: new Date(),
-              persisted: false
+              persisted: false,
+              status: 'sent'
             };
             const newSession: Session = {
               id: newId,
-              name: ensureUniqueSessionName(generateDefaultSessionName(1), []),
+              name: ensureUniqueSessionName(`Session 1 (${timestamp})`, []),
               createdAt: new Date(),
               messages: [initMessage],
               currentAnalysis: null,
@@ -302,37 +394,15 @@ const App: React.FC = () => {
         setLoadingMessage('');
       }
 
-      addConsoleMessage('info', 'System', 'PyBOG Control Builder initialized');
-      addConsoleMessage('info', 'System', 'Checking service connections...');
-
-      setTimeout(() => {
-        addConsoleMessage('success', 'API', 'Backend API connected');
-        addConsoleMessage('success', 'Database', 'PostgreSQL connected');
-        addConsoleMessage('info', 'n8n', 'Workflow engine ready');
-        addConsoleMessage('success', 'WebSocket', 'Real-time updates enabled');
-      }, 1000);
+      console.log('[App] PyBOG Control Builder initialized');
+      console.log('[App] Service connections ready');
       
       // Clear initialization loading
       setIsInitializing(false);
       setLoadingMessage('');
     })();
     return () => { cancelled = true; };
-  }, [addConsoleMessage]);
-
-  // Debug: log active session changes
-  useEffect(() => {
-    console.log('[App] Active session changed:', {
-      activeSessionId,
-      activeSession: activeSession ? {
-        id: activeSession.id,
-        name: activeSession.name,
-        messageCount: activeSession.messages.length,
-        firstMessage: activeSession.messages[0]?.content?.substring(0, 50)
-      } : null,
-      totalSessions: Object.keys(sessions).length,
-      sessionIds: Object.keys(sessions)
-    });
-  }, [activeSessionId, activeSession, sessions]);
+  }, []); // NO DEPENDENCIES - run only once on mount to prevent infinite loops
 
   // Persist console preference
   useEffect(() => {
@@ -353,7 +423,7 @@ const App: React.FC = () => {
           analysisMessageId: activeSession.analysisMessageId,
           workflowState: workflowState !== 'idle' ? {
             state: workflowState,
-            resumeUrl: n8nWebhookService.getResumeUrl(activeSessionId) || undefined,
+            resumeUrl: undefined,
           } : undefined,
         };
       },
@@ -377,7 +447,7 @@ const App: React.FC = () => {
         analysisMessageId: activeSession.analysisMessageId,
         workflowState: workflowState !== 'idle' ? {
           state: workflowState,
-          resumeUrl: n8nWebhookService.getResumeUrl(activeSessionId) || undefined,
+          resumeUrl: undefined,
         } : undefined,
       });
     }, 1000); // Debounce saves by 1 second
@@ -387,8 +457,14 @@ const App: React.FC = () => {
 
   // Session actions
   const createSession = useCallback(async () => {
+    // Generate unique name with timestamp to avoid duplicates
+    const timestamp = new Date().toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
     const count = Object.keys(sessions).length + 1;
-    const baseName = generateDefaultSessionName(count);
+    const baseName = `Session ${count} (${timestamp})`;
     const name = ensureUniqueSessionName(baseName, Object.values(sessions).map(s => s.name));
     
     // Show loading while creating session
@@ -397,7 +473,7 @@ const App: React.FC = () => {
     
     try {
       // Create session in database - use server authoritative UUID
-      const created = await enhancedApiService.createSession(name);
+      const created = await unifiedAPIService.createSession(name);
       const sessionId = created.session_id;
       console.log('Created session with ID:', sessionId);
       
@@ -408,6 +484,7 @@ const App: React.FC = () => {
         timestamp: new Date(),
         sessionId: sessionId,
         persisted: true,
+        status: 'sent'
       };
       
       // Update local state
@@ -423,9 +500,21 @@ const App: React.FC = () => {
       }));
       setActiveSessionId(sessionId);
       setFocusMessageId(undefined);
+      setWorkflowState('idle');
+      
+      // Save to localStorage immediately
+      sessionPersistence.saveActiveSessionId(sessionId);
+      await sessionPersistence.saveSession({
+        id: sessionId,
+        name,
+        createdAt: new Date(),
+        messages: [initMessage],
+        currentAnalysis: null,
+        analysisMessageId: undefined
+      });
       
       // Persist initial message (fire-and-forget); session auto-save will skip due to persisted=true
-      enhancedApiService.persistMessage(sessionId, {
+      unifiedAPIService.persistMessage(sessionId, {
         message_id: initMessage.id,
         type: 'system',
         content: initMessage.content,
@@ -434,14 +523,65 @@ const App: React.FC = () => {
       }).catch(() => {});
       
       addConsoleMessage('success', 'Session', `Created new session: ${name}`);
+      addToast('success', 'Session created', name);
     } catch (e) {
       console.error('Failed to create session:', e);
       addConsoleMessage('error', 'Session', 'Failed to create session in database');
+      addToast('error', 'Session creation failed', 'Please try again');
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
     }
-  }, [sessions, addConsoleMessage]);
+  }, [sessions, addConsoleMessage, addToast]);
+
+  // Clear all sessions function
+  const clearAllSessions = useCallback(async () => {
+    if (!window.confirm('This will delete all sessions and start fresh. Continue?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadingMessage('Clearing all sessions...');
+
+    try {
+      // Delete all sessions from backend
+      const sessionIds = Object.keys(sessions);
+      await Promise.all(sessionIds.map(id => 
+        unifiedAPIService.deleteSession(id).catch(e => 
+          console.warn(`Failed to delete session ${id}:`, e)
+        )
+      ));
+
+      // Clear all local storage
+      sessionPersistence.clearAllSessions();
+
+      // Reset local state
+      setSessions({});
+      setActiveSessionId('');
+      setSessionFiles([]);
+      setWorkflowState('idle');
+      setFocusMessageId(undefined);
+
+      // Disconnect WebSocket
+      websocketService.disconnect();
+
+      addConsoleMessage('success', 'Session', 'All sessions cleared');
+      addToast('success', 'Sessions cleared', 'Starting fresh');
+
+      // Create a new session automatically
+      setTimeout(() => {
+        createSession();
+      }, 500);
+
+    } catch (e) {
+      console.error('Failed to clear all sessions:', e);
+      addConsoleMessage('error', 'Session', 'Failed to clear all sessions');
+      addToast('error', 'Clear failed', 'Some sessions may remain');
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
+    }
+  }, [sessions, addConsoleMessage, addToast, createSession]);
 
   const switchSession = useCallback(async (id: string) => {
     // Show loading while switching
@@ -460,7 +600,7 @@ const App: React.FC = () => {
           analysisMessageId: activeSession.analysisMessageId,
           workflowState: workflowState !== 'idle' ? {
             state: workflowState,
-            resumeUrl: n8nWebhookService.getResumeUrl(activeSessionId) || undefined,
+            resumeUrl: undefined,
           } : undefined,
         });
       }
@@ -542,7 +682,7 @@ const App: React.FC = () => {
 
     // Server delete in background; rollback on failure
     try {
-      await enhancedApiService.deleteSession(id);
+      await unifiedAPIService.deleteSession(id);
     } catch (error) {
       console.error('Failed to delete session (server):', error);
       // Rollback local state
@@ -559,7 +699,7 @@ const App: React.FC = () => {
   const renameSession = useCallback(async (id: string, newName: string) => {
     try {
       // Update in database
-      await enhancedApiService.renameSession(id, newName);
+      await unifiedAPIService.updateSession(id, newName);
       
       // Update local state
       setSessions(prev => ({
@@ -577,29 +717,145 @@ const App: React.FC = () => {
     }
   }, [addConsoleMessage]);
 
-
   // WebSocket connection for real-time updates (replaces polling)
   useEffect(() => {
     // Don't connect if sessionId is empty or 'undefined'
     if (!activeSessionId || activeSessionId === 'undefined') return;
     
-    // Connect WebSocket for this session
-    websocketService.connect(activeSessionId).then(connected => {
-      if (connected) {
-        addConsoleMessage('success', 'WebSocket', `Real-time connection established for session`);
+    // Ensure session exists in database before connecting WebSocket
+    const ensureSessionAndConnect = async () => {
+      try {
+        // Check if session exists in database, create if needed
+        const session = sessions[activeSessionId];
+        if (session && !session.persisted) {
+          console.log('[App] Ensuring session exists in database:', activeSessionId);
+          try {
+            // Try to get the session first
+            await unifiedAPIService.getSession(activeSessionId);
+            console.log('[App] Session already exists in database');
+          } catch (error) {
+            // Session doesn't exist, create it
+            console.log('[App] Creating session in database:', activeSessionId);
+            await unifiedAPIService.createSession(session.name);
+          }
+          // Update session as persisted
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: { ...session, persisted: true }
+          }));
+        }
+        
+        // Connect WebSocket for this session with retry logic
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        const attemptConnection = async (): Promise<boolean> => {
+          const connected = await websocketService.connect(activeSessionId);
+          if (connected) {
+            addConsoleMessage('success', 'WebSocket', `Real-time connection established for session`);
+            return true;
+          } else if (retryCount < maxRetries) {
+            retryCount++;
+            console.warn(`[App] WebSocket connection failed, retrying... (${retryCount}/${maxRetries})`);
+            addConsoleMessage('warn', 'WebSocket', `Connection failed, retrying... (${retryCount}/${maxRetries})`);
+            // Wait before retry with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+            return attemptConnection();
+          } else {
+            console.error('[App] Failed to establish WebSocket connection after retries');
+            addConsoleMessage('error', 'WebSocket', 'Connection failed after retries');
+            return false;
+          }
+        };
+        
+        await attemptConnection();
+      } catch (error) {
+        console.error('[App] Failed to ensure session and connect WebSocket:', error);
+        addConsoleMessage('error', 'WebSocket', 'Connection failed');
       }
-    });
+    };
+    
+    ensureSessionAndConnect();
     
     // Subscribe to connection events
     const unsubscribeConnected = websocketService.on('connected', () => {
       addToast('success', 'Connected', 'Real-time updates enabled');
+      addConsoleMessage('success', 'WebSocket', 'Connected - real-time updates enabled');
     });
     const unsubscribeDisconnected = websocketService.on('disconnected', () => {
       addToast('warning', 'Disconnected', 'Attempting to reconnect…');
+      addConsoleMessage('warn', 'WebSocket', 'Disconnected - attempting to reconnect...');
+
+      // Mark any pending messages as failed for retry
+      setSessions(prev => {
+        const session = prev[activeSessionId];
+        if (!session) return prev;
+
+        const messages = session.messages.map(msg => {
+          // Mark both user messages and streaming assistant messages as failed
+          if (msg.status === 'sending' && (msg.type === 'user' || msg.id.startsWith('streaming-assistant-'))) {
+            return { ...msg, status: 'failed' as const };
+          }
+          return msg;
+        });
+
+        return {
+          ...prev,
+          [activeSessionId]: {
+            ...session,
+            messages
+          }
+        };
+      });
+
+      // Reset workflow state if we were in the middle of analysis
+      if (workflowState === 'analyzing') {
+        setWorkflowState('idle');
+        setIsLoading(false);
+        setLoadingMessage('');
+      }
+    });
+
+    // Subscribe to WebSocket errors
+    const unsubscribeError = websocketService.on('error', (event) => {
+      console.error('[App] WebSocket error:', event.data);
+      const errorMsg = event.data?.error || 'WebSocket connection error';
+      const reconnectAttempts = event.data?.reconnectAttempts || 0;
+
+      addConsoleMessage('error', 'WebSocket', `${errorMsg} (attempt ${reconnectAttempts})`);
+
+      // Progressive error handling based on reconnection attempts
+      if (reconnectAttempts >= 5) {
+        addToast('error', 'Connection lost', 'Please refresh the page to reconnect');
+        // Mark all sending messages as failed
+        setSessions(prev => {
+          const session = prev[activeSessionId];
+          if (!session) return prev;
+
+          const messages = session.messages.map(msg => {
+            if (msg.status === 'sending') {
+              return { ...msg, status: 'failed' as const };
+            }
+            return msg;
+          });
+
+          return {
+            ...prev,
+            [activeSessionId]: { ...session, messages }
+          };
+        });
+
+        // Reset workflow state
+        setWorkflowState('idle');
+        setIsLoading(false);
+        setLoadingMessage('');
+      } else if (reconnectAttempts >= 3) {
+        addToast('warning', 'Connection issues', `Reconnecting... (${reconnectAttempts}/5)`);
+      }
     });
 
     // Subscribe to state changes
-    const unsubscribeState = websocketService.on('state_change', (event) => {
+    const unsubscribeState = websocketService.on('message', (event) => {
       console.log('[App] WebSocket state change:', event.data);
       if (event.data?.state) {
         setWorkflowState(event.data.state);
@@ -615,7 +871,7 @@ const App: React.FC = () => {
     });
     
     // Subscribe to analysis updates
-    const unsubscribeAnalysis = websocketService.on('analysis_update', (event) => {
+    const unsubscribeAnalysis = websocketService.on('analysis_complete', (event) => {
       console.log('[App] WebSocket analysis update:', event.data);
       if (event.data?.analysis) {
         setSessions(prev => {
@@ -626,6 +882,159 @@ const App: React.FC = () => {
       }
     });
     
+    // Subscribe to streaming chat responses
+    const unsubscribeChat = websocketService.on('chat', (event) => {
+      const data = event.data || {};
+      console.log('[App] WebSocket chat event:', data);
+
+      // Ignore events that arrive within 2 seconds of WebSocket connection (likely replay events)
+      const connectionTime = websocketService.getConnectionTime();
+      if (connectionTime && Date.now() - connectionTime < 2000) {
+        console.log('[App] Ignoring chat event - too soon after connection (likely replay)');
+        return;
+      }
+      
+      if (data.is_complete) {
+        // Complete message received - finalize the streaming message
+        const finalContent = data.final_content || data.buffer_content || data.content || '';
+        if (finalContent.trim()) {
+          // Check if this looks like an error response
+          const lowerContent = finalContent.toLowerCase();
+          const errorPhrases = [
+            'unable to analyze',
+            'cannot analyze',
+            'no file upload',
+            'currently unable',
+            'failed to',
+            'cannot process',
+            'unable to process',
+            'no files',
+            'cannot find'
+          ];
+
+          const isErrorResponse = errorPhrases.some(phrase => lowerContent.includes(phrase));
+          let finalizedMessageId: string | null = null;
+
+          console.log('[App] WebSocket finalizing message, current session state:', {
+            activeSessionId,
+            messageCount: sessions[activeSessionId]?.messages?.length || 0,
+            finalContent: finalContent.substring(0, 100) + '...'
+          });
+
+          setSessions(prev => {
+            const session = prev[activeSessionId];
+            if (!session) return prev;
+
+            // Find the streaming message and finalize it
+            const messages = session.messages.map(msg => {
+              if (msg.id.startsWith('streaming-assistant-') && (msg.status === 'sending' || !msg.status)) {
+                finalizedMessageId = msg.id; // Store the actual ID for persistence
+                return {
+                  ...msg,
+                  content: finalContent,
+                  status: 'sent' as const,
+                  persisted: false,
+                  timestamp: new Date()
+                };
+              }
+              return msg;
+            });
+
+            // If this is an error response, mark the last user message as failed
+            if (isErrorResponse) {
+              console.log('[App] Detected error in AI response, marking last user message as failed');
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].type === 'user') {
+                  messages[i] = { ...messages[i], status: 'failed' };
+                  break;
+                }
+              }
+            }
+
+            return {
+              ...prev,
+              [activeSessionId]: {
+                ...session,
+                messages
+              }
+            };
+          });
+
+          // Persist the final assistant message with correct ID
+          if (finalizedMessageId) {
+            unifiedAPIService.persistMessage(activeSessionId, {
+              message_id: finalizedMessageId,
+              type: 'assistant',
+              content: finalContent,
+              metadata: { streaming: true },
+              session_state: 'idle'
+            }).then(() => {
+              setSessions(prev => {
+                const s = prev[activeSessionId];
+                if (!s) return prev;
+                const msgs = s.messages.map(m =>
+                  m.id === finalizedMessageId ? { ...m, persisted: true } : m
+                );
+                return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+              });
+            }).catch(console.error);
+          }
+          
+          setWorkflowState('idle');
+          setIsLoading(false);
+          setLoadingMessage('');
+          addConsoleMessage('success', 'Chat', 'Response received');
+        }
+      } else {
+        // Streaming chunk - update existing streaming message or create new one
+        const chunk = data.content || '';
+        const bufferContent = data.buffer_content || '';
+
+        if (chunk || bufferContent) {
+          console.log('[App] WebSocket streaming chunk received:', {
+            activeSessionId,
+            chunkLength: chunk?.length || 0,
+            bufferLength: bufferContent?.length || 0,
+            currentMessageCount: sessions[activeSessionId]?.messages?.length || 0
+          });
+
+          setSessions(prev => {
+            const session = prev[activeSessionId];
+            if (!session) return prev;
+
+            const messages = [...session.messages];
+            const streamingIndex = messages.findIndex(msg =>
+              msg.id.startsWith('streaming-assistant-') && (msg.status === 'sending' || !msg.status)
+            );
+
+            if (streamingIndex >= 0) {
+              // Update existing streaming message
+              const currentMsg = messages[streamingIndex];
+              messages[streamingIndex] = {
+                ...currentMsg,
+                content: bufferContent || (currentMsg.content + chunk),
+                timestamp: new Date()
+              };
+            } else {
+              // Create new streaming message with unique ID
+              const streamingMessage: ChatMessage = {
+                id: `streaming-assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'assistant',
+                content: bufferContent || chunk,
+                timestamp: new Date(),
+                sessionId: activeSessionId,
+                status: 'sending',
+                persisted: false
+              };
+              messages.push(streamingMessage);
+            }
+
+            return { ...prev, [activeSessionId]: { ...session, messages } };
+          });
+        }
+      }
+    });
+
     // Listen for general error messages pushed by backend
     const unsubscribeWsMessage = websocketService.on('message', (event) => {
       const p = event.data || {};
@@ -639,6 +1048,8 @@ const App: React.FC = () => {
           type: 'assistant',
           content: p.message || 'Ready.',
           timestamp: new Date(),
+          persisted: false,
+          status: 'sent'
         } as any;
         setSessions(prev => ({
           ...prev,
@@ -647,6 +1058,25 @@ const App: React.FC = () => {
             messages: [...(prev[activeSessionId]?.messages || []), assistantMessage]
           }
         }));
+
+        // Persist the assistant message
+        unifiedAPIService.persistMessage(activeSessionId, {
+          message_id: assistantMessage.id,
+          type: 'assistant',
+          content: assistantMessage.content,
+          metadata: { type: p.type },
+          session_state: 'idle'
+        }).then(() => {
+          setSessions(prev => {
+            const s = prev[activeSessionId];
+            if (!s) return prev;
+            const msgs = s.messages.map(m =>
+              m.id === assistantMessage.id ? { ...m, persisted: true } : m
+            );
+            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+          });
+        }).catch(console.error);
+
         setWorkflowState('idle');
         setIsLoading(false);
         setLoadingMessage('');
@@ -750,8 +1180,39 @@ const App: React.FC = () => {
         setIsLoading(false);
         setLoadingMessage('');
         if (p.message) {
-          const assistantMessage: ChatMessage = { id: `assistant-${Date.now()}`, type: 'assistant', content: p.message, timestamp: new Date() } as any;
-          setSessions(prev => ({ ...prev, [activeSessionId]: { ...prev[activeSessionId], messages: [...(prev[activeSessionId]?.messages || []), assistantMessage] } }));
+          const assistantMessage: ChatMessage = {
+            id: `assistant-${Date.now()}`,
+            type: 'assistant',
+            content: p.message,
+            timestamp: new Date(),
+            persisted: false,
+            status: 'sent'
+          } as any;
+          setSessions(prev => ({
+            ...prev,
+            [activeSessionId]: {
+              ...prev[activeSessionId],
+              messages: [...(prev[activeSessionId]?.messages || []), assistantMessage]
+            }
+          }));
+
+          // Persist the completion message
+          unifiedAPIService.persistMessage(activeSessionId, {
+            message_id: assistantMessage.id,
+            type: 'assistant',
+            content: assistantMessage.content,
+            metadata: { type: 'workflow_completed' },
+            session_state: 'complete'
+          }).then(() => {
+            setSessions(prev => {
+              const s = prev[activeSessionId];
+              if (!s) return prev;
+              const msgs = s.messages.map(m =>
+                m.id === assistantMessage.id ? { ...m, persisted: true } : m
+              );
+              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+            });
+          }).catch(console.error);
         }
         addToast('success', 'Workflow complete', p.message);
         return;
@@ -761,12 +1222,14 @@ const App: React.FC = () => {
     return () => {
       unsubscribeConnected();
       unsubscribeDisconnected();
+      unsubscribeError();
       unsubscribeState();
       unsubscribeAnalysis();
+      unsubscribeChat();
       unsubscribeWsMessage();
       // Don't disconnect WebSocket here as we may switch sessions
     };
-  }, [activeSessionId, addConsoleMessage]);
+  }, [activeSessionId, addConsoleMessage, handleWorkflowFailure, clearAnalysisWatchdog, setWorkflowState, setIsLoading, setLoadingMessage, addToast]);
 
   // Handle message sending
   const handleSendMessage = useCallback(async (text: string, files: File[]) => {
@@ -778,12 +1241,9 @@ const App: React.FC = () => {
       return;
     }
     
-    // Don't show loading overlay for analysis - n8n provides its own feedback
     setWorkflowState('analyzing');
-    clearAnalysisWatchdog();
-    analysisWatchdogRef.current = window.setTimeout(() => {
-      handleWorkflowFailure('Workflow did not respond in time. You can retry.');
-    }, 60000);
+    setIsLoading(true);
+    setLoadingMessage('Sending message...');
     
     // Check if we should auto-update session name
     const currentSession = sessions[activeSessionId];
@@ -814,7 +1274,7 @@ const App: React.FC = () => {
         }));
         // Update in database
         try {
-          await enhancedApiService.renameSession(activeSessionId, newName);
+          await unifiedAPIService.updateSession(activeSessionId, newName);
         } catch (e) {
           console.warn('Failed to update session name:', e);
         }
@@ -829,9 +1289,10 @@ const App: React.FC = () => {
       timestamp: new Date(),
       sessionId: activeSessionId,
       files: files.length > 0 ? files : undefined,
-      persisted: false
+      persisted: false,
+      status: 'sending'
     };
-    
+
     setSessions(prev => ({
       ...prev,
       [activeSessionId]: {
@@ -839,334 +1300,211 @@ const App: React.FC = () => {
         messages: [...(prev[activeSessionId]?.messages || []), userMessage]
       }
     }));
+
+    // Persist user message immediately
+    try {
+      await unifiedAPIService.persistMessage(activeSessionId, {
+        message_id: userMessage.id,
+        type: 'user',
+        content: userMessage.content,
+        session_state: 'analyzing'
+      });
+      setSessions(prev => {
+        const s = prev[activeSessionId];
+        if (!s) return prev;
+        const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, persisted: true, status: 'sent' as const } : m);
+        return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+      });
+    } catch (error) {
+      console.error('Failed to persist user message:', error);
+      // Mark message as failed so user can retry
+      setSessions(prev => {
+        const s = prev[activeSessionId];
+        if (!s) return prev;
+        const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, status: 'failed' as const } : m);
+        return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
+      });
+    }
     
     try {
-      // Add live status message only for text-only requests (avoid clutter for file uploads)
-      if (files.length === 0) {
-        const statusId = `status-${Date.now()}`;
-        const statusMessage: ChatMessage = {
-          id: statusId,
-          type: 'system',
-          messageType: 'status',
-          content: 'Analyzing your request…',
-          timestamp: new Date(),
-          sessionId: activeSessionId,
-        };
-        setSessions(prev => ({
-          ...prev,
-          [activeSessionId]: {
-            ...prev[activeSessionId],
-            messages: [...(prev[activeSessionId]?.messages || []), statusMessage]
-          }
-        }));
-        try { 
-          await apiService.persistMessage(activeSessionId, { message_id: statusId, type: 'system', content: statusMessage.content, metadata: { kind: 'status' }, session_state: 'analyzing' });
-          // Mark status message as persisted
-          setSessions(prev => {
-            const s = prev[activeSessionId];
-            if (!s) return prev;
-            const msgs = s.messages.map(m => m.id === statusId ? { ...m, persisted: true } : m);
-            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
-          });
-        } catch {}
-      }
-
       if (files.length > 0) {
-        // Persist user message ONCE before processing files
-        try {
-          const fileMetadata = files.map(f => ({ name: f.name, size: f.size, type: f.type }));
-          await enhancedApiService.persistMessage(activeSessionId, {
-            message_id: userMessage.id,
-            type: 'user',
-            content: userMessage.content,
-            metadata: { files: fileMetadata },
-            session_state: 'analyzing'
-          });
-          // Mark user message as persisted
-          setSessions(prev => {
-            const s = prev[activeSessionId];
-            if (!s) return prev;
-            const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, persisted: true } : m);
-            return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
-          });
-        } catch (e) {
-          console.error('Failed to persist user message:', e);
+        // Handle file uploads
+        console.log('[App] Starting file upload process. Session ID:', activeSessionId, 'Files:', files.length);
+        let lastFileId: number | null = null;
+        for (const f of files) {
+          try {
+            console.log('[App] Uploading file:', f.name, 'Size:', f.size, 'Type:', f.type);
+
+            // Upload file using the new backend API
+            const formData = new FormData();
+            formData.append('file', f);
+            formData.append('session_id', activeSessionId);
+
+            const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8847'}/api/files/upload`, {
+              method: 'POST',
+              body: formData
+            });
+
+            console.log('[App] Upload response status:', uploadResponse.status, uploadResponse.statusText);
+
+            if (!uploadResponse.ok) {
+              const errorText = await uploadResponse.text();
+              console.error('[App] Upload failed - Response:', errorText);
+              throw new Error(`Upload failed (${uploadResponse.status}): ${errorText}`);
+            }
+
+            const fileResult = await uploadResponse.json();
+            console.log('[App] Upload successful:', fileResult);
+            setLastFileId(fileResult.file_id); // Store the most recent file ID
+
+            // Store the uploaded file for reference but don't create a separate message
+            // The TextReviewNode will show all necessary file information
+            setLastUploadedFile(f);
+
+            addConsoleMessage('success', 'Upload', `File stored: ${fileResult.filename} (ID: ${fileResult.file_id})`);
+          } catch (e) {
+            console.error('[App] File upload failed:', e);
+            addConsoleMessage('error', 'Upload', `Failed to upload ${f.name}: ${e}`);
+            // Continue with text processing even if upload fails
+          }
         }
         
-        for (const f of files) {
-
-          // Upload file to backend with proper persistence
+        // After uploading files, extract text for review instead of immediate analysis
+        if (files.length > 0 && lastFileId) {
           try {
-            const fileResult = await enhancedApiService.uploadFile(activeSessionId, f, userMessage.id);
-            
-            const fileSizeBytes = (fileResult.size ?? f.size ?? 0) as number;
-            const fileStoredMsg: ChatMessage = {
-              id: `file-stored-${Date.now()}`,
-              type: 'system',
-              content: `File uploaded: ${fileResult.filename} (${(fileSizeBytes / 1024).toFixed(1)} KB)`,
-              timestamp: new Date(),
-              sessionId: activeSessionId,
-              persisted: true,
-              metadata: { 
-                status: 'complete' as const, 
-                fileName: fileResult.filename,
-                file_id: fileResult.file_id,
-                preview_url: (fileResult as any).preview_url,
-                previewUrl: (fileResult as any).preview_url,  // Keep both for compatibility
-              }
-            };
-            
-            setSessions(prev => ({
-              ...prev,
-              [activeSessionId]: {
-                ...prev[activeSessionId],
-                messages: [...(prev[activeSessionId]?.messages || []), fileStoredMsg]
-              }
-            }));
-            
-            // Persist (already marked persisted to avoid auto-save duplication)
-            await enhancedApiService.persistMessage(activeSessionId, {
-              message_id: fileStoredMsg.id,
-              type: 'system',
-              content: fileStoredMsg.content,
-              metadata: fileStoredMsg.metadata
-            });
-            // Mark file stored message as persisted
-            setSessions(prev => {
-              const s = prev[activeSessionId];
-              if (!s) return prev;
-              const msgs = s.messages.map(m => m.id === fileStoredMsg.id ? { ...m, persisted: true } : m);
-              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
-            });
-            
-            addConsoleMessage('success', 'Upload', `File stored: ${fileResult.filename}`);
-          } catch (e) {
-            console.error('File upload failed:', e);
-            addConsoleMessage('error', 'Upload', `Failed to upload ${f.name}`);
-          }
+            // Extract text from uploaded files for review
+            const lastUploadedFile = files[files.length - 1];
 
-          // Note: Do not trigger analysis here to avoid duplicate uploads.
-          // Analysis will be triggered once after all files are uploaded using the backend replay mechanism.
-        }
-        // After uploading all files, trigger analysis by replaying stored files from backend once
-        try {
-          // Compose a single execution: include the user's text if provided
-          if (replayInFlightRef.current[activeSessionId]) {
-            addConsoleMessage('warning', 'Workflow', 'Replay already in progress – skipping duplicate trigger');
-          } else {
-            replayInFlightRef.current[activeSessionId] = true;
-          }
-          const replayResp = await enhancedApiService.replayFiles(activeSessionId, undefined, text?.trim() ? text : undefined);
-          const parsedResponse = n8nWebhookService.parseWorkflowResponse(replayResp);
-          if (parsedResponse && parsedResponse.resumeUrl) {
-            n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl);
-            if (
-              parsedResponse.status === 'text_extracted' ||
-              parsedResponse.step === 'text_review' ||
-              parsedResponse.approvalType === 'text_review' ||
-              parsedResponse.data?.requiresApproval ||
-              Boolean(parsedResponse.extractedText)
-            ) {
-              const textReviewMsg: ChatMessage = {
+            console.log('[App] Using file ID for text extraction:', lastFileId);
+
+            if (lastFileId) {
+              console.log('[App] Extracting text from file for review:', lastFileId);
+              setLoadingMessage('Extracting text from document...');
+
+              const extractResult = await unifiedAPIService.extractTextWithWorkflow(lastFileId, activeSessionId);
+
+              // Create text review message
+              const textReviewMessage: ChatMessage = {
                 id: `text-review-${Date.now()}`,
-                type: 'system',
-                messageType: 'status',
-                content: parsedResponse.message || 'Text extracted. Please review before analysis.',
-                timestamp: new Date(),
-                sessionId: activeSessionId,
-                  metadata: {
-                    status: 'awaiting_approval',
-                    extractedText: parsedResponse.extractedText,
-                    data: { fullText: (parsedResponse as any)?.fullText },
-                    textQuality: parsedResponse.textQuality,
-                  qualityScore: parsedResponse.qualityScore,
-                  qualityIssues: parsedResponse.qualityIssues,
-                  recommendations: parsedResponse.recommendations,
-                  hvacTermsFound: parsedResponse.hvacTermsFound,
-                  actions: parsedResponse.actions,
-                  progress: parsedResponse.progress ? {
-                    percentage: parsedResponse.progress.percentage,
-                    phase: parsedResponse.progress.phase,
-                    description: parsedResponse.progress.description || '',
-                    eta: parsedResponse.progress.eta || ''
-                  } : undefined,
-                  resumeUrl: parsedResponse.resumeUrl
-                }
-              };
-              setSessions(prev => ({
-                ...prev,
-                [activeSessionId]: {
-                  ...prev[activeSessionId],
-                  messages: [...(prev[activeSessionId]?.messages || []), textReviewMsg]
-                }
-              }));
-              // Focus the canvas on the new review node
-              setFocusMessageId(textReviewMsg.id);
-              setWorkflowState('awaiting_approval');
-              addConsoleMessage('info', 'Workflow', 'Text extraction complete. Awaiting user approval.');
-            } else if (parsedResponse.status === 'analysis_complete' || parsedResponse.step === 'analysis_review') {
-              const analysisMsgId = `analysis-${Date.now()}`;
-              const analysisMessage: ChatMessage = {
-                id: analysisMsgId,
                 type: 'assistant',
-                messageType: 'analysis',
-                content: parsedResponse.message || 'HVAC analysis complete. Please review.',
+                messageType: 'text_review',
+                content: 'Document text extracted. Please review and approve before analysis.',
                 timestamp: new Date(),
                 sessionId: activeSessionId,
                 metadata: {
-                  analysisData: parsedResponse.analysis,
-                  analysisQuality: parsedResponse.analysisQuality,
-                  summary: parsedResponse.summary,
-                  actions: parsedResponse.actions,
-                  resumeUrl: parsedResponse.resumeUrl
+                  extractedText: extractResult.extracted_text || extractResult.text || extractResult.content,
+                  file_id: lastFileId,
+                  filename: lastUploadedFile.name,
+                  requiresApproval: true,
+                  stage: 'text_review'
                 }
               };
+
               setSessions(prev => ({
                 ...prev,
                 [activeSessionId]: {
                   ...prev[activeSessionId],
-                  messages: [...(prev[activeSessionId]?.messages || []), analysisMessage],
-                  currentAnalysis: parsedResponse.analysis,
-                  analysisMessageId: analysisMsgId,
+                  messages: [...(prev[activeSessionId]?.messages || []), textReviewMessage]
                 }
               }));
-              // Focus the canvas on the review node
-              setFocusMessageId(analysisMsgId);
+
               setWorkflowState('awaiting_approval');
-              addConsoleMessage('success', 'Analysis', 'HVAC analysis complete. Ready for review.');
-            } else if (parsedResponse.step === 'generation_confirmation' || parsedResponse.status === 'generation_complete') {
-              n8nWebhookService.storeResumeUrl(activeSessionId, parsedResponse.resumeUrl || '');
-              const confirmationMsg: ChatMessage = {
-                id: `generation-confirm-${Date.now()}`,
-                type: 'assistant',
-                messageType: 'status',
-                content: parsedResponse.message || 'BOG generated. Awaiting confirmation…',
-                timestamp: new Date(),
-                sessionId: activeSessionId,
-                metadata: {
-                  status: 'awaiting_approval',
-                  actions: parsedResponse.actions,
-                  resumeUrl: parsedResponse.resumeUrl
-                }
-              };
-              setSessions(prev => ({
-                ...prev,
-                [activeSessionId]: {
-                  ...prev[activeSessionId],
-                  messages: [...(prev[activeSessionId]?.messages || []), confirmationMsg]
-                }
-              }));
-              setWorkflowState('awaiting_approval');
-              addConsoleMessage('info', 'Generation', 'Awaiting generation confirmation.');
+              addConsoleMessage('info', 'Text Extraction', 'Text extracted and ready for review');
             } else {
-              // Fallback: we received a resumeUrl but not enough hints to classify; show generic approval
-              const waitingMsg: ChatMessage = {
-                id: `wait-approval-${Date.now()}`,
-                type: 'system',
-                messageType: 'status',
-                content: parsedResponse.message || 'Awaiting your approval to continue…',
+              console.error('[App] No file ID found for text extraction');
+              addConsoleMessage('error', 'Extraction', 'Failed to find uploaded file for text extraction');
+              setWorkflowState('idle');
+            }
+          } catch (error) {
+            console.error('Text extraction failed:', error);
+            addConsoleMessage('error', 'Extraction', 'Failed to extract text from document');
+            setWorkflowState('idle');
+          } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+          }
+        }
+
+        // Handle text-only messages (chat without files)
+        else if (text?.trim() && files.length === 0) {
+          try {
+            // Ensure WebSocket is connected for this session before sending message
+            console.log('[App] Ensuring WebSocket connection before sending chat message');
+            const wsConnected = await websocketService.connect(activeSessionId);
+            if (!wsConnected) {
+              throw new Error('Failed to establish WebSocket connection');
+            }
+
+            console.log('[App] WebSocket connected, sending chat message');
+            // Send chat message with streaming response via WebSocket
+            const chatResponse = await chatService.sendMessage({
+              session_id: activeSessionId,
+              text: text
+            });
+
+            if (chatResponse.success) {
+              console.log('[App] Chat message sent successfully, awaiting WebSocket stream');
+
+              // Add a loading/streaming assistant message immediately
+              const loadingMessage: ChatMessage = {
+                id: `streaming-assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'assistant',
+                content: 'Processing your request...',
                 timestamp: new Date(),
                 sessionId: activeSessionId,
-                metadata: {
-                  status: 'awaiting_approval',
-                  resumeUrl: parsedResponse.resumeUrl
-                }
-              } as any;
+                status: 'sending',
+                persisted: false
+              };
+
               setSessions(prev => ({
                 ...prev,
                 [activeSessionId]: {
                   ...prev[activeSessionId],
-                  messages: [...(prev[activeSessionId]?.messages || []), waitingMsg]
+                  messages: [...(prev[activeSessionId]?.messages || []), loadingMessage]
                 }
               }));
-              setWorkflowState('awaiting_approval');
-              addConsoleMessage('info', 'Workflow', 'Waiting for approval.');
+
+              addConsoleMessage('success', 'Chat', 'Processing files with AI...');
+              // Response will come via WebSocket streaming
+            } else {
+              throw new Error('Chat service returned unsuccessful response');
             }
+          } catch (e) {
+            console.error('Chat processing failed:', e);
+            handleWorkflowFailure(`Processing failed: ${e}`);
           }
-        } catch (e) {
-          console.warn('Replay trigger failed:', e);
-        } finally {
-          delete replayInFlightRef.current[activeSessionId];
+        } else {
+          // GATED WORKFLOW FIX: No automatic analysis for file uploads
+          // The gated workflow in lines 1388-1449 should handle all file uploads
+          console.log('[App] File workflow completed - waiting for user interaction');
+          setWorkflowState('idle');
+          setIsLoading(false);
+          setLoadingMessage('');
         }
       } else if (text) {
-        // Persist user text message first
+        // Text-only message: use chat pipeline
         try {
-          await apiService.persistMessage(activeSessionId, {
+          // Persist user message first
+          await unifiedAPIService.persistMessage(activeSessionId, {
             message_id: userMessage.id,
             type: 'user',
             content: text,
-            metadata: {},
             session_state: 'analyzing'
           });
-          // Mark user text message as persisted
           setSessions(prev => {
             const s = prev[activeSessionId];
             if (!s) return prev;
             const msgs = s.messages.map(m => m.id === userMessage.id ? { ...m, persisted: true } : m);
             return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
           });
-        } catch {}
 
-        const raw = await workflowAPI.sendChatMessage({ sessionId: activeSessionId, message: text, includeContext: true });
-        const response = n8nWebhookService.parseWorkflowResponse(raw) || raw;
-        if ((response?.status === 'ready_for_review' || response?.status === 'analysis_complete') && (response.analysis || response.summary)) {
-          const analysisMsgId = `analysis-${Date.now()}`;
-          const analysisMessage: ChatMessage = {
-            id: analysisMsgId,
-            type: 'assistant',
-            content: response.message || 'HVAC analysis complete. Please review.',
-            timestamp: new Date(),
-            metadata: { analysisData: response.analysis }
-          };
-          setSessions(prev => ({
-            ...prev,
-            [activeSessionId]: {
-              ...prev[activeSessionId],
-              messages: [...(prev[activeSessionId]?.messages || []), analysisMessage],
-              currentAnalysis: { ...response.analysis, _messageId: analysisMsgId },
-              analysisMessageId: analysisMsgId,
-            }
-          }));
-          setWorkflowState('awaiting_approval');
-          try {
-            await apiService.persistMessage(activeSessionId, {
-              message_id: analysisMsgId,
-              type: 'assistant',
-              content: analysisMessage.content,
-              metadata: { analysisData: response.analysis },
-              session_state: 'awaiting_approval'
-            });
-            // Mark analysis message as persisted
-            setSessions(prev => {
-              const s = prev[activeSessionId];
-              if (!s) return prev;
-              const msgs = s.messages.map(m => m.id === analysisMsgId ? { ...m, persisted: true } : m);
-              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
-            });
-          } catch {}
-        } else if (response?.message) {
-          const assistantMessage: ChatMessage = {
-            id: `assistant-${Date.now()}`,
-            type: 'assistant',
-            content: response.message,
-            timestamp: new Date(),
-          };
-          setSessions(prev => ({
-            ...prev,
-            [activeSessionId]: {
-              ...prev[activeSessionId],
-              messages: [...(prev[activeSessionId]?.messages || []), assistantMessage],
-            }
-          }));
-          try { 
-            await apiService.persistMessage(activeSessionId, { message_id: assistantMessage.id, type: 'assistant', content: assistantMessage.content });
-            setSessions(prev => {
-              const s = prev[activeSessionId];
-              if (!s) return prev;
-              const msgs = s.messages.map(m => m.id === assistantMessage.id ? { ...m, persisted: true } : m);
-              return { ...prev, [activeSessionId]: { ...s, messages: msgs } };
-            });
-          } catch {}
+          // Start chat pipeline for end-to-end processing
+          await startChatPipeline(text);
+          addConsoleMessage('success', 'Pipeline', 'Chat pipeline started - processing message...');
+          
+        } catch (error: any) {
+          console.error('Chat pipeline failed:', error);
+          handleWorkflowFailure(error.message || 'Failed to start chat pipeline');
         }
       }
     } catch (error: any) {
@@ -1176,7 +1514,8 @@ const App: React.FC = () => {
       setIsLoading(false);
       clearAnalysisWatchdog();
     }
-  }, [activeSessionId, addConsoleMessage]);
+  }, [activeSessionId, workflowState, sessions, addToast, setWorkflowState, setIsLoading, setLoadingMessage, shouldUpdateSessionName, generateSessionDisplayName, addConsoleMessage, handleWorkflowFailure, clearAnalysisWatchdog, startChatPipeline]);
+
   // Handle analysis approval
   const handleApproveAnalysis = useCallback(async () => {
     if (!activeSessionId || !activeSession) return;
@@ -1184,41 +1523,37 @@ const App: React.FC = () => {
     
     try {
       // Always use backend approval API to resume workflows
-      const response = await workflowAPI.handleApproval({ sessionId: activeSessionId, action: 'approve_analysis' });
+      // Send approval via unified API service
+      await unifiedAPIService.sendChatMessage(activeSessionId, 'Analysis approved. Please proceed with BOG generation.');
 
-      if ((response?.status === 'complete' || response?.status === 'bog_generated') && response?.downloadUrl) {
-        const bogMessage: ChatMessage = {
-          id: `bog-${Date.now()}`,
-          type: 'assistant',
-          content: response.message || 'BOG file generated successfully!',
-          timestamp: new Date(),
-          metadata: { downloadUrl: response.downloadUrl }
-        };
+      // Create approval message
+      const bogMessage: ChatMessage = {
+        id: `bog-${Date.now()}`,
+        type: 'assistant',
+        content: 'Analysis approved. BOG generation requested.',
+        timestamp: new Date(),
+        metadata: { status: 'approved' }
+      };
         
-        setSessions(prev => ({
-          ...prev,
-          [activeSessionId]: {
-            ...prev[activeSessionId],
-            messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
-          }
-        }));
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), bogMessage]
+        }
+      }));
         
-        setWorkflowState('complete');
-      } else if (response?.resumeUrl) {
-        // If another wait step is returned, store resume URL client-side for UI
-        n8nWebhookService.storeResumeUrl(activeSessionId, response.resumeUrl);
-        setWorkflowState('awaiting_approval');
-      }
+      setWorkflowState('complete');
 
       // Persist completion or status message
       try {
         const completeMsgId = `complete-${Date.now()}`;
-        await apiService.persistMessage(activeSessionId, {
+        await unifiedAPIService.persistMessage(activeSessionId, {
           message_id: completeMsgId,
           type: 'assistant',
-          content: response?.message || 'Action completed',
-          metadata: { downloadUrl: response?.downloadUrl },
-          session_state: response?.downloadUrl ? 'complete' : 'awaiting_approval'
+          content: 'Action completed',
+          metadata: { status: 'approved' },
+          session_state: 'complete'
         });
         setSessions(prev => {
           const s = prev[activeSessionId];
@@ -1233,183 +1568,99 @@ const App: React.FC = () => {
       const errMsg = typeof error?.message === 'string' ? error.message : 'Failed to approve analysis';
       handleWorkflowFailure(errMsg);
     }
-  }, [activeSessionId, activeSession, addConsoleMessage]);
+  }, [activeSessionId, activeSession, addConsoleMessage, handleWorkflowFailure]);
 
-  // Handle analysis changes request
-
-  const handleResendMessage = useCallback(async (message: ChatMessage) => {
+  // Handle pipeline retry
+  const handleRetryPipeline = useCallback(async () => {
     if (!activeSessionId) return;
     
-    console.log('Resending message:', message.id);
+    try {
+      setIsLoading(true);
+      setLoadingMessage('Retrying last step...');
+      await retryLastStep();
+      addConsoleMessage('info', 'Pipeline', 'Retrying last step...');
+    } catch (error: any) {
+      console.error('Pipeline retry failed:', error);
+      handleWorkflowFailure(error.message || 'Failed to retry pipeline step');
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
+    }
+  }, [activeSessionId, retryLastStep, addConsoleMessage, handleWorkflowFailure]);
 
-    const findLatestExtractedText = () => {
-      const session = sessions[activeSessionId];
-      if (!session) return undefined;
-      for (let i = session.messages.length - 1; i >= 0; i--) {
-        const m = session.messages[i] as any;
-        const t = m?.metadata?.extractedText || m?.metadata?.data?.extractedText;
-        if (t && typeof t === 'string' && t.trim()) return t;
-      }
-      return undefined;
-    };
+  const handleResendMessage = useCallback(async (message: ChatMessage) => {
+    if (!activeSessionId || !message.content?.trim()) return;
     
-    // Update message status to sending
-    setSessions(prev => {
-      const session = prev[activeSessionId];
-      if (!session) return prev;
-      
-      const updatedMessages = session.messages.map(m => 
-        m.id === message.id ? { ...m, status: 'sending' as const } : m
-      );
-      
-      return {
-        ...prev,
-        [activeSessionId]: {
-          ...session,
-          messages: updatedMessages
-        }
-      };
-    });
+    console.log('Resending message:', message.id);
+    
+    // Mark original message as retrying
+    setSessions(prev => ({
+      ...prev,
+      [activeSessionId]: {
+        ...prev[activeSessionId],
+        messages: prev[activeSessionId]?.messages.map(m => 
+          m.id === message.id ? { ...m, status: 'sending' } : m
+        ) || []
+      }
+    }));
     
     try {
-      // Resend to backend for audit trail only (non-blocking)
-      try { await enhancedApiService.resendMessage(activeSessionId, message); } catch {}
+      setWorkflowState('analyzing');
+      setIsLoading(true);
+      setLoadingMessage('Retrying message...');
       
-      // Always prefer backend replay first to avoid duplicate uploads
-      let replaySucceeded = false;
-      try {
-        const replay = await enhancedApiService.replayFiles(activeSessionId, message.id);
-        const parsed = n8nWebhookService.parseWorkflowResponse(replay);
-        if (parsed?.status === 'text_extracted' || parsed?.step === 'text_review') {
-          addConsoleMessage('success', 'Retry', 'Replayed stored files successfully');
-          addToast('success', 'Retry', 'Replayed stored files successfully');
-          // Render a Text Review approval message node
-          const textReviewMsg: ChatMessage = {
-            id: `text-review-${Date.now()}`,
-            type: 'system',
-            messageType: 'status',
-            content: parsed?.message || 'Text extracted. Please review before analysis.',
-            timestamp: new Date(),
-            sessionId: activeSessionId,
-            metadata: {
-              status: 'awaiting_approval',
-              extractedText: parsed?.extractedText,
-              textQuality: parsed?.textQuality,
-              qualityScore: parsed?.qualityScore,
-              qualityIssues: parsed?.qualityIssues,
-              recommendations: parsed?.recommendations,
-              hvacTermsFound: parsed?.hvacTermsFound,
-              actions: parsed?.actions,
-              progress: parsed?.progress,
-              resumeUrl: parsed?.resumeUrl
-            }
-          } as any;
-          setSessions(prev => ({
-            ...prev,
-            [activeSessionId]: {
-              ...prev[activeSessionId],
-              messages: [...(prev[activeSessionId]?.messages || []), textReviewMsg]
-            }
-          }));
-          setWorkflowState('awaiting_approval');
-          replaySucceeded = true;
-        } else if (parsed?.status === 'chat_ready' || parsed?.status === 'chat_response' || replay?.status === 'chat_ready') {
-          const assistantMessage: ChatMessage = {
-            id: `assistant-${Date.now()}`,
-            type: 'assistant',
-            content: parsed?.message || replay?.message || 'Ready.',
-            timestamp: new Date(),
-          } as any;
-          setSessions(prev => ({
-            ...prev,
-            [activeSessionId]: {
-              ...prev[activeSessionId],
-              messages: [...(prev[activeSessionId]?.messages || []), assistantMessage]
-            }
-          }));
-          setWorkflowState('idle');
-          replaySucceeded = true;
-        } else {
-          throw new Error('Replay did not return a terminal state');
-        }
-      } catch (_err) {
-        replaySucceeded = false;
-      }
+      // Store failed message for retry functionality
+      const failedMessage = { ...message, status: 'failed' as const };
       
-      // If replay didn’t work, try re-uploading local files (last resort)
-      if (!replaySucceeded) {
-        const isRealFile = (f: any) => !!f && typeof f === 'object' && 'name' in f && 'size' in f && typeof (f as any).arrayBuffer === 'function';
-        const realFiles = Array.isArray(message.files) ? message.files.filter(isRealFile) as unknown as File[] : [];
-        if (realFiles.length > 0) {
-          await handleSendMessage(message.content, realFiles);
-        } else {
-          // No server files and no in-memory files: prompt user to re-upload or fallback to extracted text
-          addToast('warning', 'Retry', 'Original files are not available. Re-upload the document or retry with extracted text.');
-          // Fallback: re-analyze from extracted text or resend plain text
-          const extracted = findLatestExtractedText();
-          if (extracted) {
-            setWorkflowState('analyzing');
-            clearAnalysisWatchdog();
-            analysisWatchdogRef.current = window.setTimeout(() => {
-              handleWorkflowFailure('Workflow did not respond in time. You can retry.');
-            }, 60000);
-            // Re-run analysis through backend API (unified path)
-            await workflowAPI.sendChatMessage({ sessionId: activeSessionId, message: extracted, includeContext: true });
-            addConsoleMessage('info', 'Retry', 'Re-analyzing from extracted text');
-            addToast('info', 'Retry', 'Re-analyzing from extracted text');
-          } else {
-            await handleSendMessage(message.content, []);
-          }
-        }
-      }
-
-      // Mark as sent
-      setSessions(prev => {
-        const session = prev[activeSessionId];
-        if (!session) return prev;
-        
-        const updatedMessages = session.messages.map(m => 
-          m.id === message.id ? { ...m, status: 'sent' as const } : m
-        );
-        
-        return {
-          ...prev,
-          [activeSessionId]: {
-            ...session,
-            messages: updatedMessages
-          }
-        };
+      // Resend the message using the chat service
+      const chatResponse = await chatService.sendMessage({
+        session_id: activeSessionId,
+        text: message.content
       });
       
-      addConsoleMessage('success', 'Message', 'Message resent');
-      addToast('success', 'Message', 'Message resent');
+      if (chatResponse.success) {
+        // Mark message as sent and remove failed status
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            messages: prev[activeSessionId]?.messages.map(m => 
+              m.id === message.id ? { ...m, status: 'sent' } : m
+            ) || []
+          }
+        }));
+        
+        addConsoleMessage('success', 'Retry', 'Message resent successfully');
+        addToast('success', 'Message resent', 'Processing response...');
+        
+        // Response will come via WebSocket streaming
+      } else {
+        throw new Error('Chat service returned unsuccessful response');
+      }
+      
     } catch (error) {
-      console.error('Failed to resend message:', error);
+      console.error('Message retry failed:', error);
       
-      // Mark as failed again
-      setSessions(prev => {
-        const session = prev[activeSessionId];
-        if (!session) return prev;
-        
-        const updatedMessages = session.messages.map(m => 
-          m.id === message.id ? { ...m, status: 'failed' as const } : m
-        );
-        
-        return {
-          ...prev,
-          [activeSessionId]: {
-            ...session,
-            messages: updatedMessages
-          }
-        };
-      });
+      // Mark message as failed again and store for retry
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: prev[activeSessionId]?.messages.map(m => 
+            m.id === message.id ? { ...m, status: 'failed' } : m
+          ) || []
+        }
+      }));
       
-      addConsoleMessage('error', 'Message', 'Failed to resend message');
-      addToast('error', 'Message', 'Failed to resend message');
+      setWorkflowState('idle');
+      setIsLoading(false);
+      setLoadingMessage('');
+      
+      addConsoleMessage('error', 'Retry', 'Failed to resend message');
+      addToast('error', 'Retry failed', 'Please try again');
     }
-  }, [activeSessionId, sessions, addConsoleMessage, handleSendMessage, clearAnalysisWatchdog, handleWorkflowFailure]);
-
-  const handleNavigateToMessage = useCallback((messageId: string) => {
+  }, [activeSessionId, addToast, addConsoleMessage, setWorkflowState, setIsLoading, setLoadingMessage]); 
+ const handleNavigateToMessage = useCallback((messageId: string) => {
     setFocusMessageId(messageId);
     console.log('Navigating to message:', messageId);
   }, []);
@@ -1424,84 +1675,375 @@ const App: React.FC = () => {
     
     try {
       // Request modification via backend approval API
-      const response = await workflowAPI.handleApproval({ sessionId: activeSessionId, action: 'modify', feedback });
+      // Send modification request via unified API service
+      await unifiedAPIService.sendChatMessage(activeSessionId, `Please modify the analysis based on this feedback: ${feedback}`);
       
-      if (response?.success || response?.status === 'refinement_requested') {
-        const feedbackMessage: ChatMessage = {
-          id: `feedback-${Date.now()}`,
-          type: 'assistant', 
-          content: response.message || 'Feedback received. Please provide updated sequence.',
-          timestamp: new Date()
-        };
+      // Create feedback message
+      const feedbackMessage: ChatMessage = {
+        id: `feedback-${Date.now()}`,
+        type: 'assistant', 
+        content: 'Feedback received. Please provide updated sequence.',
+        timestamp: new Date()
+      };
         
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), feedbackMessage],
+          currentAnalysis: null, // Clear current analysis for re-analysis
+        }
+      }));
+        
+      setWorkflowState('idle'); // Ready for new input
+      // Persist feedback acknowledgement + set idle
+      try { 
+        await unifiedAPIService.persistMessage(activeSessionId, { 
+          message_id: feedbackMessage.id, 
+          type: 'assistant', 
+          content: feedbackMessage.content, 
+          session_state: 'idle' 
+        }); 
+      } catch {}
+      
+    } catch (error) {
+      console.error('Request changes failed:', error);
+      addToast('error', 'Error', 'Failed to request changes');
+    }
+  }, [activeSessionId, addToast]);
+
+  // BOG workflow handlers
+  const handleApproveBOGGeneration = useCallback(async (analysisData: any) => {
+    if (!activeSessionId || !activeSession) return;
+    setWorkflowState('generating');
+
+    try {
+      // Get analysis_id from the analysisData or use a default value
+      const analysisId = analysisData?.analysis_id || analysisData?.id || 1;
+
+      // Start BOG generation using the proper API method
+      const bogResult = await unifiedAPIService.generateBOGFile(activeSessionId, analysisId);
+      console.log('[App] BOG generation started:', bogResult);
+
+      // Create BOG progress message (handle backend response schema)
+      const bogProgressMessage: ChatMessage = {
+        id: `bog-progress-${Date.now()}`,
+        type: 'assistant',
+        messageType: 'bog_progress',
+        content: 'BOG generation started. Please wait while we create your Niagara BOG file...',
+        timestamp: new Date(),
+        metadata: {
+          stage: 'initializing',
+          progress: 0,
+          analysisData: analysisData,
+          bogFileId: bogResult.file_id || (bogResult as any).artifact_id,
+          filename: bogResult.filename || 'generated_bog_file.bog',
+          artifactId: (bogResult as any).artifact_id,
+          analysisId: analysisId
+        }
+      };
+
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), bogProgressMessage]
+        }
+      }));
+
+      // Persist the progress message
+      try {
+        await unifiedAPIService.persistMessage(activeSessionId, {
+          message_id: bogProgressMessage.id,
+          type: 'assistant',
+          message_type: 'bog_progress',
+          content: bogProgressMessage.content,
+          metadata: bogProgressMessage.metadata,
+          session_state: 'generating'
+        });
+      } catch {}
+
+    } catch (error: any) {
+      console.error('BOG generation approval failed:', error);
+      const errMsg = typeof error?.message === 'string' ? error.message : 'Failed to start BOG generation';
+      handleWorkflowFailure(errMsg);
+    }
+  }, [activeSessionId, activeSession, handleWorkflowFailure]);
+
+  const handleRequestAnalysisChanges = useCallback(async (feedback: string) => {
+    if (!activeSessionId) return;
+
+    try {
+      // Request analysis modification via unified API service
+      await unifiedAPIService.sendChatMessage(activeSessionId, `Please refine the analysis based on this feedback: ${feedback}`);
+
+      // Create feedback message
+      const feedbackMessage: ChatMessage = {
+        id: `analysis-feedback-${Date.now()}`,
+        type: 'assistant',
+        content: 'Analysis refinement requested. Please provide updated requirements or upload a revised document.',
+        timestamp: new Date(),
+        metadata: { feedbackType: 'analysis_changes', feedback: feedback }
+      };
+
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), feedbackMessage],
+          currentAnalysis: null, // Clear current analysis for re-analysis
+        }
+      }));
+
+      setWorkflowState('idle'); // Ready for new input
+
+      // Persist feedback acknowledgement
+      try {
+        await unifiedAPIService.persistMessage(activeSessionId, {
+          message_id: feedbackMessage.id,
+          type: 'assistant',
+          content: feedbackMessage.content,
+          metadata: feedbackMessage.metadata,
+          session_state: 'idle'
+        });
+      } catch {}
+
+    } catch (error) {
+      console.error('Request analysis changes failed:', error);
+      addToast('error', 'Error', 'Failed to request analysis changes');
+    }
+  }, [activeSessionId, addToast]);
+
+  const handleViewAnalysisDetails = useCallback(async (analysisData: any) => {
+    // This will trigger a detailed view of the analysis
+    // For now, we can create a detailed analysis message or modal
+    console.log('Viewing analysis details:', analysisData);
+
+    // Could implement a modal here or navigate to detailed view
+    addToast('info', 'Analysis Details', 'Analysis details view would open here');
+  }, [addToast]);
+
+  // Text approval workflow handlers
+  const handleApproveText = useCallback(async (approvedText: string) => {
+    if (!activeSessionId) return;
+
+    try {
+      setWorkflowState('analyzing');
+
+      // Start analysis with approved text and chat context
+      const recentMessages = sessions[activeSessionId]?.messages?.slice(-3) || [];
+      const contextText = recentMessages
+        .filter(m => m.type === 'user' || (m.type === 'assistant' && m.messageType !== 'text_review'))
+        .map(m => `${m.type}: ${m.content}`)
+        .join('\n');
+
+      const fullContext = `Chat Context:\n${contextText}\n\nApproved Document Text:\n${approvedText}`;
+
+      console.log('[App] Starting analysis with approved text and context');
+      await unifiedAPIService.startAnalysisWithWorkflow(activeSessionId, fullContext);
+
+      // Create analysis progress message
+      const analysisMessage: ChatMessage = {
+        id: `analysis-started-${Date.now()}`,
+        type: 'assistant',
+        messageType: 'analysis_progress',
+        content: 'Analysis started with approved text and chat context.',
+        timestamp: new Date(),
+        sessionId: activeSessionId,
+        metadata: {
+          stage: 'starting',
+          progress: 0,
+          approvedText: approvedText,
+          withContext: true
+        }
+      };
+
+      setSessions(prev => ({
+        ...prev,
+        [activeSessionId]: {
+          ...prev[activeSessionId],
+          messages: [...(prev[activeSessionId]?.messages || []), analysisMessage]
+        }
+      }));
+
+    } catch (error: any) {
+      console.error('Text approval failed:', error);
+      const errMsg = typeof error?.message === 'string' ? error.message : 'Failed to start analysis';
+      handleWorkflowFailure(errMsg);
+    }
+  }, [activeSessionId, sessions, handleWorkflowFailure]);
+
+  const handleRequestTextChanges = useCallback(async (feedback: string) => {
+    if (!activeSessionId) return;
+
+    try {
+      // Extract file_id from feedback if it contains it, or use the last uploaded file
+      const fileIdMatch = feedback.match(/file ID: (\d+)/);
+      let fileId = null;
+
+      if (fileIdMatch) {
+        fileId = parseInt(fileIdMatch[1]);
+      } else if (lastFileId) {
+        fileId = lastFileId;
+      }
+
+      if (fileId) {
+        // Trigger actual re-extraction using the API
+        addToast('info', 'Re-extract', `Re-extracting text from file ID: ${fileId}`);
+        setWorkflowState('analyzing');
+
+        const extractResult = await unifiedAPIService.extractTextWithWorkflow(fileId, activeSessionId);
+
+        // Create new text review message with re-extracted content
+        const textReviewMessage: ChatMessage = {
+          id: `text-review-reextract-${Date.now()}`,
+          type: 'assistant',
+          messageType: 'text_review',
+          content: 'Document text re-extracted. Please review and approve before analysis.',
+          timestamp: new Date(),
+          sessionId: activeSessionId,
+          metadata: {
+            extractedText: extractResult.extracted_text || extractResult.text || extractResult.content,
+            file_id: fileId,
+            filename: extractResult.filename || lastUploadedFile?.name || 'Re-extracted Document',
+            requiresApproval: true,
+            stage: 'text_review',
+            isReExtraction: true,
+            feedback: feedback
+          }
+        };
+
         setSessions(prev => ({
           ...prev,
           [activeSessionId]: {
             ...prev[activeSessionId],
-            messages: [...(prev[activeSessionId]?.messages || []), feedbackMessage],
-            currentAnalysis: null, // Clear current analysis for re-analysis
+            messages: [...(prev[activeSessionId]?.messages || []), textReviewMessage]
           }
         }));
-        
-        setWorkflowState('idle'); // Ready for new input
-        // Persist feedback acknowledgement + set idle
-        try { await apiService.persistMessage(activeSessionId, { message_id: feedbackMessage.id, type: 'assistant', content: feedbackMessage.content, session_state: 'idle' }); } catch {}
+
+        setWorkflowState('idle');
+        addToast('success', 'Re-extract', 'Text re-extraction completed');
+      } else {
+        // Fallback to feedback message if no file ID available
+        const feedbackMessage: ChatMessage = {
+          id: `text-feedback-${Date.now()}`,
+          type: 'assistant',
+          content: 'Text re-extraction requested. Please upload a clearer document or provide additional guidance.',
+          timestamp: new Date(),
+          sessionId: activeSessionId,
+          metadata: { feedbackType: 'text_changes', feedback: feedback }
+        };
+
+        setSessions(prev => ({
+          ...prev,
+          [activeSessionId]: {
+            ...prev[activeSessionId],
+            messages: [...(prev[activeSessionId]?.messages || []), feedbackMessage]
+          }
+        }));
+
+        setWorkflowState('idle');
+        addToast('info', 'Re-extraction', 'Text re-extraction requested');
       }
-      
-    } catch (error) {
-      // Handle error...
+    } catch (error: any) {
+      console.error('Text re-extraction failed:', error);
+      setWorkflowState('idle');
+      addToast('error', 'Re-extract', `Failed to re-extract text: ${error?.message || error}`);
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, lastFileId, lastUploadedFile, addToast]);
+
+  const handleViewTextDetails = useCallback(async (text: string) => {
+    // Open text in modal or detailed view
+    console.log('Viewing full text:', text);
+    addToast('info', 'Text Details', 'Full text view would open here');
+  }, [addToast]);
+
+  // Add debug mode for testing
+  const [debugMode, setDebugMode] = useState(false);
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {/* Main Workbench Interface */}
-      <SimplifiedWorkbench
-        // session and analysis data
-        messages={messages}
-        sessionId={sessionId}
-        isLoading={isLoading}
-        workflowState={workflowState}
-        currentAnalysis={currentAnalysis}
-        analysisMessageId={analysisMessageId}
-        focusMessageId={focusMessageId}
-        sessionFiles={sessionFiles}
-        // highlightTarget={highlightTarget}
-        
-        // actions
-        onSendMessage={handleSendMessage}
-        onApproveAnalysis={handleApproveAnalysis}
-        onRequestChanges={handleRequestChanges}
-        onResendMessage={handleResendMessage}
-        onNavigateToMessage={handleNavigateToMessage}
-        onNavigateToItem={handleNavigateToItem}
-        
-        // session manager
-        sessions={Object.values(sessions).map(s => ({ id: s.id, name: s.name, createdAt: s.createdAt }))}
-        activeSessionId={activeSessionId}
-        onCreateSession={createSession}
-        onSwitchSession={switchSession}
-        onDeleteSession={deleteSession}
-        onRenameSession={renameSession}
-        
-        // console
-        isConsoleOpen={isConsoleOpen}
-        onToggleConsole={() => setIsConsoleOpen(!isConsoleOpen)}
-      />
+      {/* Debug toggle */}
+      <div style={{ position: 'fixed', top: '10px', right: '10px', zIndex: 9999 }}>
+        <button 
+          onClick={() => setDebugMode(!debugMode)}
+          style={{ 
+            padding: '5px 10px', 
+            backgroundColor: debugMode ? '#ff4444' : '#4444ff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          {debugMode ? 'Exit Debug' : 'Debug Mode'}
+        </button>
+      </div>
       
-      {/* Console Panel */}
-      <ConsolePanel
-        isOpen={isConsoleOpen}
-        onClose={() => setIsConsoleOpen(false)}
-        messages={consoleMessages}
-        onClear={() => setConsoleMessages([])}
-      />
-      
-      {/* Loading Overlay - Show for: initial load, session operations, NOT for analyzing (has its own UI) */}
-      <LoadingOverlay 
-        isVisible={isInitializing || (isLoading && workflowState !== 'analyzing')} 
-        message={loadingMessage || (isInitializing ? 'Loading PyBOG Control Builder...' : 'Processing...')}
-      />
+      {debugMode ? (
+        <div>Debug mode enabled</div>
+      ) : (
+        <>
+          {/* Main Workbench Interface */}
+          <SimplifiedWorkbench
+            // session and analysis data
+            messages={messages}
+            sessionId={sessionId}
+            isLoading={isLoading}
+            workflowState={workflowState}
+            currentAnalysis={currentAnalysis}
+            analysisMessageId={analysisMessageId}
+            focusMessageId={focusMessageId}
+            sessionFiles={sessionFiles}
+            // highlightTarget={highlightTarget}
+            
+            // actions
+            onSendMessage={handleSendMessage}
+            onApproveAnalysis={handleApproveAnalysis}
+            onRequestChanges={handleRequestChanges}
+            onResendMessage={handleResendMessage}
+            onNavigateToMessage={handleNavigateToMessage}
+            onNavigateToItem={handleNavigateToItem}
+
+            // BOG workflow actions
+            onApproveBOGGeneration={handleApproveBOGGeneration}
+            onRequestAnalysisChanges={handleRequestAnalysisChanges}
+            onViewAnalysisDetails={handleViewAnalysisDetails}
+
+            // Text approval workflow actions
+            onApproveText={handleApproveText}
+            onRequestTextChanges={handleRequestTextChanges}
+            onViewTextDetails={handleViewTextDetails}
+
+            // session manager
+            sessions={Object.values(sessions)}
+            activeSessionId={activeSessionId}
+            onCreateSession={createSession}
+            onSwitchSession={switchSession}
+            onDeleteSession={deleteSession}
+            onRenameSession={renameSession}
+            onClearAllSessions={clearAllSessions}
+            
+            // console
+            isConsoleOpen={isConsoleOpen}
+            onToggleConsole={() => setIsConsoleOpen(!isConsoleOpen)}
+          />
+          
+          {/* Console Panel */}
+          <ConsolePanel
+            isOpen={isConsoleOpen}
+            onClose={() => setIsConsoleOpen(false)}
+            messages={consoleMessages}
+            onClear={() => setConsoleMessages([])}
+          />
+          
+          {/* Loading Overlay - Show for: initial load, session operations, NOT for analyzing (has its own UI) */}
+          <LoadingOverlay 
+            isVisible={isInitializing || (isLoading && workflowState !== 'analyzing')} 
+            message={loadingMessage || (isInitializing ? 'Loading PyBOG Control Builder...' : 'Processing...')}
+          />
+        </>
+      )}
     </div>
   );
 };

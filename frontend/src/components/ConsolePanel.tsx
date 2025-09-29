@@ -37,7 +37,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
     if (!isOpen) return;
     
     const cfg = (window as any).RUNTIME_CONFIG || {};
-    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8847';
     const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/logs';
     
     const ws = new WebSocket(wsUrl);

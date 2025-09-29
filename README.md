@@ -1,23 +1,84 @@
-# PyBOG Control Builder
+# 🏗️ PyBOG HVAC Control Builder
 
-HVAC Control Sequence to Niagara BOG File Generator
+**Neo-Brutalism AI-Powered Wire Sheet Logic Generator for Niagara Workbench**
 
-## Overview
+Transform HVAC control sequences into professional BOG files using AI analysis, React Flow visualization, and a beautiful neo-brutalism interface.
 
-PyBOG Control Builder is a dockerized application that converts HVAC control sequence documents into Niagara Workbench BOG (Building Object Graph) files using AI-powered analysis.
+![PyBOG Interface](https://img.shields.io/badge/Interface-Neo--Brutalism-ff6b6b?style=for-the-badge)
+![AI Powered](https://img.shields.io/badge/AI-OpenAI%20GPT--4-00d4aa?style=for-the-badge)
+![React Flow](https://img.shields.io/badge/UI-React%20Flow-61dafb?style=for-the-badge)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge)
 
-## Architecture
+## ✨ Features
+
+### 🎨 **Neo-Brutalism Interface**
+- Bold, geometric design with sharp edges and high contrast
+- React Flow-based chat canvas for interactive workflow visualization
+- Real-time progress tracking with animated process steps
+- File viewer modal for document analysis
+- System health monitoring with service status indicators
+
+### 🤖 **AI-Powered Analysis**
+- **Document Processing**: Upload PDFs, DOCX, or TXT files with HVAC sequences
+- **I/O Point Extraction**: Automatically identifies sensors, actuators, and control points
+- **Control Block Identification**: Finds logical control sections (safety, scheduling, temperature, etc.)
+- **Pseudocode Generation**: Creates structured wire sheet logic for Niagara Workbench
+- **Quality Assessment**: Evaluates text completeness and HVAC terminology coverage
+
+### 🔄 **Interactive Workflow**
+- **Human-in-the-Loop**: Review and approve AI analysis before BOG generation
+- **Real-time Updates**: WebSocket-powered progress streaming
+- **Session Management**: Persistent chat sessions with full conversation history
+- **File Storage**: Session-based file organization and retrieval
+- **Iterative Design**: Modify analysis results and regenerate BOG files
+
+### 📁 **BOG File Generation**
+- **PyBOG Integration**: Full wire sheet logic compilation
+- **Niagara Compatible**: Ready-to-import BOG files for Workbench
+- **Structured Output**: Organized input/output points and control sequences
+- **Download Management**: Secure file serving with session validation
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker Desktop
+- OpenAI API Key
+- 8GB RAM recommended
+
+### 1. Clone and Setup
+```bash
+git clone <repository-url>
+cd pybog
+python start_pybog.py
+```
+
+### 2. Configure Environment
+Edit `.env` file with your OpenAI API key:
+```env
+OPENAI_API_KEY=your_actual_openai_key_here
+```
+
+### 3. Access the Interface
+- **Main App**: http://localhost:3001
+- **API Docs**: http://localhost:8000/docs
+
+- **Database UI**: http://localhost:5050
+
+## 🏗️ Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│   Backend   │────▶│     n8n     │
-│   (React)   │     │   (FastAPI) │     │  (Workflow) │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                    │
-       └───────────────────┴────────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  PostgreSQL  │
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Neo-Brutalism │────▶│   FastAPI +     │────▶│   PostgreSQL    │
+│   React Flow UI │     │   LangChain     │     │   + Redis       │
+│   (Port 3001)   │     │   (Port 8000)   │     │   + WebSocket   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                        │                        │
+         └────────────────────────┴────────────────────────┘
+                                  │
+                           ┌──────▼──────┐
+                           │   PyBOG     │
+                           │  Generator   │
+                           └─────────────┘
                     │   + Redis    │
                     └──────────────┘
 ```
@@ -42,7 +103,7 @@ PyBOG Control Builder is a dockerized application that converts HVAC control seq
 4. **Access Application**
    - Frontend: http://localhost:3001
    - API: http://localhost:8000/docs
-   - n8n: http://localhost:5678
+
 
 ## Services
 
@@ -50,7 +111,7 @@ PyBOG Control Builder is a dockerized application that converts HVAC control seq
 |---------|------|-------------|
 | Frontend | 3001 | React UI with health monitoring |
 | API | 8000 | FastAPI backend service |
-| n8n | 5678 | Workflow automation engine |
+
 | PostgreSQL | 5432 | Primary database |
 | Redis | 6379 | Cache layer |
 
@@ -98,7 +159,7 @@ docker-compose logs -f [service-name]
 - **Services not starting**: Check Docker Desktop is running
 - **API errors**: Verify OPENAI_API_KEY in .env file
 - **Frontend not loading**: Clear browser cache, check port 3001
-- **n8n webhook errors**: Ensure workflow is active in n8n interface
+
 
 ## License
 

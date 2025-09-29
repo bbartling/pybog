@@ -1,0 +1,25 @@
+HVAC Control Sequence for Single Zone AHU
+
+Equipment: Single Zone Air Handling Unit with Economizer
+
+Control Points:
+- Supply Air Temperature Sensor (SAT)
+- Outside Air Temperature Sensor (OAT) 
+- Return Air Temperature Sensor (RAT)
+- Supply Air Temperature Setpoint (SAT_SP)
+- Outside Air Damper Command (OAD_CMD)
+- Heating Valve Command (HV_CMD)
+- Cooling Valve Command (CV_CMD)
+
+Control Logic:
+1. During occupied hours, maintain SAT_SP at 55°F
+2. During unoccupied hours, maintain SAT_SP at 60°F
+3. Enable economizer when OAT < RAT and OAT > 45°F
+4. Heating sequence: If SAT < SAT_SP, open heating valve
+5. Cooling sequence: If SAT > SAT_SP, open cooling valve
+6. High temperature alarm if SAT > 65°F
+7. Low temperature alarm if SAT < 50°F
+
+Schedules:
+- Occupied: Monday-Friday 7:00 AM to 6:00 PM
+- Unoccupied: All other times

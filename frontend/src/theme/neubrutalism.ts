@@ -8,18 +8,24 @@ export const TOKENS = {
   border: "#3F3F4B",       // Primary border color
   text: "#1F1F1F",         // Primary text
   muted: "#6D6E7A",        // Muted/secondary text
+  textSecondary: "#6D6E7A", // Secondary text (alias for muted)
   
   // Component Colors
   nodeHeader: "#C9C7DF",   // Header backgrounds (light purple)
   nodeFooter: "#F6F2C7",   // Footer backgrounds (light yellow)
   chip: "#ECEEF5",         // Badge/chip backgrounds
   port: "#59586A",         // Connection points
+  surface: "#FFFFFF",      // Surface/card backgrounds
   
-  // Status Colors
-  ok: "#2DB72D",           // Success/healthy
+  // Brand Colors
+  primary: "#4A9EFF",      // Primary brand color
+  success: "#2DB72D",      // Success states
   warning: "#FFA500",      // Warning states
   error: "#FF4444",        // Error states
   info: "#4A9EFF",         // Info/primary actions
+  
+  // Status Colors (legacy aliases)
+  ok: "#2DB72D",           // Success/healthy
   
   // Role-based Colors
   userHeader: "#C9C7DF",
@@ -39,6 +45,9 @@ export const TOKENS = {
   white: "#FFFFFF",
   black: "#000000",
   transparent: "transparent",
+  
+  // Typography
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
 };
 
 export const STYLES = {
@@ -131,12 +140,20 @@ export const COMPONENTS = {
       color: TOKENS.white,
     },
     success: {
-      background: TOKENS.ok,
+      background: TOKENS.success,
       color: TOKENS.white,
     },
     warning: {
       background: TOKENS.warning,
       color: TOKENS.white,
+    },
+    danger: {
+      background: TOKENS.error,
+      color: TOKENS.white,
+    },
+    secondary: {
+      background: TOKENS.chip,
+      color: TOKENS.text,
     },
   },
   

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Flow Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .info { background-color: #d1ecf1; }
+        button { padding: 10px 15px; margin: 5px; }
+        #log { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>PyBOG Complete Flow Test</h1>
+    
+    <div class="section">
+        <h3>1. API Health Check</h3>
+        <button onclick="testAPIHealth()">Test API Health</button>
+        <div id="api-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>2. Session Creation</h3>
+        <button onclick="testSessionCreation()">Create Session</button>
+        <div id="session-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>3. WebSocket Connection</h3>
+        <button onclick="testWebSocket()">Test WebSocket</button>
+        <button onclick="disconnectWebSocket()">Disconnect</button>
+        <div id="websocket-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>4. Chat Message</h3>
+        <input type="text" id="chatMessage" placeholder="Enter message..." value="Hello, can you help me with HVAC controls?">
+        <button onclick="testChatMessage()">Send Chat</button>
+        <div id="chat-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>5. File Upload</h3>
+        <input type="file" id="fileInput" accept=".pdf,.txt,.doc,.docx">
+        <button onclick="testFileUpload()">Upload File</button>
+        <div id="file-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>Test Log</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let ws = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        async function testAPIHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                document.getElementById('api-result').innerHTML = `<div class="success">✅ API Health: ${data.status}</div>`;
+                log('API Health check passed', 'success');
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = `<div class="error">❌ API Health failed: ${error}</div>`;
+                log(`API Health check failed: ${error}`, 'error');
+            }
+        }
+        
+        async function testSessionCreation() {
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Test Session' })
+                });
+                const data = await response.json();
+                sessionId = data.session_id;
+                document.getElementById('session-result').innerHTML = `<div class="success">✅ Session created: ${sessionId}</div>`;
+                log(`Session created: ${sessionId}`, 'success');
+            } catch (error) {
+                document.getElementById('session-result').innerHTML = `<div class="error">❌ Session creation failed: ${error}</div>`;
+                log(`Session creation failed: ${error}`, 'error');
+            }
+        }
+        
+        function testWebSocket() {
+            if (!sessionId) {
+                log('Please create a session first', 'error');
+                return;
+            }
+            
+            const wsUrl = `ws://localhost:8847/ws/${sessionId}`;
+            log(`Connecting to WebSocket: ${wsUrl}`);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                document.getElementById('websocket-result').innerHTML = '<div class="success">✅ WebSocket connected</div>';
+                log('WebSocket connected successfully', 'success');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`WebSocket message: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'chat') {
+                        if (data.data.is_complete) {
+                            log(`Chat complete: ${data.data.final_content || data.data.content}`, 'success');
+                        } else {
+                            log(`Chat chunk: ${data.data.content}`, 'info');
+                        }
+                    }
+                } catch (e) {
+                    log(`Raw WebSocket message: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onclose = function() {
+                document.getElementById('websocket-result').innerHTML = '<div class="error">❌ WebSocket disconnected</div>';
+                log('WebSocket disconnected', 'error');
+            };
+            
+            ws.onerror = function(error) {
+                document.getElementById('websocket-result').innerHTML = `<div class="error">❌ WebSocket error: ${error}</div>`;
+                log(`WebSocket error: ${error}`, 'error');
+            };
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        async function testChatMessage() {
+            if (!sessionId) {
+                log('Please create a session first', 'error');
+                return;
+            }
+            
+            const message = document.getElementById('chatMessage').value;
+            if (!message) {
+                log('Please enter a message', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('chat-result').innerHTML = '<div class="success">✅ Chat message sent - check WebSocket for response</div>';
+                    log('Chat message sent successfully', 'success');
+                } else {
+                    throw new Error('Chat service returned unsuccessful response');
+                }
+            } catch (error) {
+                document.getElementById('chat-result').innerHTML = `<div class="error">❌ Chat failed: ${error}</div>`;
+                log(`Chat message failed: ${error}`, 'error');
+            }
+        }
+        
+        async function testFileUpload() {
+            if (!sessionId) {
+                log('Please create a session first', 'error');
+                return;
+            }
+            
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                log('Please select a file', 'error');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('session_id', sessionId);
+                
+                const response = await fetch('/api/files/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                document.getElementById('file-result').innerHTML = `<div class="success">✅ File uploaded: ${data.filename}</div>`;
+                log(`File uploaded successfully: ${data.filename}`, 'success');
+            } catch (error) {
+                document.getElementById('file-result').innerHTML = `<div class="error">❌ File upload failed: ${error}</div>`;
+                log(`File upload failed: ${error}`, 'error');
+            }
+        }
+        
+        // Auto-run API health check on load
+        window.onload = function() {
+            testAPIHealth();
+        };
+    </script>
+</body>
+</html>

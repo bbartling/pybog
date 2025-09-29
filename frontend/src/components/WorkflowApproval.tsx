@@ -1,6 +1,6 @@
 /**
  * WorkflowApproval Component
- * Handles wait node approvals and user actions for n8n workflows
+ * Handles workflow approvals and user actions for unified backend
  */
 
 import React, { useState, useEffect } from 'react';
@@ -41,7 +41,7 @@ import {
   MessageCategory,
   isWaitingMessage 
 } from '../types/unified';
-import { workflowAPI } from '../services/workflowAPI';
+import { unifiedAPIService } from '../services/UnifiedAPIService';
 
 interface WorkflowApprovalProps {
   message: Message;
@@ -89,20 +89,12 @@ export const WorkflowApproval: React.FC<WorkflowApprovalProps> = ({
     setSuccess(null);
 
     try {
-      const response = await workflowAPI.handleApproval({
-        sessionId,
-        action: action.payload.action,
-        feedback: additionalData?.feedback || inputValues.feedback,
-        modifications: additionalData?.modifications || inputValues.modifications,
-        resumeUrl: waitNode.resumeUrl,
-      });
+      // Send action via unified API service
+      const message = `Action: ${action.payload.action}${additionalData?.feedback ? ` - Feedback: ${additionalData.feedback}` : ''}`;
+      await unifiedAPIService.sendChatMessage(sessionId, message);
 
-      if (response.success) {
-        setSuccess(`Successfully ${action.payload.action}ed the workflow`);
-        onActionComplete?.(action.payload.action, true);
-      } else {
-        throw new Error(response.error || 'Action failed');
-      }
+      setSuccess(`Successfully ${action.payload.action}ed the workflow`);
+      onActionComplete?.(action.payload.action, true);
     } catch (err: any) {
       setError(err.message || 'Failed to complete action');
       onActionComplete?.(action.payload.action, false);

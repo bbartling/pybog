@@ -1,6 +1,6 @@
 /**
  * Unified Data Models for PyBOG
- * Clean interfaces that align with n8n workflows and backend data structures
+ * Clean interfaces that align with backend data structures
  */
 
 // Core Session Management

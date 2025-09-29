@@ -3,11 +3,11 @@
  * This TypeScript version mirrors the Python constants.py file.
  */
 
-// Session States - Used across API, Database, and N8N
+// Session States - Used across API and Database
 export enum SessionState {
   NEW = "new",                          // Initial state when session created
   DOCUMENT_UPLOADED = "document_uploaded",  // File uploaded, awaiting processing
-  ANALYZING = "analyzing",               // N8N workflow processing document
+  ANALYZING = "analyzing",               // Backend processing document
   ANALYSIS_COMPLETE = "analysis_complete",  // Analysis done, awaiting review
   PENDING_APPROVAL = "pending_approval",    // User needs to approve analysis
   APPROVED = "approved",                 // User approved, ready for BOG generation

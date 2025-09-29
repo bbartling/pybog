@@ -6,7 +6,8 @@ import {
   Terminal, Wifi, WifiOff, Server, HardDrive, Zap,
   ExternalLink, RefreshCw, GitBranch, Cpu, CircuitBoard, Github
 } from 'lucide-react';
-import ChatCanvasGrid, { ChatMessage } from './ChatCanvasGrid';
+import ChatCanvasGridSimple from './ChatCanvasGridSimple';
+import { ChatMessage, Session } from '../types/ChatMessage';
 import ProjectNavigator from './ProjectNavigatorEnhanced';
 import './SimplifiedWorkbench.neubrutalism.css';
 import { ReactFlowProvider } from 'reactflow';
@@ -19,24 +20,20 @@ interface IOPoint {
   dataType: string;
 }
 
-interface SessionSummary {
-  id: string;
-  name: string;
-  createdAt: Date | string;
-}
+// Using unified Session interface from types/ChatMessage.ts
 
 interface SimplifiedWorkbenchProps {
   // session and analysis data
   messages: ChatMessage[];
   sessionId: string;
   isLoading: boolean;
-  workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete';
+  workflowState?: 'idle' | 'analyzing' | 'awaiting_approval' | 'generating' | 'complete' | 'awaiting_analysis_review';
   currentAnalysis?: any;
   analysisMessageId?: string;
   focusMessageId?: string;
   highlightTarget?: { kind: 'analysis' | 'block' | 'input' | 'output'; label?: string };
   sessionFiles?: { file_id: string; filename: string; file_type: string; file_size: number; preview_url: string; }[];
-  
+
   // actions
   onSendMessage: (text: string, files: File[]) => void;
   onApproveAnalysis: () => void;
@@ -44,14 +41,25 @@ interface SimplifiedWorkbenchProps {
   onResendMessage?: (message: ChatMessage) => void;
   onNavigateToMessage: (messageId: string) => void;
   onNavigateToItem: (target: { kind: 'input' | 'output' | 'block'; label: string }) => void;
+
+  // BOG workflow actions
+  onApproveBOGGeneration?: (analysisData: any) => void;
+  onRequestAnalysisChanges?: (feedback: string) => void;
+  onViewAnalysisDetails?: (analysisData: any) => void;
+
+  // Text approval workflow actions
+  onApproveText?: (approvedText: string) => void;
+  onRequestTextChanges?: (feedback: string) => void;
+  onViewTextDetails?: (text: string) => void;
   
   // session manager
-  sessions: SessionSummary[];
+  sessions: Session[];
   activeSessionId: string;
   onCreateSession: () => void;
   onSwitchSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession?: (id: string, name: string) => void;
+  onClearAllSessions?: () => void;
   
   // console
   isConsoleOpen?: boolean;
@@ -69,7 +77,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   focusMessageId,
   highlightTarget,
   sessionFiles = [],
-  
+
   // actions
   onSendMessage,
   onApproveAnalysis,
@@ -77,6 +85,16 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   onResendMessage,
   onNavigateToMessage,
   onNavigateToItem,
+
+  // BOG workflow actions
+  onApproveBOGGeneration,
+  onRequestAnalysisChanges,
+  onViewAnalysisDetails,
+
+  // Text approval workflow actions
+  onApproveText,
+  onRequestTextChanges,
+  onViewTextDetails,
   
   // session manager
   sessions,
@@ -85,6 +103,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   onSwitchSession,
   onDeleteSession,
   onRenameSession,
+  onClearAllSessions,
   
   // console
   isConsoleOpen = false,
@@ -97,10 +116,10 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
   const [systemStatus, setSystemStatus] = useState<'healthy' | 'degraded' | 'error'>('healthy');
   const [showSystemDetails, setShowSystemDetails] = useState(false);
   const [systemServices, setSystemServices] = useState({
-    api: { name: 'API Server', status: 'healthy', message: 'Running', url: 'http://localhost:8000/docs' },
+    api: { name: 'API Server', status: 'healthy', message: 'Running', url: 'http://localhost:8847/docs' },
     database: { name: 'PostgreSQL', status: 'healthy', message: 'Connected', url: 'http://localhost:5050' },
     redis: { name: 'Redis Cache', status: 'healthy', message: 'Operational', url: null },
-    n8n: { name: 'n8n Workflow', status: 'healthy', message: 'Ready', url: 'http://localhost:5678' },
+    backend: { name: 'Backend API', status: 'healthy', message: 'Ready', url: 'http://localhost:8847' },
     websocket: { name: 'WebSocket', status: 'healthy', message: 'Active', url: null },
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -357,7 +376,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
                       {key === 'database' && <Database size={14} style={{ color: '#6B7280' }} />}
                       {key === 'redis' && <HardDrive size={14} style={{ color: '#6B7280' }} />}
                       {key === 'api' && <Server size={14} style={{ color: '#6B7280' }} />}
-                      {key === 'n8n' && <Zap size={14} style={{ color: '#6B7280' }} />}
+                      {key === 'backend' && <Zap size={14} style={{ color: '#6B7280' }} />}
                       {key === 'websocket' && (
                         service.status === 'healthy' ? 
                           <Wifi size={14} style={{ color: '#6B7280' }} /> :
@@ -410,6 +429,7 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
               setConfirmDelete({ open: true, sessionId: id });
             }}
             onRenameSession={onRenameSession}
+            onClearAllSessions={onClearAllSessions}
           />
         </div>
 
@@ -418,12 +438,18 @@ const SimplifiedWorkbenchClean: React.FC<SimplifiedWorkbenchProps> = ({
           {/* Main Canvas */}
           <div className="workbench-canvas">
             <ReactFlowProvider>
-              <ChatCanvasGrid
+              <ChatCanvasGridSimple
                 messages={messages}
                 sessionId={sessionId}
                 onApproveAnalysis={onApproveAnalysis}
                 onRequestChanges={onRequestChanges}
                 onResendMessage={onResendMessage}
+                onApproveBOGGeneration={onApproveBOGGeneration}
+                onRequestAnalysisChanges={onRequestAnalysisChanges}
+                onViewAnalysisDetails={onViewAnalysisDetails}
+                onApproveText={onApproveText}
+                onRequestTextChanges={onRequestTextChanges}
+                onViewTextDetails={onViewTextDetails}
                 workflowState={workflowState}
                 focusMessageId={focusMessageId}
               />

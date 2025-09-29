@@ -1,0 +1,1 @@
+Test HVAC control sequence content

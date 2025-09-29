@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Debug Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .pending { background: #fff3cd; color: #856404; }
+        
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 14px;
+        }
+        button:hover { background: #005a9e; }
+        
+        .details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Network Debug Test</h1>
+        <p>Testing network connectivity from browser to backend...</p>
+        
+        <div id="test-results"></div>
+        
+        <div>
+            <button onclick="runNetworkTests()">🚀 Run Network Tests</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+    </div>
+
+    <script>
+        const resultsContainer = document.getElementById('test-results');
+        
+        function addResult(testName, status, message, details = null) {
+            const div = document.createElement('div');
+            div.className = `test-result ${status}`;
+            div.innerHTML = `<strong>${testName}:</strong> ${message}`;
+            
+            if (details) {
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'details';
+                detailsDiv.textContent = details;
+                div.appendChild(detailsDiv);
+            }
+            
+            resultsContainer.appendChild(div);
+        }
+        
+        function clearResults() {
+            resultsContainer.innerHTML = '';
+        }
+        
+        async function runNetworkTests() {
+            clearResults();
+            addResult('Network Tests', 'pending', 'Starting network diagnostics...');
+            
+            // Test 1: Basic fetch to health endpoint
+            try {
+                console.log('Testing basic fetch...');
+                const response = await fetch('http://localhost:8847/api/health');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('Basic Fetch', 'pass', `✅ Success: ${response.status}`, 
+                        `Response: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    addResult('Basic Fetch', 'fail', `❌ HTTP ${response.status}: ${response.statusText}`,
+                        `Headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`);
+                }
+            } catch (error) {
+                addResult('Basic Fetch', 'fail', `❌ ${error.name}: ${error.message}`,
+                    `Stack: ${error.stack}`);
+            }
+            
+            // Test 2: CORS preflight test
+            try {
+                console.log('Testing CORS preflight...');
+                const response = await fetch('http://localhost:8847/api/health', {
+                    method: 'OPTIONS'
+                });
+                
+                const corsHeaders = {
+                    'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+                    'access-control-allow-methods': response.headers.get('access-control-allow-methods'),
+                    'access-control-allow-headers': response.headers.get('access-control-allow-headers'),
+                    'access-control-allow-credentials': response.headers.get('access-control-allow-credentials')
+                };
+                
+                addResult('CORS Preflight', response.ok ? 'pass' : 'fail', 
+                    `${response.ok ? '✅' : '❌'} Status: ${response.status}`,
+                    `CORS Headers: ${JSON.stringify(corsHeaders, null, 2)}`);
+            } catch (error) {
+                addResult('CORS Preflight', 'fail', `❌ ${error.name}: ${error.message}`,
+                    `Stack: ${error.stack}`);
+            }
+            
+            // Test 3: POST request (like session creation)
+            try {
+                console.log('Testing POST request...');
+                const response = await fetch('http://localhost:8847/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'Network Debug Test Session',
+                        metadata: { test: true }
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('POST Request', 'pass', `✅ Session created: ${response.status}`,
+                        `Response: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    addResult('POST Request', 'fail', `❌ HTTP ${response.status}: ${response.statusText}`,
+                        `Error: ${errorText}`);
+                }
+            } catch (error) {
+                addResult('POST Request', 'fail', `❌ ${error.name}: ${error.message}`,
+                    `Stack: ${error.stack}`);
+            }
+            
+            // Test 4: Browser environment check
+            const browserInfo = {
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                origin: window.location.origin,
+                protocol: window.location.protocol,
+                hostname: window.location.hostname,
+                port: window.location.port
+            };
+            
+            addResult('Browser Environment', 'pass', '✅ Browser info collected',
+                `Environment: ${JSON.stringify(browserInfo, null, 2)}`);
+            
+            // Test 5: Network timing
+            try {
+                console.log('Testing network timing...');
+                const startTime = performance.now();
+                const response = await fetch('http://localhost:8847/api/health');
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+                
+                addResult('Network Timing', response.ok ? 'pass' : 'fail',
+                    `${response.ok ? '✅' : '❌'} Request took ${duration.toFixed(2)}ms`,
+                    `Start: ${startTime.toFixed(2)}ms, End: ${endTime.toFixed(2)}ms`);
+            } catch (error) {
+                addResult('Network Timing', 'fail', `❌ ${error.name}: ${error.message}`,
+                    `Stack: ${error.stack}`);
+            }
+        }
+        
+        // Auto-run tests on load
+        setTimeout(runNetworkTests, 500);
+    </script>
+</body>
+</html>

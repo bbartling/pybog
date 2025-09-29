@@ -1,0 +1,752 @@
+diff --git a/frontend/src/services/n8nWebhookService.ts b/frontend/src/services/n8nWebhookService.ts
+index 0a99725..ad7ff88 100644
+--- a/frontend/src/services/n8nWebhookService.ts
++++ b/frontend/src/services/n8nWebhookService.ts
+@@ -1,4 +1,6 @@
+ // n8n Webhook Service for handling approval workflows
++import { getApprovalWebhookUrl } from '../utils/webhookUrlHelper';
++
+ interface WebhookApprovalData {
+   sessionId: string;
+   extractedText?: string;
+@@ -32,6 +34,7 @@ interface WorkflowWaitingResponse {
+   qualityIssues?: string[];
+   recommendations?: string[];
+   hvacTermsFound?: number;
++  fullText?: any; // allow full text payload if provided by n8n
+   analysis?: {
+     inputs: string[];
+     outputs: string[];
+@@ -110,6 +113,19 @@ class N8nWebhookService {
+   /**
+    * Get stored resume URL for a session
+    */
++  async fetchServerResumeUrl(sessionId: string): Promise<string | null> {
++    try {
++      const resp = await fetch(`/api/workflow/resume-url/${sessionId}`);
++      if (!resp.ok) return null;
++      const data = await resp.json();
++      const url = data?.resumeUrl || null;
++      if (url) this.storeResumeUrl(sessionId, url);
++      return url;
++    } catch {
++      return null;
++    }
++  }
++
+   getResumeUrl(sessionId: string): string | null {
+     if (!sessionId || sessionId === 'undefined') return null;
+     let url = this.activeResumeUrls.get(sessionId);
+@@ -138,8 +154,34 @@ class N8nWebhookService {
+     } catch (e) {}
+   }
+ 
++  /**
++   * Parse JSON response safely
++   */
++  private async parseJsonResponse(response: Response): Promise<any> {
++    try {
++      const contentType = response.headers.get('content-type') || '';
++      const contentLength = response.headers.get('content-length');
++      const isEmpty = response.status === 204 || contentLength === '0';
++      if (isEmpty) return {};
++      if (contentType.includes('application/json')) {
++        return await response.json();
++      } else {
++        const text = await response.text();
++        try {
++          return text ? JSON.parse(text) : {};
++        } catch {
++          return { text };
++        }
++      }
++    } catch (e) {
++      console.error('Error parsing response:', e);
++      return {};
++    }
++  }
++
+   /**
+    * Resume a waiting workflow with approval
++   * DEPRECATED: This method directly calls n8n, but we should use the backend proxy instead
+    */
+   async approveWorkflowStep(
+     resumeUrl: string, 
+@@ -152,26 +194,60 @@ class N8nWebhookService {
+         sessionId: data.sessionId 
+       });
+       
++      // DEPRECATED: Using backend proxy instead of direct resume URL call
++      // This method is kept for backward compatibility
++      console.warn('[N8n Webhook] Using direct approval method instead of backend proxy, consider using specific methods');
++      
++      // Construct the correct webhook URL with proper suffix
++      const responseData = {
++        resumeUrl,
++        step: this.getStepFromAction(data.action),
++        status: this.getStatusFromAction(data.action),
++        approvalType: this.getApprovalTypeFromAction(data.action)
++      };
++      
++      let finalWebhookUrl: string;
++      try {
++        finalWebhookUrl = getApprovalWebhookUrl(responseData);
++      } catch (error) {
++        console.warn('[N8n Webhook] URL helper failed, using original URL:', error);
++        finalWebhookUrl = resumeUrl;
++      }
++      
++      console.log('[N8n Webhook] URL construction:', {
++        original: resumeUrl,
++        final: finalWebhookUrl,
++        action: data.action
++      });
++      
+       // Send directly to the resume URL with proper structure
+-      const response = await fetch(resumeUrl, {
++      // CRITICAL: Wait node with rawBody: true expects data at root level, not wrapped
++      const payload = {
++        sessionId: data.sessionId,
++        action: data.action,
++        extractedText: data.extractedText,
++        analysis: data.analysis,
++        feedback: data.feedback,
++        userAction: data.userAction,
++        timestamp: data.timestamp || new Date().toISOString(),
++      };
++      
++      console.log('[N8n Webhook] Sending approval payload:', {
++        action: payload.action,
++        sessionId: payload.sessionId,
++        hasExtractedText: Boolean(payload.extractedText),
++        textLength: payload.extractedText?.length || 0,
++        url: finalWebhookUrl
++      });
++      
++      const response = await fetch(finalWebhookUrl, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'X-Session-ID': data.sessionId,
+           'X-User-Action': data.action,
+         },
+-        body: JSON.stringify({
+-          // n8n Wait node expects data in 'body' field
+-          body: {
+-            sessionId: data.sessionId,
+-            action: data.action,
+-            extractedText: data.extractedText,
+-            analysis: data.analysis,
+-            feedback: data.feedback,
+-            userAction: data.userAction,
+-            timestamp: data.timestamp || new Date().toISOString(),
+-          }
+-        }),
++        body: JSON.stringify(payload),
+       });
+ 
+       if (!response.ok) {
+@@ -219,26 +295,92 @@ class N8nWebhookService {
+   /**
+    * Approve text extraction and continue to analysis
+    */
++  
+   async approveTextExtraction(
+     sessionId: string,
+     extractedText: string,
+     resumeUrl?: string
+   ) {
+-    const url = resumeUrl || this.getResumeUrl(sessionId);
++    // Get resume URL from parameter, frontend storage, or fall back to backend
++    let url = resumeUrl || this.getResumeUrl(sessionId);
++    if (!url) {
++      // Try backend fallback to fetch last known resumeUrl
++      url = await this.fetchServerResumeUrl(sessionId);
++    }
+     if (!url) {
+       throw new Error('No resume URL available for session');
+     }
+ 
+-    const response = await this.approveWorkflowStep(url, {
++    console.log('[n8nWebhookService] Approving text extraction:', {
+       sessionId,
+-      extractedText,
+-      action: 'approve_text',
++      textLength: extractedText?.length || 0,
++      url,
++      hasText: Boolean(extractedText)
+     });
++    
++    // CRITICAL: Ensure text is not empty
++    if (!extractedText || extractedText.trim() === '') {
++      console.error('[n8nWebhookService] No extracted text provided for approval!');
++      throw new Error('Cannot approve empty text. Please provide extracted text.');
++    }
+ 
+-    // Clear the used resume URL
+-    this.clearResumeUrl(sessionId);
++    // Try direct approval first (faster, no backend dependency for timeouts)
++    try {
++const directResponse = await this.approveWorkflowStep(url, {
++        sessionId,
++        extractedText,  // CRITICAL: This must be sent
++        // Also include fullText for workflows that prefer it
++        // (Process Text Approval prioritizes fullText)
++        // Use the same content as extractedText when only one is available
++        // to ensure complete text reaches the workflow
++        // @ts-ignore - allow extra field
++        fullText: extractedText,
++        action: 'approve_text',
++        userAction: 'approve_text',
++        timestamp: new Date().toISOString()
++      });
++      
++      console.log('[n8nWebhookService] Direct approval successful:', {
++        hasExtractedText: Boolean(directResponse?.extractedText),
++        responseKeys: Object.keys(directResponse || {})
++      });
++      return directResponse;
++    } catch (directError) {
++      console.warn('[n8nWebhookService] Direct approval failed, trying backend proxy:', directError);
++      
++      // Fallback to backend proxy endpoint
++      const response = await fetch('/api/workflow/approve', {
++        method: 'POST',
++        headers: {
++          'Content-Type': 'application/json',
++        },
++body: JSON.stringify({
++          sessionId,
++          extractedText,  // CRITICAL: This must be sent
++          // Also send fullText for compatibility
++          fullText: extractedText,
++          action: 'approve_text',
++          resumeUrl: url // Pass the resumeUrl to the backend
++        }),
++      });
+     
+-    return response;
++    if (!response.ok) {
++      throw new Error(`Approval failed: ${response.status} ${response.statusText}`);
++    }
++    
++    // Parse response and handle resumeUrl if present in response
++    const result = await this.parseJsonResponse(response);
++    
++    // If we have a new resumeUrl, store it
++    if (result?.resumeUrl) {
++      this.storeResumeUrl(sessionId, result.resumeUrl);
++    } else {
++      // Only clear if no new resumeUrl is provided
++      this.clearResumeUrl(sessionId);
++    }
++    
++    return result;
++    }
+   }
+ 
+   /**
+@@ -249,7 +391,10 @@ class N8nWebhookService {
+     analysis: any,
+     resumeUrl?: string
+   ) {
+-    const url = resumeUrl || this.getResumeUrl(sessionId);
++    let url = resumeUrl || this.getResumeUrl(sessionId);
++    if (!url) {
++      url = await this.fetchServerResumeUrl(sessionId);
++    }
+     if (!url) {
+       throw new Error('No resume URL available for session');
+     }
+@@ -274,7 +419,10 @@ class N8nWebhookService {
+     feedback: string,
+     resumeUrl?: string
+   ) {
+-    const url = resumeUrl || this.getResumeUrl(sessionId);
++    let url = resumeUrl || this.getResumeUrl(sessionId);
++    if (!url) {
++      url = await this.fetchServerResumeUrl(sessionId);
++    }
+     if (!url) {
+       throw new Error('No resume URL available for session');
+     }
+@@ -295,16 +443,60 @@ class N8nWebhookService {
+     extractedText: string,
+     resumeUrl?: string
+   ) {
+-    const url = resumeUrl || this.getResumeUrl(sessionId);
++    // Get resume URL from parameter, frontend storage, or fall back to backend
++    let url = resumeUrl || this.getResumeUrl(sessionId);
++    if (!url) {
++      url = await this.fetchServerResumeUrl(sessionId);
++    }
+     if (!url) {
+       throw new Error('No resume URL available for session');
+     }
+ 
+-    return this.approveWorkflowStep(url, {
+-      sessionId,
+-      extractedText,
+-      action: 'edit_text',
+-    });
++    console.log('[n8nWebhookService] Editing extracted text with URL:', url);
++
++    // Try direct approval first (faster, no backend dependency for timeouts)
++    try {
++      const directResponse = await this.approveWorkflowStep(url, {
++        sessionId,
++        extractedText,
++        action: 'edit_text',
++        userAction: 'edit_text',
++        timestamp: new Date().toISOString()
++      });
++      
++      console.log('[n8nWebhookService] Direct edit successful');
++      return directResponse;
++    } catch (directError) {
++      console.warn('[n8nWebhookService] Direct edit failed, trying backend proxy:', directError);
++      
++      // Fallback to backend proxy endpoint
++      const response = await fetch('/api/workflow/approve', {
++        method: 'POST',
++        headers: {
++          'Content-Type': 'application/json',
++        },
++        body: JSON.stringify({
++          sessionId,
++          extractedText,
++          action: 'edit_text',
++          resumeUrl: url // Pass the resumeUrl to the backend
++        }),
++      });
++    
++    if (!response.ok) {
++      throw new Error(`Edit text failed: ${response.status} ${response.statusText}`);
++    }
++    
++    // Parse response and handle resumeUrl if present in response
++    const result = await this.parseJsonResponse(response);
++    
++    // If we have a new resumeUrl, store it
++    if (result?.resumeUrl) {
++      this.storeResumeUrl(sessionId, result.resumeUrl);
++    }
++    
++    return result;
++    }
+   }
+ 
+   /**
+@@ -314,16 +506,56 @@ class N8nWebhookService {
+     sessionId: string,
+     resumeUrl?: string
+   ) {
++    // Get resume URL from parameter, frontend storage, or fall back to backend
+     const url = resumeUrl || this.getResumeUrl(sessionId);
+     if (!url) {
+       throw new Error('No resume URL available for session');
+     }
+ 
+-    return this.approveWorkflowStep(url, {
+-      sessionId,
+-      action: 'retry_extraction',
+-      userAction: 'retry',
+-    });
++    console.log('[n8nWebhookService] Retrying extraction with URL:', url);
++
++    // Try direct approval first (faster, no backend dependency for timeouts)
++    try {
++      const directResponse = await this.approveWorkflowStep(url, {
++        sessionId,
++        action: 'retry_extraction',
++        userAction: 'retry',
++        timestamp: new Date().toISOString()
++      });
++      
++      console.log('[n8nWebhookService] Direct retry successful');
++      return directResponse;
++    } catch (directError) {
++      console.warn('[n8nWebhookService] Direct retry failed, trying backend proxy:', directError);
++      
++      // Fallback to backend proxy endpoint
++      const response = await fetch('/api/workflow/approve', {
++        method: 'POST',
++        headers: {
++          'Content-Type': 'application/json',
++        },
++        body: JSON.stringify({
++          sessionId,
++          action: 'retry_extraction',
++          userAction: 'retry',
++          resumeUrl: url // Pass the resumeUrl to the backend
++        }),
++      });
++    
++    if (!response.ok) {
++      throw new Error(`Retry extraction failed: ${response.status} ${response.statusText}`);
++    }
++    
++    // Parse response and handle resumeUrl if present in response
++    const result = await this.parseJsonResponse(response);
++    
++    // If we have a new resumeUrl, store it
++    if (result?.resumeUrl) {
++      this.storeResumeUrl(sessionId, result.resumeUrl);
++    }
++    
++    return result;
++    }
+   }
+ 
+   /**
+@@ -334,7 +566,10 @@ class N8nWebhookService {
+     action: 'confirm' | 'regenerate' | 'cancel',
+     resumeUrl?: string
+   ) {
+-    const url = resumeUrl || this.getResumeUrl(sessionId);
++    let url = resumeUrl || this.getResumeUrl(sessionId);
++    if (!url) {
++      url = await this.fetchServerResumeUrl(sessionId);
++    }
+     if (!url) {
+       throw new Error('No resume URL available for generation confirmation');
+     }
+@@ -370,25 +605,115 @@ class N8nWebhookService {
+         }
+       }
+       
+-      const data = response?.data || response || {};
++      // CRITICAL: Handle array responses from n8n "Respond to Webhook" nodes
++      // Text Review Response uses "respondWith: allIncomingItems" which returns an array
++      let data = response;
++      
++      if (Array.isArray(response)) {
++        // Extract first item from array response - this is the typical n8n format
++        data = response[0] || {};
++        console.log('[n8nWebhookService] Array response detected, using first item');
++      } else if (response.data && Array.isArray(response.data)) {
++        // Handle nested array in .data property
++        data = response.data[0] || {};
++        console.log('[n8nWebhookService] Nested array response, using first item');
++      } else {
++        // Handle regular object response
++        data = response?.data || response || {};
++      }
++      
++      // Handle nested json property (n8n often wraps data in .json)
++      if (data?.json && typeof data.json === 'object') {
++        // Merge json properties to top level for easier access
++        Object.assign(data, data.json);
++      }
++      
++      // Extract resumeUrl from ALL possible locations
++      // Check data object and its nested properties
++      const resumeUrlFromData = data.resumeUrl || 
++                               data.resume_url || 
++                               data.resumeURL ||
++                               data.webhookUrl ||
++                               data.webhook_url ||
++                               data.json?.resumeUrl || 
++                               data.json?.resume_url ||
++                               data.json?.resumeURL ||
++                               data.json?.webhookUrl ||
++                               data.json?.webhook_url ||
++                               data.workflowState?.resumeUrl ||
++                               data.metadata?.resumeUrl ||
++                               data.metadata?.workflowState?.resumeUrl;
++      
++      // Also check the original response in case resumeUrl is at top level
++      const resumeUrlFromResponse = Array.isArray(response) 
++        ? (response[0]?.resumeUrl || response[0]?.resume_url || response[0]?.resumeURL || 
++           response[0]?.webhookUrl || response[0]?.webhook_url ||
++           response[0]?.workflowState?.resumeUrl || response[0]?.metadata?.resumeUrl)
++        : (response?.resumeUrl || response?.resume_url || response?.resumeURL ||
++           response?.webhookUrl || response?.webhook_url ||
++           response?.workflowState?.resumeUrl || response?.metadata?.resumeUrl);
++      
++      const finalResumeUrl = resumeUrlFromData || resumeUrlFromResponse;
++      
++      console.log('[n8nWebhookService] Resume URL extraction:', {
++        fromData: resumeUrlFromData,
++        fromResponse: resumeUrlFromResponse,
++        final: finalResumeUrl,
++        rawData: data,
++        rawResponse: response
++      });
++      
++      // Extra detailed logging if no resume URL found
++      if (!finalResumeUrl) {
++        console.warn('[n8nWebhookService] No resume URL found in response. Checking structure:', {
++          hasData: !!data,
++          hasJson: !!data?.json,
++          dataKeys: Object.keys(data || {}),
++          jsonKeys: data?.json ? Object.keys(data.json) : [],
++          responseType: Array.isArray(response) ? 'array' : typeof response
++        });
++      }
+ 
+       // Store resume URL if present
+-      if (data.resumeUrl && data.sessionId) {
+-        this.storeResumeUrl(data.sessionId, data.resumeUrl);
++      const sessionId = data.sessionId || data.json?.sessionId;
++      if (finalResumeUrl && sessionId) {
++        this.storeResumeUrl(sessionId, finalResumeUrl);
+       }
+ 
++      // Extract data from nested json property if it exists
++      const extractedText = data.extractedText || data.json?.extractedText;
++      const fullText = data.fullText || data.json?.fullText;
++      const analysis = data.analysis || data.json?.analysis || data.analysisData || data.json?.analysisData;
++      const status = data.status || data.json?.status;
++      const step = data.step || data.json?.step;
++      const actions = data.actions || data.json?.actions;
++      const progress = data.progress || data.json?.progress;
++      const message = data.message || data.json?.message;
++      const textQuality = data.textQuality || data.json?.textQuality;
++      const qualityScore = data.qualityScore || data.json?.qualityScore;
++      const requiresApproval = data.requiresApproval || data.json?.requiresApproval;
++      
++      console.log('[n8nWebhookService] Extracted values:', {
++        extractedText: !!extractedText,
++        status,
++        step,
++        hasActions: !!actions,
++        requiresApproval,
++        sessionId
++      });
++
+       // Normalize step/status so the UI can react reliably even when n8n returns raw items
+       // Heuristics:
+       // - If a resumeUrl exists and we have extractedText/fullText, treat as initial text review
+       // - If analysis/summary present, treat as analysis review
+       // - If download/bog info present, treat as generation confirmation/completion
+-      let computedStep: string | undefined = data.step;
+-      let computedStatus: string | undefined = data.status;
++      let computedStep: string | undefined = step;
++      let computedStatus: string | undefined = status;
+ 
+-      const hasResume = Boolean(data.resumeUrl);
+-      const hasExtracted = Boolean(data.extractedText || data.fullText);
+-      const hasAnalysis = Boolean(data.analysis || data.analysisData || data.summary);
+-      const hasArtifact = Boolean(data.downloadUrl || data.bogFilePath);
++      const hasResume = Boolean(finalResumeUrl);
++      const hasExtracted = Boolean(extractedText || fullText);
++      const hasAnalysis = Boolean(analysis || data.summary || data.json?.summary);
++      const hasArtifact = Boolean(data.downloadUrl || data.json?.downloadUrl || data.bogFilePath || data.json?.bogFilePath);
+ 
+       if (!computedStep || !computedStatus) {
+         if (hasResume && hasExtracted) {
+@@ -420,36 +745,69 @@ class N8nWebhookService {
+         approvalType = 'generation_confirmation';
+       }
+ 
+-      return {
+-        resumeUrl: data.resumeUrl || '',
+-        status: computedStatus || data.status || 'unknown',
+-        step: computedStep || data.step || '',
+-        currentStep: data.currentStep,
+-        totalSteps: data.totalSteps,
+-        message: data.message || '',
+-        extractedText: data.extractedText,
+-        fullText: data.fullText,
+-        totalCharacters: data.totalCharacters,
+-        fileCount: data.fileCount,
+-        textQuality: data.textQuality,
+-        qualityScore: data.qualityScore,
+-        qualityIssues: data.qualityIssues,
+-        recommendations: data.recommendations,
+-        hvacTermsFound: data.hvacTermsFound,
+-        analysis: data.analysis || data.analysisData,
+-        analysisQuality: data.analysisQuality,
+-        summary: data.summary,
+-        actions: data.actions,
+-        progress: data.progress,
+-        workflowStatus: data.workflowStatus || data.status,
+-        interactionType: data.interactionType,
+-        capabilities: data.capabilities,
+-        timestamp: data.timestamp || new Date().toISOString(),
++      const result = {
++        resumeUrl: finalResumeUrl || '',
++        status: computedStatus || status || 'unknown',
++        step: computedStep || step || '',
++        currentStep: data.currentStep || data.json?.currentStep,
++        totalSteps: data.totalSteps || data.json?.totalSteps,
++        message: message || '',
++        extractedText: extractedText,
++        fullText: fullText,
++        totalCharacters: data.totalCharacters || data.json?.totalCharacters,
++        fileCount: data.fileCount || data.json?.fileCount,
++        textQuality: textQuality,
++        qualityScore: qualityScore,
++        qualityIssues: data.qualityIssues || data.json?.qualityIssues,
++        recommendations: data.recommendations || data.json?.recommendations,
++        hvacTermsFound: data.hvacTermsFound || data.json?.hvacTermsFound,
++        analysis: analysis,
++        analysisQuality: data.analysisQuality || data.json?.analysisQuality,
++        summary: data.summary || data.json?.summary,
++        actions: actions,
++        progress: progress,
++        workflowStatus: data.workflowStatus || data.json?.workflowStatus || status,
++        interactionType: data.interactionType || data.json?.interactionType,
++        capabilities: data.capabilities || data.json?.capabilities,
++        timestamp: data.timestamp || data.json?.timestamp || new Date().toISOString(),
+         approvalType,
+-        data: data.data,
+-        downloadUrl: data.downloadUrl,
+-        bogFilePath: data.bogFilePath,
+-      };
++        data: data.data || data.json?.data,
++        downloadUrl: data.downloadUrl || data.json?.downloadUrl,
++        bogFilePath: data.bogFilePath || data.json?.bogFilePath,
++      } as any;
++      
++      // Synthesize sensible default actions when a wait/approval step is detected
++      if (!result.actions || (typeof result.actions === 'object' && Object.keys(result.actions).length === 0)) {
++        if (result.approvalType === 'generation_confirmation') {
++          result.actions = {
++            confirm: { label: 'Confirm', action: 'confirm', primary: true },
++            regenerate: { label: 'Regenerate', action: 'regenerate' },
++            cancel: { label: 'Cancel', action: 'cancel', color: 'warning' },
++          };
++        } else if (result.approvalType === 'analysis_review') {
++          result.actions = {
++            approve_analysis: { label: 'Approve Analysis', action: 'approve_analysis', primary: true },
++            refine_analysis: { label: 'Request Changes', action: 'refine_analysis' },
++          };
++        } else if (result.approvalType === 'text_review' || (result.resumeUrl && (result.extractedText || result.fullText))) {
++          // Text review defaults: approve + retry (edit handled via UI toggle)
++          result.actions = {
++            approve_text: { label: 'Approve', action: 'approve_text', primary: true, recommended: true },
++            retry_extraction: { label: 'Retry Extraction', action: 'retry_extraction' },
++          };
++        }
++      }
++      
++      console.log('[n8nWebhookService] Final parsed result:', {
++        hasResumeUrl: !!(result as any).resumeUrl,
++        status: (result as any).status,
++        step: (result as any).step,
++        approvalType: (result as any).approvalType,
++        hasExtractedText: !!(result as any).extractedText,
++        hasActions: !!(result as any).actions
++      });
++      
++      return result;
+     } catch (error) {
+       console.error('[N8n Webhook] Failed to parse response:', error);
+       return null;
+@@ -508,6 +866,64 @@ class N8nWebhookService {
+       keysToRemove.forEach(key => localStorage.removeItem(key));
+     } catch (e) {}
+   }
++
++  /**
++   * Helper methods for webhook URL construction
++   */
++  private getStepFromAction(action: string): string | undefined {
++    switch (action) {
++      case 'approve_text':
++      case 'edit_text':
++      case 'retry_extraction':
++        return 'text_review';
++      case 'approve_analysis':
++      case 'refine_analysis':
++        return 'analysis_review';
++      case 'confirm':
++      case 'regenerate':
++      case 'cancel':
++        return 'generation_confirmation';
++      default:
++        return undefined;
++    }
++  }
++
++  private getStatusFromAction(action: string): string | undefined {
++    switch (action) {
++      case 'approve_text':
++      case 'edit_text':
++        return 'text_extracted';
++      case 'retry_extraction':
++        return 'text_review_required';
++      case 'approve_analysis':
++      case 'refine_analysis':
++        return 'analysis_complete';
++      case 'confirm':
++      case 'regenerate':
++      case 'cancel':
++        return 'generation_complete';
++      default:
++        return undefined;
++    }
++  }
++
++  private getApprovalTypeFromAction(action: string): 'text_review' | 'analysis_review' | 'generation_confirmation' | undefined {
++    switch (action) {
++      case 'approve_text':
++      case 'edit_text':
++      case 'retry_extraction':
++        return 'text_review';
++      case 'approve_analysis':
++      case 'refine_analysis':
++        return 'analysis_review';
++      case 'confirm':
++      case 'regenerate':
++      case 'cancel':
++        return 'generation_confirmation';
++      default:
++        return undefined;
++    }
++  }
+ }
+ 
+ const n8nWebhookService = new N8nWebhookService();
+diff --git a/frontend/src/services/workflowAPI.ts b/frontend/src/services/workflowAPI.ts
+index 9a0c9e2..bec0c5f 100644
+--- a/frontend/src/services/workflowAPI.ts
++++ b/frontend/src/services/workflowAPI.ts
+@@ -96,14 +96,34 @@ class WorkflowAPI {
+   }
+ 
+   // ==================== Approval Handling ====================
+-
++  
++  /**
++   * NOTE: Do not remap action names.
++   * We pass the original action through so the backend can
++   * construct the exact payload expected by the n8n Wait nodes.
++   * Examples that must be preserved:
++   * - approve_text, edit_text, retry_extraction
++   * - approve_analysis, refine_analysis
++   * - confirm, regenerate, cancel
++   */
+   async handleApproval(request: ApprovalRequest | (ApprovalRequest & { action: string })): Promise<any> {
++    // Preserve original action; include userAction for visibility
++    const payload = {
++      ...request,
++      userAction: request.action,
++    } as any;
++
++    console.log('[WorkflowAPI] Approval action (no remap):', {
++      action: request.action,
++      sessionId: request.sessionId
++    });
++
+     const response = await fetch(`${this.baseUrl}/api/workflow/approve`, {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+       },
+-      body: JSON.stringify(request),
++      body: JSON.stringify(payload),
+     });
+ 
+     if (!response.ok) {
+@@ -177,7 +197,7 @@ class WorkflowAPI {
+     // Close existing connection if any
+     this.unsubscribeFromWorkflowEvents(sessionId);
+ 
+-    const eventSource = new EventSource(`${this.baseUrl}/api/workflow/events/${sessionId}`);
++const eventSource = new EventSource(`${this.baseUrl}/api/sessions/${sessionId}/events`);
+     
+     eventSource.onmessage = (event) => {
+       try {

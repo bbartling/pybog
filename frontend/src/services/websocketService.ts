@@ -3,17 +3,22 @@
  * Handles live connections to backend for session updates, analysis progress, etc.
  */
 
-import { ChatMessage } from '../components/ChatCanvasGrid';
-
 export type WebSocketEventType = 
   | 'connected'
   | 'disconnected'
   | 'message'
-  | 'state_change'
-  | 'analysis_update'
+  | 'progress'
+  | 'chat'
+  | 'analysis_complete'
   | 'bog_generated'
+  | 'cancellation_complete'
   | 'error'
-  | 'health_update';
+  | 'health_update'
+  | 'text_review_ready'
+  | 'analysis_review_ready'
+  | 'review_completed'
+  | 'workflow_reset'
+  | 'workflow_error';
 
 export interface WebSocketEvent {
   type: WebSocketEventType;
@@ -34,19 +39,39 @@ class WebSocketService {
   private eventHandlers: Map<WebSocketEventType, Set<EventHandler>> = new Map();
   private sessionId: string | null = null;
   private isConnecting = false;
+  private connectionTime: number | null = null;
 
   constructor() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Derive host from REACT_APP_API_URL safely (strip any path like /api)
-    const raw = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    let host = 'localhost:8000';
-    try {
-      const u = new URL(raw);
-      host = u.host; // host:port
-    } catch {
-      host = raw.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0] || 'localhost:8000';
+    
+    // Use runtime config if available, fallback to build-time env vars
+    const runtimeConfig = (window as any).RUNTIME_CONFIG;
+    const apiUrl = runtimeConfig?.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8847';
+    const wsUrl = runtimeConfig?.WS_URL;
+    
+    let host = 'localhost:8847';
+    
+    if (wsUrl) {
+      // Use explicit WebSocket URL from runtime config
+      try {
+        const u = new URL(wsUrl);
+        host = u.host;
+      } catch {
+        host = wsUrl.replace(/^wss?:\/\//, '').replace(/\/$/, '').split('/')[0] || 'localhost:8847';
+      }
+    } else {
+      // Derive host from API URL
+      try {
+        const u = new URL(apiUrl);
+        host = u.host; // host:port
+      } catch {
+        host = apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0] || 'localhost:8847';
+      }
     }
+    
+    // Updated to match backend WebSocket endpoint structure: /ws/{session_id}
     this.url = `${protocol}//${host}/ws`;
+    console.log('[WebSocket] Configured WebSocket URL:', this.url);
   }
 
   /**
@@ -80,6 +105,7 @@ class WebSocketService {
           console.log('[WebSocket] Connected successfully');
           this.isConnecting = false;
           this.reconnectAttempts = 0;
+          this.connectionTime = Date.now(); // Track connection time
           this.startHeartbeat();
           this.emit('connected', { sessionId });
           resolve(true);
@@ -101,12 +127,16 @@ class WebSocketService {
           resolve(false);
         };
 
-        this.ws.onclose = () => {
-          console.log('[WebSocket] Connection closed');
+        this.ws.onclose = (event) => {
+          console.log('[WebSocket] Connection closed', { code: event.code, reason: event.reason });
           this.isConnecting = false;
           this.stopHeartbeat();
           this.emit('disconnected', { sessionId: this.sessionId });
-          this.attemptReconnect();
+          
+          // Only attempt reconnect if it wasn't a clean close
+          if (event.code !== 1000 && this.sessionId) {
+            this.attemptReconnect();
+          }
         };
 
       } catch (error) {
@@ -195,23 +225,27 @@ class WebSocketService {
         }
       });
     }
-  }
+  }  /**
 
-  /**
    * Handle incoming WebSocket messages
    */
   private handleMessage(data: any): void {
     const { type, ...payload } = data;
 
     switch (type) {
-      case 'state_change':
-        console.log('[WebSocket] State change:', payload);
-        this.emit('state_change', payload);
+      case 'progress':
+        console.log('[WebSocket] Progress update:', payload);
+        this.emit('progress', payload);
         break;
 
-      case 'analysis_update':
-        console.log('[WebSocket] Analysis update:', payload);
-        this.emit('analysis_update', payload);
+      case 'chat':
+        console.log('[WebSocket] Chat message:', payload);
+        this.emit('chat', payload);
+        break;
+
+      case 'analysis_complete':
+        console.log('[WebSocket] Analysis complete:', payload);
+        this.emit('analysis_complete', payload);
         break;
 
       case 'bog_generated':
@@ -219,29 +253,63 @@ class WebSocketService {
         this.emit('bog_generated', payload);
         break;
 
-      case 'message':
-        console.log('[WebSocket] New message:', payload);
-        this.emit('message', payload);
+      case 'cancellation_complete':
+        console.log('[WebSocket] Cancellation complete:', payload);
+        this.emit('message', { type: 'cancellation', ...payload });
         break;
 
-      case 'process_step':
-      case 'analysis_progress':
-      case 'status':
-      case 'analysis_complete':
-      case 'workflow_completed':
-        this.emit('message', { type, ...payload });
+      case 'error':
+        console.log('[WebSocket] Error:', payload);
+        this.emit('error', payload);
         break;
 
       case 'health':
         this.emit('health_update', payload);
         break;
 
+      case 'text_review_ready':
+        console.log('[WebSocket] Text review ready:', payload);
+        this.emit('text_review_ready', payload);
+        break;
+
+      case 'analysis_review_ready':
+        console.log('[WebSocket] Analysis review ready:', payload);
+        this.emit('analysis_review_ready', payload);
+        break;
+
+      case 'review_completed':
+        console.log('[WebSocket] Review completed:', payload);
+        this.emit('review_completed', payload);
+        break;
+
+      case 'workflow_reset':
+        console.log('[WebSocket] Workflow reset:', payload);
+        this.emit('workflow_reset', payload);
+        break;
+
+      case 'workflow_error':
+        console.log('[WebSocket] Workflow error:', payload);
+        this.emit('workflow_error', payload);
+        break;
+
       case 'pong':
         // Heartbeat response
         break;
 
+      // Legacy support for existing message types
+      case 'message':
+      case 'process_step':
+      case 'analysis_progress':
+      case 'status':
+      case 'workflow_completed':
+        console.log('[WebSocket] Legacy message:', type, payload);
+        this.emit('message', { type, ...payload });
+        break;
+
       default:
         console.log('[WebSocket] Unknown message type:', type, payload);
+        // Emit as generic message for backward compatibility
+        this.emit('message', { type, ...payload });
     }
   }
 
@@ -273,6 +341,10 @@ class WebSocketService {
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.log('[WebSocket] Max reconnection attempts reached');
+      this.emit('error', {
+        error: 'Max reconnection attempts reached',
+        reconnectAttempts: this.reconnectAttempts
+      });
       return;
     }
 
@@ -281,13 +353,28 @@ class WebSocketService {
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000); // Cap at 30 seconds
 
     console.log(`[WebSocket] Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
 
-    setTimeout(() => {
+    // Emit error with current attempt count for UI feedback
+    this.emit('error', {
+      error: `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+      reconnectAttempts: this.reconnectAttempts
+    });
+
+    setTimeout(async () => {
       if (this.sessionId) {
-        this.connect(this.sessionId);
+        console.log(`[WebSocket] Executing reconnection attempt ${this.reconnectAttempts}`);
+        const connected = await this.connect(this.sessionId);
+        if (connected) {
+          console.log('[WebSocket] Reconnection successful');
+          this.reconnectAttempts = 0; // Reset on successful reconnection
+          this.emit('connected', { sessionId: this.sessionId });
+        } else {
+          console.log('[WebSocket] Reconnection attempt failed, will retry...');
+          this.attemptReconnect(); // Recursive retry
+        }
       }
     }, delay);
   }
@@ -305,8 +392,16 @@ class WebSocketService {
   getCurrentSessionId(): string | null {
     return this.sessionId;
   }
+
+  /**
+   * Get connection time for replay event filtering
+   */
+  getConnectionTime(): number | null {
+    return this.connectionTime;
+  }
 }
 
 // Export singleton instance
 const websocketService = new WebSocketService();
 export default websocketService;
+export {};

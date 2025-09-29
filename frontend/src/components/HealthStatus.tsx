@@ -34,7 +34,7 @@ const HealthStatus: React.FC = () => {
   const [services, setServices] = useState<ServiceStatus[]>([
     { name: 'API', status: 'checking', icon: <Server size={14} /> },
     { name: 'Database', status: 'checking', icon: <Database size={14} /> },
-    { name: 'n8n', status: 'checking', icon: <Cpu size={14} /> },
+    { name: 'Backend', status: 'checking', icon: <Cpu size={14} /> },
     { name: 'WebSocket', status: 'checking', icon: <Activity size={14} /> },
   ]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -47,7 +47,7 @@ const HealthStatus: React.FC = () => {
   // Health WebSocket connection
   useEffect(() => {
     const cfg = (window as any).RUNTIME_CONFIG || {};
-    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8847';
     const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/health';
     
     const ws = new WebSocket(wsUrl);
@@ -72,8 +72,8 @@ const HealthStatus: React.FC = () => {
 
   useEffect(() => {
     const cfg = (window as any).RUNTIME_CONFIG || {};
-    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    const n8nBase = cfg.N8N_URL || process.env.REACT_APP_N8N_URL || 'http://localhost:5678';
+    const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8847';
+    // Using unified backend only
 
     const checkServices = async () => {
       const newStatuses = [...services];
@@ -93,16 +93,16 @@ const HealthStatus: React.FC = () => {
         newStatuses[1] = { ...newStatuses[1], status: 'offline', message: 'Database Unknown' };
       }
 
-      // n8n reachability: treat 404 as OK (GET to POST-only webhook)
+      // Backend health check
       try {
-        const resp = await fetch(`${n8nBase}/webhook/pybog-analyze`, { method: 'GET' });
-        if (resp.ok || [401,403,404].includes(resp.status)) {
-          newStatuses[2] = { ...newStatuses[2], status: 'online', message: 'n8n Reachable' };
+        const resp = await fetch(`${apiBase}/api/health`);
+        if (resp.ok) {
+          newStatuses[2] = { ...newStatuses[2], status: 'online', message: 'Backend Healthy' };
         } else {
-          newStatuses[2] = { ...newStatuses[2], status: 'error', message: `n8n ${resp.status}` };
+          newStatuses[2] = { ...newStatuses[2], status: 'error', message: `Backend ${resp.status}` };
         }
       } catch (e) {
-        newStatuses[2] = { ...newStatuses[2], status: 'offline', message: 'n8n Unreachable' };
+        newStatuses[2] = { ...newStatuses[2], status: 'offline', message: 'Backend Unreachable' };
       }
 
       // WebSocket check based on API URL
@@ -160,9 +160,9 @@ const HealthStatus: React.FC = () => {
 
   const openExternalService = (service: string) => {
     const urls = {
-      n8n: (window as any).RUNTIME_CONFIG?.N8N_URL || 'http://localhost:5678',
-      docs: `${(window as any).RUNTIME_CONFIG?.API_URL || 'http://localhost:8000'}/docs`,
-      pgadmin: 'http://localhost:5050'
+      backend: `${(window as any).RUNTIME_CONFIG?.API_URL || 'http://localhost:8847'}/api/health`,
+      docs: `${(window as any).RUNTIME_CONFIG?.API_URL || 'http://localhost:8847'}/docs`,
+      pgadmin: 'http://localhost:5847'
     };
     window.open(urls[service as keyof typeof urls], '_blank');
   };
@@ -174,7 +174,7 @@ const HealthStatus: React.FC = () => {
   useEffect(() => {
     const checkDetailedHealth = async () => {
       const cfg = (window as any).RUNTIME_CONFIG || {};
-      const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiBase = cfg.API_URL || process.env.REACT_APP_API_URL || 'http://localhost:8847';
       
       try {
         const response = await fetch(`${apiBase}/api/health`, { cache: 'no-store' });
@@ -237,7 +237,7 @@ const HealthStatus: React.FC = () => {
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <button 
-            onClick={(e) => { e.stopPropagation(); openExternalService('n8n'); }}
+            onClick={(e) => { e.stopPropagation(); openExternalService('backend'); }}
             style={{
               background: 'transparent',
               border: 'none',
@@ -245,7 +245,7 @@ const HealthStatus: React.FC = () => {
               cursor: 'pointer',
               padding: 4,
             }}
-            title="Open n8n"
+            title="Open Backend API"
           >
             <ExternalLink size={12} />
           </button>
@@ -387,7 +387,7 @@ const HealthStatus: React.FC = () => {
           {/* Service Links */}
           <div style={{ display: 'flex', gap: 4 }}>
             <button 
-              onClick={() => openExternalService('n8n')}
+              onClick={() => openExternalService('backend')}
               style={{
                 flex: 1,
                 padding: 6,
@@ -399,7 +399,7 @@ const HealthStatus: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              n8n
+              Backend
             </button>
             <button 
               onClick={() => openExternalService('docs')}

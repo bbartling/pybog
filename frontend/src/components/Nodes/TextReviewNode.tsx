@@ -1,466 +1,537 @@
-import React, { useState } from 'react';
-import { Handle, Position } from 'reactflow';
-import { 
-  FileText, 
-  CheckCircle, 
-  AlertCircle, 
-  Edit3, 
-  RefreshCw,
-  TrendingUp,
-  X 
-} from 'lucide-react';
-import './NodeStyles.css';
+/**
+ * Text Review Node Component
+ * Shows extracted document text with approval actions for analysis workflow
+ */
 
-interface TextReviewNodeData {
-  sessionId: string;
+import React, { useState } from 'react';
+import { Handle, Position, NodeProps } from 'reactflow';
+import { CheckCircle, XCircle, Eye, FileText, Edit3, AlertTriangle } from 'lucide-react';
+import { TOKENS, STYLES, COMPONENTS } from '../../theme/neubrutalism';
+import TextExpansionModal from '../TextExpansionModal';
+
+interface TextReviewData {
   extractedText: string;
-  fileCount: number;
-  totalCharacters: number;
-  estimatedTokens?: number;
-  textQuality: 'excellent' | 'good' | 'fair' | 'warning' | 'poor';
-  qualityScore: number;
-  qualityIssues: string[];
-  recommendations: string[];
-  hvacTermsFound?: number;
-  currentStep?: number;
-  totalSteps?: number;
-  progress?: {
-    percentage: number;
-    phase: string;
-    description: string;
-    eta: string;
-  };
-  actions?: {
-    [key: string]: {
-      label: string;
-      action: string;
-      description: string;
-      recommended: boolean;
-      confidence: number;
-    };
-  };
-  onApprove: (extractedText: string) => void;
-  onEdit: (extractedText: string) => void;
-  onRetry: () => void;
-  onCancel?: () => void;
+  filename: string;
+  file_id: string;
+  requiresApproval: boolean;
+  stage: string;
+  onApproveText?: (approvedText: string) => void;
+  onRequestTextChanges?: (feedback: string) => void;
+  onViewTextDetails?: (text: string) => void;
 }
 
-const TextReviewNode: React.FC<{ data: TextReviewNodeData }> = ({ data }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [editedText, setEditedText] = useState(data.extractedText);
+const TextReviewNode: React.FC<NodeProps<TextReviewData>> = ({ data, id }) => {
+  const { extractedText, filename, file_id, requiresApproval, onApproveText, onRequestTextChanges, onViewTextDetails } = data;
   const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(extractedText || '');
+  const [feedback, setFeedback] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
-  const getQualityColor = () => {
-    switch (data.textQuality) {
-      case 'excellent': return '#10b981';
-      case 'good': return '#3b82f6';
-      case 'fair': return '#f59e0b';
-      case 'warning': return '#ef4444';
-      case 'poor': return '#991b1b';
-      default: return '#6b7280';
+  const handleApprove = () => {
+    if (onApproveText) {
+      onApproveText(isEditing ? editedText : extractedText);
     }
   };
 
-  const handleApprove = () => {
-    data.onApprove(isEditing ? editedText : data.extractedText);
+  const handleRequestChanges = () => {
+    if (onRequestTextChanges && feedback.trim()) {
+      onRequestTextChanges(feedback);
+      setShowFeedback(false);
+      setFeedback('');
+    }
   };
 
-  const handleSaveEdit = () => {
-    data.onEdit(editedText);
-    setIsEditing(false);
+  const handleReExtract = () => {
+    if (onRequestTextChanges) {
+      onRequestTextChanges(`Please re-extract text from file ID: ${file_id} (${filename})`);
+    }
+  };
+
+  const handleViewDetails = () => {
+    setShowModal(true);
+  };
+
+  const handleEditToggle = () => {
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = (newText: string) => {
+    setEditedText(newText);
+    setIsEditing(true);
+    setShowEditModal(false);
   };
 
   const handleCancelEdit = () => {
-    setEditedText(data.extractedText);
+    setEditedText(extractedText); // Reset changes
     setIsEditing(false);
+    setShowEditModal(false);
   };
 
+  const previewText = (isEditing ? editedText : extractedText) || '';
+  const truncatedText = previewText.length > 300 ? previewText.substring(0, 300) + '...' : previewText;
+
   return (
-    <div 
-      className="text-review-node"
-      style={{
-        background: 'linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)',
-        border: `2px solid ${getQualityColor()}`,
-        borderRadius: '12px',
-        padding: '16px',
-        width: '480px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-      }}
-    >
-      <Handle type="target" position={Position.Top} />
-      
-      {/* Header with quality indicator */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+    <div style={{
+      ...COMPONENTS.message.base,
+      minWidth: '600px',
+      maxWidth: '650px',
+      fontFamily: TOKENS.fontFamily,
+      background: TOKENS.white,
+      border: STYLES.border.solid,
+      borderRadius: STYLES.radius.large,
+      position: 'relative',
+    }}>
+      {/* Input Port */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{
+          background: TOKENS.port,
+          width: 12,
+          height: 12,
+          border: STYLES.border.solid,
+          left: -6
+        }}
+      />
+
+      {/* Header - Text Review */}
+      <div style={{
+        ...COMPONENTS.message.header,
+        background: TOKENS.nodeHeader,
+        borderBottom: STYLES.border.solid,
+        display: 'flex',
         alignItems: 'center',
-        marginBottom: '12px',
-        borderBottom: '1px solid #e5e7eb',
-        paddingBottom: '12px'
+        justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileText size={20} color={getQualityColor()} />
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-            Text Extraction Review
-          </h3>
-          {data.currentStep && data.totalSteps && (
-            <span style={{ 
-              fontSize: '12px', 
-              color: '#6b7280',
-              background: '#f3f4f6',
-              padding: '2px 8px',
-              borderRadius: '4px'
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: STYLES.spacing.md,
+        }}>
+          <FileText size={18} color={TOKENS.text} />
+          <div>
+            <div style={{
+              fontWeight: STYLES.fontWeight.semibold,
+              color: TOKENS.text,
+              fontSize: STYLES.fontSize.lg,
             }}>
-              Step {data.currentStep}/{data.totalSteps}
-            </span>
-          )}
+              Text Extracted
+            </div>
+            <div style={{
+              fontSize: STYLES.fontSize.xs,
+              color: TOKENS.muted,
+              fontWeight: STYLES.fontWeight.normal,
+            }}>
+              Review before analysis
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px'
-          }}
-        >
-          {isExpanded ? '−' : '+'}
-        </button>
+
+        {/* Status Badge */}
+        <div style={{
+          ...COMPONENTS.badge.base,
+          ...COMPONENTS.badge.warning,
+        }}>
+          <AlertTriangle size={14} color={TOKENS.text} />
+          <span>Awaiting Review</span>
+        </div>
       </div>
 
-      {isExpanded && (
-        <>
-          {/* Progress Bar */}
-          {data.progress && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between',
-                fontSize: '12px',
-                color: '#6b7280',
-                marginBottom: '4px'
-              }}>
-                <span>{data.progress.phase}</span>
-                <span>{data.progress.percentage}%</span>
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: '#e5e7eb',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${data.progress.percentage}%`,
-                  height: '100%',
-                  background: getQualityColor(),
-                  transition: 'width 0.3s ease'
-                }} />
-              </div>
-              <div style={{ 
-                fontSize: '11px', 
-                color: '#9ca3af',
-                marginTop: '2px'
-              }}>
-                {data.progress.description}
-              </div>
-            </div>
-          )}
-
-          {/* Quality Assessment */}
-          <div style={{
-            background: '#f9fafb',
-            borderRadius: '8px',
-            padding: '12px',
-            marginBottom: '12px'
+      {/* Progress Bar */}
+      <div style={{
+        background: TOKENS.chip,
+        padding: STYLES.spacing.md,
+        borderBottom: STYLES.border.solid,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: STYLES.spacing.sm,
+        }}>
+          <span style={{
+            fontSize: STYLES.fontSize.xs,
+            fontWeight: STYLES.fontWeight.bold,
+            color: TOKENS.text,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 500 }}>Text Quality</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <TrendingUp size={14} color={getQualityColor()} />
-                <span style={{ 
-                  color: getQualityColor(), 
-                  fontWeight: 600,
-                  fontSize: '13px'
-                }}>
-                  {data.textQuality.toUpperCase()} ({data.qualityScore}%)
-                </span>
-              </div>
-            </div>
+            Step 2 of 5 - Text Review
+          </span>
+          <span style={{
+            fontSize: STYLES.fontSize.xs,
+            fontWeight: STYLES.fontWeight.bold,
+            color: TOKENS.primary,
+          }}>
+            40%
+          </span>
+        </div>
+        <div style={{
+          width: '100%',
+          height: '8px',
+          background: TOKENS.white,
+          border: STYLES.border.solid,
+          borderRadius: STYLES.radius.small,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: '40%',
+            height: '100%',
+            background: TOKENS.primary,
+            transition: STYLES.transition.base,
+          }} />
+        </div>
+      </div>
 
-            {/* File Stats */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: '8px',
-              marginBottom: '8px'
-            }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '18px', fontWeight: 600 }}>{data.fileCount}</div>
-                <div style={{ fontSize: '11px', color: '#6b7280' }}>Files</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '18px', fontWeight: 600 }}>
-                  {(data.totalCharacters / 1000).toFixed(1)}k
-                </div>
-                <div style={{ fontSize: '11px', color: '#6b7280' }}>Characters</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '18px', fontWeight: 600 }}>
-                  {data.hvacTermsFound || 0}
-                </div>
-                <div style={{ fontSize: '11px', color: '#6b7280' }}>HVAC Terms</div>
-              </div>
-            </div>
-
-            {/* Issues & Recommendations */}
-            {data.qualityIssues.length > 0 && (
-              <div style={{ marginBottom: '8px' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '4px',
-                  marginBottom: '4px'
-                }}>
-                  <AlertCircle size={12} color="#ef4444" />
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#ef4444' }}>
-                    Issues:
-                  </span>
-                </div>
-                <ul style={{ 
-                  margin: '0 0 0 16px', 
-                  padding: 0,
-                  fontSize: '11px',
-                  color: '#6b7280'
-                }}>
-                  {data.qualityIssues.map((issue, idx) => (
-                    <li key={idx}>{issue}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {data.recommendations.length > 0 && (
-              <div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '4px',
-                  marginBottom: '4px'
-                }}>
-                  <CheckCircle size={12} color="#10b981" />
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#10b981' }}>
-                    Recommendations:
-                  </span>
-                </div>
-                <ul style={{ 
-                  margin: '0 0 0 16px', 
-                  padding: 0,
-                  fontSize: '11px',
-                  color: '#6b7280'
-                }}>
-                  {data.recommendations.map((rec, idx) => (
-                    <li key={idx}>{rec}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      {/* Content */}
+      <div style={{
+        ...COMPONENTS.message.body,
+      }}>
+        {/* File Info */}
+        <div style={{
+          background: TOKENS.chip,
+          border: STYLES.border.solid,
+          borderRadius: STYLES.radius.medium,
+          padding: STYLES.spacing.md,
+          marginBottom: STYLES.spacing.lg,
+        }}>
+          <div style={{
+            fontSize: STYLES.fontSize.sm,
+            fontWeight: STYLES.fontWeight.bold,
+            color: TOKENS.text,
+            marginBottom: STYLES.spacing.xs,
+          }}>
+            Document: {filename}
           </div>
-
-          {/* Text Preview/Edit Area */}
           <div style={{
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            padding: '12px',
-            marginBottom: '12px',
-            maxHeight: '200px',
-            overflow: 'auto'
+            fontSize: STYLES.fontSize.xs,
+            color: TOKENS.muted,
           }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              marginBottom: '8px'
+            {previewText.length} characters extracted
+          </div>
+        </div>
+
+        {/* Text Preview/Editor */}
+        <div style={{
+          background: TOKENS.white,
+          border: STYLES.border.solid,
+          borderRadius: STYLES.radius.medium,
+          padding: STYLES.spacing.md,
+          marginBottom: STYLES.spacing.lg,
+          minHeight: '120px',
+          maxHeight: '200px',
+          overflow: 'auto',
+        }}>
+          {isEditing ? (
+            <textarea
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              style={{
+                width: '100%',
+                height: '150px',
+                border: 'none',
+                outline: 'none',
+                fontSize: STYLES.fontSize.sm,
+                fontFamily: TOKENS.fontFamily,
+                color: TOKENS.text,
+                background: 'transparent',
+                resize: 'none',
+              }}
+              placeholder="Edit extracted text..."
+            />
+          ) : (
+            <div style={{
+              fontSize: STYLES.fontSize.sm,
+              color: TOKENS.text,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
             }}>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
-                Extracted Text {isEditing && '(Editing)'}
-              </span>
-              {!isEditing && (
+              {truncatedText}
+              {previewText.length > 300 && (
                 <button
-                  onClick={() => setIsEditing(true)}
+                  onClick={handleViewDetails}
                   style={{
                     background: 'none',
                     border: 'none',
+                    color: TOKENS.primary,
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '11px',
-                    color: '#3b82f6'
+                    textDecoration: 'underline',
+                    fontSize: STYLES.fontSize.sm,
+                    padding: 0,
+                    marginLeft: STYLES.spacing.sm,
                   }}
                 >
-                  <Edit3 size={12} />
-                  Edit
+                  View Full Text
                 </button>
               )}
             </div>
-            
-            {isEditing ? (
+          )}
+        </div>
+
+        {/* Feedback Section */}
+        {showFeedback && (
+          <div style={{
+            background: TOKENS.changesRequested,
+            border: STYLES.border.solid,
+            borderRadius: STYLES.radius.medium,
+            padding: STYLES.spacing.md,
+            marginBottom: STYLES.spacing.lg,
+          }}>
+            <textarea
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Describe what changes are needed..."
+              style={{
+                ...COMPONENTS.input.base,
+                width: '100%',
+                height: '80px',
+                resize: 'none',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div style={{
+          display: 'flex',
+          gap: STYLES.spacing.sm,
+          marginBottom: STYLES.spacing.md,
+        }}>
+          <button
+            onClick={handleViewDetails}
+            style={{
+              ...COMPONENTS.button.base,
+              ...COMPONENTS.button.secondary,
+              fontSize: STYLES.fontSize.sm,
+              display: 'flex',
+              alignItems: 'center',
+              gap: STYLES.spacing.xs,
+              flex: 1,
+              justifyContent: 'center',
+            }}
+          >
+            <Eye size={14} />
+            View Full
+          </button>
+
+          <button
+            onClick={handleEditToggle}
+            style={{
+              ...COMPONENTS.button.base,
+              ...COMPONENTS.button.secondary,
+              fontSize: STYLES.fontSize.sm,
+              display: 'flex',
+              alignItems: 'center',
+              gap: STYLES.spacing.xs,
+              flex: 1,
+              justifyContent: 'center',
+            }}
+          >
+            <Edit3 size={14} />
+            {isEditing ? 'Edit More' : 'Edit'}
+          </button>
+
+          <button
+            onClick={handleReExtract}
+            style={{
+              ...COMPONENTS.button.base,
+              ...COMPONENTS.button.warning,
+              fontSize: STYLES.fontSize.sm,
+              display: 'flex',
+              alignItems: 'center',
+              gap: STYLES.spacing.xs,
+              flex: 1,
+              justifyContent: 'center',
+            }}
+          >
+            <XCircle size={14} />
+            Re-extract
+          </button>
+        </div>
+
+        {/* Feedback Submit Button */}
+        {showFeedback && (
+          <button
+            onClick={handleRequestChanges}
+            disabled={!feedback.trim()}
+            style={{
+              ...COMPONENTS.button.base,
+              ...COMPONENTS.button.danger,
+              ...(feedback.trim() ? {} : COMPONENTS.button.disabled),
+              fontSize: STYLES.fontSize.sm,
+              display: 'flex',
+              alignItems: 'center',
+              gap: STYLES.spacing.sm,
+              width: '100%',
+              justifyContent: 'center',
+              marginBottom: STYLES.spacing.md,
+            }}
+          >
+            <XCircle size={16} />
+            Request Re-extraction
+          </button>
+        )}
+
+        {/* Primary Approval Button */}
+        <button
+          onClick={handleApprove}
+          style={{
+            ...COMPONENTS.button.base,
+            ...COMPONENTS.button.success,
+            fontSize: STYLES.fontSize.lg,
+            display: 'flex',
+            alignItems: 'center',
+            gap: STYLES.spacing.sm,
+            fontWeight: STYLES.fontWeight.bold,
+            width: '100%',
+            justifyContent: 'center',
+            padding: `${STYLES.spacing.lg} ${STYLES.spacing.xxl}`,
+          }}
+        >
+          <CheckCircle size={18} />
+          Approve Text & Start Analysis
+        </button>
+      </div>
+
+      {/* Output Port - Only show when approved */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{
+          background: TOKENS.port,
+          width: 12,
+          height: 12,
+          border: STYLES.border.solid,
+          right: -6
+        }}
+      />
+
+      {/* Text Expansion Modal */}
+      <TextExpansionModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={`Extracted Text - ${filename}`}
+        content={extractedText || 'No text extracted'}
+        messageType="system"
+        showActions={true}
+      />
+
+      {/* Text Edit Modal */}
+      {showEditModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 50000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCancelEdit();
+            }
+          }}
+        >
+          <div
+            style={{
+              background: TOKENS.white,
+              border: STYLES.border.solid,
+              borderRadius: STYLES.radius.large,
+              width: '80vw',
+              maxWidth: '1200px',
+              height: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              fontFamily: TOKENS.fontFamily,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              ...COMPONENTS.message.header,
+              background: TOKENS.nodeHeader,
+              borderBottom: STYLES.border.solid,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: STYLES.spacing.md,
+              }}>
+                <Edit3 size={18} color={TOKENS.text} />
+                <div style={{
+                  fontWeight: STYLES.fontWeight.semibold,
+                  color: TOKENS.text,
+                  fontSize: STYLES.fontSize.lg,
+                }}>
+                  Edit Extracted Text - {filename}
+                </div>
+              </div>
+            </div>
+
+            {/* Edit Area */}
+            <div style={{
+              flex: 1,
+              padding: STYLES.spacing.lg,
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
               <textarea
                 value={editedText}
                 onChange={(e) => setEditedText(e.target.value)}
                 style={{
+                  ...COMPONENTS.input.base,
                   width: '100%',
-                  minHeight: '120px',
-                  border: '1px solid #3b82f6',
-                  borderRadius: '4px',
-                  padding: '8px',
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
-                  resize: 'vertical'
+                  height: '100%',
+                  resize: 'none',
+                  fontSize: STYLES.fontSize.base,
+                  lineHeight: 1.6,
                 }}
+                placeholder="Edit the extracted text..."
               />
-            ) : (
-              <pre style={{
-                margin: 0,
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                whiteSpace: 'pre-wrap',
-                color: '#374151',
-                lineHeight: 1.5
-              }}>
-                {data.extractedText.substring(0, 500)}
-                {data.extractedText.length > 500 && '...'}
-              </pre>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {isEditing ? (
-              <>
-                <button
-                  onClick={handleSaveEdit}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    background: '#3b82f6',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <CheckCircle size={14} />
-                  Save & Continue
-                </button>
-                <button
-                  onClick={handleCancelEdit}
-                  style={{
-                    padding: '8px 12px',
-                    background: '#f3f4f6',
-                    color: '#6b7280',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                {/* Approve button - highlighted if recommended */}
-                {data.actions?.approve_text && (
-                  <button
-                    onClick={handleApprove}
-                    style={{
-                      flex: data.actions.approve_text.recommended ? 2 : 1,
-                      padding: '8px 12px',
-                      background: data.actions.approve_text.recommended ? '#10b981' : '#3b82f6',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      fontWeight: data.actions.approve_text.recommended ? 600 : 500,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      boxShadow: data.actions.approve_text.recommended ? 
-                        '0 2px 8px rgba(16,185,129,0.3)' : 'none'
-                    }}
-                  >
-                    <CheckCircle size={14} />
-                    {data.actions.approve_text.label}
-                    {data.actions.approve_text.recommended && ' ✓'}
-                  </button>
-                )}
-
-                {/* Retry button */}
-                {data.actions?.retry_extraction && (
-                  <button
-                    onClick={data.onRetry}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      background: data.actions.retry_extraction.recommended ? '#f59e0b' : '#f3f4f6',
-                      color: data.actions.retry_extraction.recommended ? '#ffffff' : '#6b7280',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <RefreshCw size={14} />
-                    {data.actions.retry_extraction.label}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Action Descriptions */}
-          {data.actions && !isEditing && (
-            <div style={{
-              marginTop: '8px',
-              padding: '8px',
-              background: '#f9fafb',
-              borderRadius: '6px',
-              fontSize: '11px',
-              color: '#6b7280'
-            }}>
-              {Object.entries(data.actions)
-                .filter(([_, action]) => action.recommended)
-                .map(([key, action]) => (
-                  <div key={key} style={{ marginBottom: '4px' }}>
-                    <strong>{action.label}:</strong> {action.description}
-                    {action.confidence && (
-                      <span style={{ marginLeft: '4px', color: '#9ca3af' }}>
-                        ({action.confidence}% confidence)
-                      </span>
-                    )}
-                  </div>
-                ))
-              }
             </div>
-          )}
-        </>
+
+            {/* Footer */}
+            <div style={{
+              padding: STYLES.spacing.lg,
+              borderTop: STYLES.border.solid,
+              display: 'flex',
+              gap: STYLES.spacing.sm,
+              justifyContent: 'flex-end',
+            }}>
+              <button
+                onClick={handleCancelEdit}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.secondary,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleSaveEdit(editedText)}
+                style={{
+                  ...COMPONENTS.button.base,
+                  ...COMPONENTS.button.primary,
+                }}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-      
-      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 };
