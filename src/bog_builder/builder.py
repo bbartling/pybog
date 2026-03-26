@@ -445,6 +445,27 @@ class BogFolderBuilder:
             "kitControl:Add", name, properties=properties, actions=actions
         )
 
+    def add_abs_value(
+        self, name: str, properties: dict | None = None, actions: dict | None = None
+    ) -> None:
+        self._add_component(
+            "kitControl:AbsValue", name, properties=properties, actions=actions
+        )
+
+    def add_modulus(
+        self, name: str, properties: dict | None = None, actions: dict | None = None
+    ) -> None:
+        self._add_component(
+            "kitControl:Modulus", name, properties=properties, actions=actions
+        )
+
+    def add_power(
+        self, name: str, properties: dict | None = None, actions: dict | None = None
+    ) -> None:
+        self._add_component(
+            "kitControl:Power", name, properties=properties, actions=actions
+        )
+
     def add_subtract(
         self, name: str, properties: dict | None = None, actions: dict | None = None
     ) -> None:
