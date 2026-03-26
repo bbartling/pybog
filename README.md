@@ -715,6 +715,9 @@ Wrapper methods for mathematical operations from `kitControl`.
 | `add_minimum(name: str)` | `kitControl:Minimum` | Finds the minimum value among active inputs. |
 | `add_maximum(name: str)` | `kitControl:Maximum` | Finds the maximum value among active inputs. |
 | `add_reset(name: str)` | `kitControl:Reset` | Rescales a value from one range to another. |
+| `add_abs_value(name: str)` | `kitControl:AbsValue` | Outputs the absolute value of input A. |
+| `add_modulus(name: str)` | `kitControl:Modulus` | Outputs input A modulo input B. |
+| `add_power(name: str)` | `kitControl:Power` | Outputs input A raised to input B. |
 | `add_sine_wave(name: str)` | `kitControl:SineWave` | Generates a sine wave output for testing. |
 
 ## 5\. Logic and Comparison Components
