@@ -528,9 +528,9 @@ Reference logic building blocks from Niagara’s kitControl palette are document
 - [x] Maximum
 - [x] SineWave
 - [x] Reset
-- [ ] Modulus
-- [ ] Power
-- [ ] AbsValue
+- [x] Modulus
+- [x] Power
+- [x] AbsValue
 - [ ] ArcCosine
 - [ ] ArcSine
 - [ ] ArcTangent

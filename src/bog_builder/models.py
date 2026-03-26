@@ -49,6 +49,9 @@ COMPONENT_OUTPUT_TYPE = {
     "kitControl:BooleanConst": "StatusBoolean",
     "kitControl:EnumConst": "StatusEnum",
     "kitControl:Add": "StatusNumeric",
+    "kitControl:AbsValue": "StatusNumeric",
+    "kitControl:Modulus": "StatusNumeric",
+    "kitControl:Power": "StatusNumeric",
     "kitControl:Subtract": "StatusNumeric",
     "kitControl:Multiply": "StatusNumeric",
     "kitControl:Divide": "StatusNumeric",
@@ -165,6 +168,9 @@ CONVERSION_MAP = {
 
 COMPONENT_SLOT_MAP: dict[str, dict[str, List[str]]] = {
     "kitControl:Add": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
+    "kitControl:AbsValue": {"inputs": ["inA"], "outputs": ["out"]},
+    "kitControl:Modulus": {"inputs": ["inA", "inB"], "outputs": ["out"]},
+    "kitControl:Power": {"inputs": ["inA", "inB"], "outputs": ["out"]},
     "kitControl:Subtract": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Average": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
     "kitControl:Minimum": {"inputs": ["inA", "inB", "inC", "inD"], "outputs": ["out"]},
